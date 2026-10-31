@@ -5,7 +5,7 @@ Native integration for [OpenCode](https://github.com/opencode-ai/opencode).
 ## Features
 - **Native Plugin**: Located at `.opencode-plugin/plugins/righthand-server.js`
 - **Session Injection**: Automatically injects active persona into OpenCode sessions
-- **CLI Sync**: Shares persistent state in `.righthand/active-persona.json` with the `righthand` CLI
+- **CLI Sync**: Shares persistent state in `.righthand/state/active-persona.json` with the `righthand` CLI
 - **Headless & Interactive**: Works seamlessly in both `opencode run` and interactive sessions
 
 ## Usage via CLI
