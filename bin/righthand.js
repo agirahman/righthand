@@ -2,6 +2,7 @@
 'use strict';
 
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const { readState, writeState, readSetupState, writeSetupState } = require('./state');
@@ -48,9 +49,11 @@ const HARNESSES = {
     aliases: [],
     label: 'OpenCode',
     pathCheck: ['opencode'],
+    destBase: 'home',
+    legacyFiles: ['.opencode/plugins/righthand-server.js', '.opencode/plugins/righthand-tui.js'],
     files: [
-      { src: '.opencode/plugins/righthand-server.js', dest: '.opencode/plugins/righthand-server.js' },
-      { src: '.opencode/plugins/righthand-tui.js',    dest: '.opencode/plugins/righthand-tui.js' },
+      { src: '.opencode-plugin/plugins/righthand-server.js', dest: 'opencode/plugins/righthand-server.js' },
+      { src: '.opencode-plugin/plugins/righthand-tui.js',    dest: 'opencode/plugins/righthand-tui.js' },
     ],
   },
 };
@@ -64,6 +67,24 @@ function resolveHarness(name) {
     if (cfg.aliases && cfg.aliases.includes(lower)) return key;
   }
   return null;
+}
+
+// ---------------------------------------------------------------------------
+// Destination resolution (shared by setup/update/doctor)
+// ---------------------------------------------------------------------------
+function configBaseDir() {
+  const env = process.env.XDG_CONFIG_HOME;
+  if (env && path.isAbsolute(env)) return env;
+  return path.join(os.homedir(), '.config');
+}
+
+function resolveDestBase(h) {
+  if (h && h.destBase === 'home') return configBaseDir();
+  return process.cwd();
+}
+
+function resolveDestPath(h, dest) {
+  return path.join(resolveDestBase(h), dest);
 }
 
 // ---------------------------------------------------------------------------
@@ -230,7 +251,7 @@ function cmdSetup(target) {
       let ok = true;
       for (const { src, dest } of h.files) {
         const srcPath = path.join(root, src);
-        const destPath = path.join(cwd, dest);
+        const destPath = resolveDestPath(h, dest);
         if (!fs.existsSync(srcPath)) {
           console.log(`  ✗ source not found: ${src}`);
           ok = false;
@@ -238,7 +259,7 @@ function cmdSetup(target) {
         }
         fs.mkdirSync(path.dirname(destPath), { recursive: true });
         fs.copyFileSync(srcPath, destPath);
-        console.log(`  ✓ copied → ${dest}`);
+        console.log(`  ✓ copied → ${destPath}`);
       }
       if (ok) installed.add(key);
     }
@@ -270,17 +291,17 @@ function cmdUpdate(target) {
       console.log(`\n[${h.label}]`);
       for (const { src, dest } of h.files) {
         const srcPath = path.join(root, src);
-        const destPath = path.join(cwd, dest);
+        const destPath = resolveDestPath(h, dest);
         if (!fs.existsSync(srcPath)) {
           console.log(`  ✗ source not found: ${src}`);
           continue;
         }
         if (!fs.existsSync(path.dirname(destPath))) {
-          console.log(`  ✗ dest folder not found: ${path.dirname(dest)} (run setup first?)`);
+          console.log(`  ✗ dest folder not found: ${path.dirname(destPath)} (run setup first?)`);
           continue;
         }
         fs.copyFileSync(srcPath, destPath);
-        console.log(`  ✓ updated → ${dest}`);
+        console.log(`  ✓ updated → ${destPath}`);
       }
     }
   }
@@ -345,16 +366,26 @@ function cmdDoctor() {
 
   for (const [key, h] of Object.entries(HARNESSES)) {
     if (h.type === 'copy') {
-      const allExist = h.files.every(({ dest }) => fs.existsSync(path.join(cwd, dest)));
+      const allExist = h.files.every(({ dest }) => fs.existsSync(resolveDestPath(h, dest)));
       const status = allExist ? '✓' : '✗';
       if (allExist) anySetup = true;
       console.log(`  ${status} ${key.padEnd(10)} ${allExist ? 'files present' : 'not set up'}`);
       for (const { dest } of h.files) {
-        const exists = fs.existsSync(path.join(cwd, dest));
-        console.log(`             ${exists ? '✓' : '✗'} ${dest}`);
+        const destPath = resolveDestPath(h, dest);
+        const exists = fs.existsSync(destPath);
+        console.log(`             ${exists ? '✓' : '✗'} ${destPath}`);
       }
       if (!allExist) {
         console.log(`             Run: righthand setup ${key}`);
+      }
+      if (h.legacyFiles) {
+        const stale = h.legacyFiles
+          .map(p => path.isAbsolute(p) ? p : path.join(os.homedir(), p))
+          .filter(p => fs.existsSync(p));
+        if (stale.length > 0) {
+          console.log(`             ⚠ legacy stale install found (remove manually):`);
+          for (const p of stale) console.log(`               ${p}`);
+        }
       }
     } else if (h.type === 'spawn') {
       const isConfigured = configured.has(key);
