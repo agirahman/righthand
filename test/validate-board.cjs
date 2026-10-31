@@ -28,7 +28,8 @@ let failed = 0;
 for (const bp of boardFiles) {
   const rel = path.relative(root, bp);
   const raw = fs.readFileSync(bp, 'utf8');
-  const lines = raw.split(/\r?\n/).filter((l) => l.trim() !== '');
+  // A leading UTF-8 BOM is tolerated because Windows editors and PowerShell Add-Content emit it.
+  const lines = raw.replace(/^\uFEFF/, '').split(/\r?\n/).filter((l) => l.trim() !== '');
   for (let i = 0; i < lines.length; i++) {
     const lineNo = i + 1;
     let obj;
