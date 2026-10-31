@@ -66,7 +66,6 @@ const requiredSections = ['## When to use', '## Procedure', '## Checklist', '## 
 for (const profileFile of profileFiles) {
   const entries = profileSkills.get(profileFile) || [];
   for (const entry of entries) {
-    if (entry === 'dispatch') continue; // created in a later ticket
     const skillPath = path.join(skillsRoot, entry, 'SKILL.md');
     if (!fs.existsSync(skillPath)) {
       console.error(`FAIL: [skill] ${profileFile} references missing skill '${entry}': ${path.relative(root, skillPath)}`);
@@ -114,7 +113,6 @@ if (fs.existsSync(skillsRoot)) {
   for (const dir of fs.readdirSync(skillsRoot)) {
     const dirPath = path.join(skillsRoot, dir);
     if (!fs.statSync(dirPath).isDirectory()) continue;
-    if (dir === 'dispatch') continue; // created in a later ticket
     if (dir.startsWith('righthand-')) {
       console.error(`FAIL: [skill] Legacy persona envelope directory present: ${dir}`);
       failed++;
