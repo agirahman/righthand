@@ -5,7 +5,7 @@
 .DESCRIPTION
   Creates a new Herdr tab in the specified workspace with a standardized label
   '<role>-<ticket>', prepares a ticket-numbered git worktree for writer roles
-  via Herdr (never a wt/ directory in the repo), and starts Command Code with
+  via Herdr (never an in-repo worktree directory), and starts Command Code with
   the requested persona.
 
 .PARAMETER Workspace
@@ -46,7 +46,7 @@ $Label = if ($Ticket) { "$Role-$Ticket" } else { $Role }
 
 Write-Host "==> Creating Herdr tab in workspace '$Workspace' with label '$Label'..." -ForegroundColor Cyan
 
-# 1. Prepare worktree if writer role (Herdr-managed lane, never wt/)
+# 1. Prepare worktree if writer role (Herdr-managed lane, never an in-repo worktree dir)
 $WorkDir = "."
 if ($IsWriter -and $Ticket) {
     $Slug = if ($Description) { "$Ticket-$Description" } else { "$Ticket-$Role" }
