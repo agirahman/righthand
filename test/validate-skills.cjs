@@ -14,7 +14,6 @@ const manifestDirs = [
   path.join(root, '.kimi-plugin', 'plugin.json'),
   path.join(root, '.omp-plugin', 'marketplace.json'),
   path.join(root, '.agents', 'plugins', 'marketplace.json'),
-  path.join(root, '.cline-plugin', 'plugin.json'),
 ];
 
 console.log(`Checking cross-harness manifests and persona skills...`);
