@@ -115,7 +115,7 @@ Harness id, launch command, persona injection, model selection, prompt submissio
 ### Command Code verified mechanics
 
 - Worktree lanes are created with `herdr worktree create --cwd <main checkout> --branch <ticket-slug> --base <base-branch> --label <role>-<ticket> --no-focus`. `--cwd` is mandatory once a linked worktree exists, otherwise the command fails with `linked_worktree_source`.
-- Lanes are created under `C:\\Users\\agira\\.herdr\\worktrees\\<repo>\\<branch>`. Never create a `wt/` directory in the repository.
+- Herdr manages worktree lanes under its own root outside the repository (one directory per branch). Never create a `wt/` directory in the repository.
 - The launch command is `cmdc -t --yolo -m <model> --mod-option default=<persona>`. Without `-t` the project trust prompt blocks startup; without `--yolo` tool permissions block the run.
 - `cmd` is **not** a valid `herdr agent start --kind` value. Command Code reports its own state to the Herdr socket, so the agent appears in `herdr agent list` on its own after launch.
 - `herdr agent prompt <target>` rejects self-registering agents with `agent_not_ready`, even when the pane id or the agent name is valid. Submit prompts through the pane surface instead: `herdr pane send-text <pane> "<prompt>"` followed by `herdr pane send-keys <pane> enter`.
