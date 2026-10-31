@@ -2,7 +2,7 @@ node_modules/
 dist/
 PLAN.md
 *.log
-.righthand/
+.righthand/state/
 .DS_Store
 Thumbs.db
 .dsh-acl-recovery/

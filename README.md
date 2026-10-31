@@ -85,6 +85,7 @@ righthand inject                 # Print active persona prompt to stdout
 righthand status                 # One-liner: active persona + setup harnesses
 
 # --- Setup & Maintenance ---
+righthand init                  # Initialize .righthand/ in current project
 righthand setup <harness|all>    # Install RightHand into a harness
 righthand update [harness]       # Re-sync files for omp/opencode after npm update
 righthand doctor                 # Health check: PATH, files, active persona
@@ -94,7 +95,7 @@ righthand -v / --version         # Print version
 righthand -h / --help            # Print help
 ```
 
-Active persona state is stored in `.righthand/active-persona.json` (per project, gitignored).
+Active persona state is stored in `.righthand/state/active-persona.json` (per project, gitignored).
 
 ---
 
