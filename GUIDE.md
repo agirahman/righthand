@@ -6,12 +6,12 @@ RightHand personas are portable skills. Each harness has its own install path. U
 
 | Route | Best for |
 |---|---|
-| Plugin door | Claude Code, Codex, Cursor, Kimi, OMP, Antigravity, Cline |
+| Plugin door | Claude Code, Codex, Cursor, Kimi, OMP |
 | Pi package | Pi |
-| Shared folder copy | OpenCode, Amp, Gemini CLI, Hermes, Copilot, Antigravity project |
+| Shared folder copy | OpenCode |
 | Git clone | Any harness that reads repo skills |
 
-## Plugin-door installs (Claude Code / Codex / Cursor / Kimi / OMP / Antigravity / Cline)
+## Plugin-door installs (Claude Code / Codex / Cursor / Kimi / OMP)
 
 Install commands mirror the upstream support table:
 
@@ -20,8 +20,6 @@ Install commands mirror the upstream support table:
 - **Cursor**: `agent plugin marketplace add https://github.com/agirahman/righthand` then install from Customize panel
 - **Kimi Code**: `/plugins install https://github.com/agirahman/righthand`
 - **Oh My Pi**: `omp plugin marketplace add agirahman/righthand`; `omp plugin install righthand@righthand`
-- **Antigravity**: `agy plugin install https://github.com/agirahman/righthand`
-- **Cline (CLI)**: `cline plugin install https://github.com/agirahman/righthand.git`
 
 Updates: use each harness's own update command or re-run install. Removal: use each harness's uninstall command.
 
@@ -54,7 +52,7 @@ On Windows use `Copy-Item -Recurse`.
 ## Usage modes
 
 - Native `/righthand` slash commands and interactive persona switching are supported in **Command Code**, **Pi**, **Oh My Pi**, **OpenCode**, and via the **RightHand CLI** (`righthand switch <persona>`).
-- On other harnesses (Claude Code, Cursor, Codex, Kimi, Cline), activate by requesting the persona in conversation: *"Act as righthand-backend"* or *"Use the righthand-orchestrator skill"*.
+- On other harnesses (Claude Code, Cursor, Codex, Kimi), activate by requesting the persona in conversation: *"Act as righthand-backend"* or *"Use the righthand-orchestrator skill"*.
 - Writer personas should run in isolated lanes created by Herdr outside this repository, using `scripts/herdr-spawn.*`.
 
 ## Verification

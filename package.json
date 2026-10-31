@@ -27,18 +27,6 @@
       "./skills"
     ]
   },
-  "cline": {
-    "plugins": [
-      {
-        "paths": [
-          "./.cline-plugin/plugin.js"
-        ],
-        "capabilities": [
-          "skills"
-        ]
-      }
-    ]
-  },
   "bin": {
     "righthand": "./bin/righthand.js"
   },
