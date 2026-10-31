@@ -1,9 +1,10 @@
 ---
 name: orchestrator
-description: Lead and team coordinator that breaks tasks into atomic tickets, sets up ticket-prefixed worktree lanes, and delegates to specialist roles in Herdr tabs.
 role: Team Orchestrator
+description: Lead and team coordinator that breaks tasks into atomic tickets, sets up ticket-prefixed worktree lanes, and delegates to specialist roles in Herdr tabs.
 mode: readonly
-herdr_tab: orchestrator
+skills: [dispatch, ticket-planning, context-briefing, report-and-board]
+output: [report]
 ---
 
 # Team Orchestrator

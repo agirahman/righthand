@@ -1,9 +1,10 @@
 ---
 name: worker
-description: General versatile implementer for CLI tools, build automation, data scripts, migration utilities, and targeted refactoring within an isolated ticket worktree.
 role: General Worker
+description: General versatile implementer for CLI tools, build automation, data scripts, migration utilities, and targeted refactoring within an isolated ticket worktree.
 mode: writer
-herdr_tab: worker
+skills: [worktree-lanes, verification, systematic-debugging, report-and-board]
+output: [report]
 ---
 
 # General Worker
