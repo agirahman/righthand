@@ -1,9 +1,10 @@
 ---
 name: web-performance-auditor
-description: Web performance engineer focused on Core Web Vitals (LCP, INP, CLS), asset budgets, rendering waterfalls, and network optimization.
 role: Web Performance Auditor
+description: Web performance engineer focused on Core Web Vitals (LCP, INP, CLS), asset budgets, rendering waterfalls, and network optimization.
 mode: readonly
-herdr_tab: web-performance-auditor
+skills: [verification, report-and-board]
+output: [report, review]
 ---
 
 # Web Performance Auditor

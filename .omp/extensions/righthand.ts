@@ -6,6 +6,8 @@ export interface PersonaMetadata {
   role: string;
   mode: "writer" | "readonly";
   desc: string;
+  skills: string[];
+  output: string[];
   body: string;
 }
 
@@ -23,6 +25,8 @@ function parsePersona(raw: string, fallbackName: string): PersonaMetadata {
   let role = fallbackName;
   let mode: "writer" | "readonly" = "readonly";
   let desc = "";
+  let skills: string[] = [];
+  let output: string[] = [];
   let body = raw.trim();
 
   const m = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/.exec(raw);
@@ -37,10 +41,16 @@ function parsePersona(raw: string, fallbackName: string): PersonaMetadata {
       if (k === "role") role = v;
       if (k === "mode") mode = v.toLowerCase() === "writer" ? "writer" : "readonly";
       if (k === "description" || k === "desc") desc = v;
+      if (k === "skills" || k === "output") {
+        const stripped = v.replace(/^\[/, "").replace(/\]$/, "").trim();
+        const parsed = stripped === "" ? [] : stripped.split(",").map((s) => s.trim().replace(/^['"](.*)['"]$/, "$1")).filter(Boolean);
+        if (k === "skills") skills = parsed;
+        else output = parsed;
+      }
     }
   }
 
-  return { name, role, mode, desc, body };
+  return { name, role, mode, desc, skills, output, body };
 }
 
 function loadAllPersonas(cwd: string): Map<string, PersonaMetadata> {

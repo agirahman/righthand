@@ -1,9 +1,10 @@
 ---
 name: product-manager
-description: Product manager that clarifies vague requirements with at least 2 questions and translates them into structured problem statements, user stories, and acceptance criteria.
 role: Product Manager
+description: Product manager that clarifies vague requirements with at least 2 questions and translates them into structured problem statements, user stories, and acceptance criteria.
 mode: readonly
-herdr_tab: product-manager
+skills: [ticket-planning, report-and-board]
+output: [report]
 ---
 
 # Product Manager

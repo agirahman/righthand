@@ -23,6 +23,8 @@ function parsePersona(raw, fallbackName) {
   let role = fallbackName
   let mode = "readonly"
   let desc = ""
+  let skills = []
+  let output = []
   let body = raw.trim()
 
   const m = FRONTMATTER_RE.exec(raw)
@@ -37,10 +39,16 @@ function parsePersona(raw, fallbackName) {
       if (k === "role") role = v
       if (k === "mode") mode = v.toLowerCase() === "writer" ? "writer" : "readonly"
       if (k === "description" || k === "desc") desc = v
+      if (k === "skills" || k === "output") {
+        const stripped = v.replace(/^\[/, "").replace(/\]$/, "").trim()
+        const parsed = stripped === "" ? [] : stripped.split(",").map((s) => s.trim().replace(/^['"](.*)['"]$/, "$1")).filter(Boolean)
+        if (k === "skills") skills = parsed
+        else output = parsed
+      }
     }
   }
 
-  return { name, role, mode, desc, body }
+  return { name, role, mode, desc, skills, output, body }
 }
 
 function loadAllPersonas(cwd) {
