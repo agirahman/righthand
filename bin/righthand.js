@@ -151,7 +151,7 @@ function cmdInit() {
 
   // .gitignore handling
   const giPath = path.join(cwd, '.gitignore');
-  const line = '.righthand/state/';
+  const line = '.righthand/';
   let giStatus = 'unchanged';
   if (!fs.existsSync(giPath)) {
     fs.writeFileSync(giPath, line + '\n');
