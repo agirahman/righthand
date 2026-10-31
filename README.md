@@ -34,7 +34,7 @@ Instead of treating an AI agent as a generic monolith, RightHand injects targete
 
 ## Persona Catalog
 
-The catalog combines developer team roles with Addy Osmani's specialized audit personas (12 personas: 7 `readonly`, 5 `writer`):
+The catalog combines developer team roles with Addy Osmani's specialized audit personas (11 personas: 7 `readonly`, 4 `writer`):
 
 | Profile | Mode | Role Title | Core Focus | Output Framework / Deliverable |
 |---|---|---|---|---|
@@ -44,7 +44,6 @@ The catalog combines developer team roles with Addy Osmani's specialized audit p
 | `worker` | `writer` | General Worker | General-purpose tasks: CLI tools, build automation, data migrations, glue code | Status report, minimal file diff, verification proof |
 | `backend` | `writer` | Backend Engineer | API contracts, database queries/migrations, server-side trust boundaries | API diff, automated test assertions, migration idempotency proof |
 | `frontend` | `writer` | Frontend Engineer | Semantic HTML, CSS-first layout, state colocation, responsive UX, accessibility (a11y) | Component diff, keyboard/screen-reader audit, visual check proof |
-| `editor` | `writer` | Video & Motion Editor | Programmatic animation, HyperFrames HTML-to-video timeline sync, motion design, rendering | Video diff, check validation proof, snapshot/render deliverables |
 | `devops` | `writer` | DevOps Engineer | Deterministic CI/CD pipelines, Docker containerization, secrets hygiene, rollbacks | Pipeline/container diff, reproducibility checklist, build verification |
 | `code-reviewer` | `readonly` | Senior Code Reviewer | Multi-dimensional evaluation across 5 engineering axes | 5-axis review report (P1–P4 severity) anchored to `file:line` |
 | `security-auditor` | `readonly` | Security Auditor | Vulnerability discovery, OWASP Top 10 compliance, sanitization, threat modeling | Threat matrix (Critical–Low) + actionable remediation snippets |
@@ -78,7 +77,7 @@ RightHand includes a built-in CLI for managing personas and harness integrations
 
 ```bash
 # --- Persona Commands ---
-righthand list                   # List all 12 personas + active state
+righthand list                   # List all 11 personas + active state
 righthand switch backend         # Activate a persona
 righthand switch security-auditor
 righthand off                    # Deactivate persona (restore default)
@@ -124,7 +123,7 @@ Pi supports native extensions that hook agent lifecycle events.
   # Runs internally: pi install npm:@agirahman/righthand
   ```
 - **Slash Command**:
-  - `/righthand <persona>` — interactive slash command with full tab-autocomplete for all 12 personas.
+  - `/righthand <persona>` — interactive slash command with full tab-autocomplete for all 11 personas.
   - `/righthand off` — clear persona.
 - **Status Indicator**: Displays current persona badge in the Pi UI status bar.
 - **Details**: See [`.pi/README.md`](./.pi/README.md).
@@ -171,7 +170,7 @@ For harnesses that support portable Agent Skills or custom plugins (Claude Code,
 
 ### Worktree Isolation for Writer Personas
 
-To prevent merge conflicts when multiple agents work simultaneously on the same repository, writer roles (`backend`, `frontend`, `editor`, `devops`, `worker`) must operate in isolated, ticket-prefixed git worktrees:
+To prevent merge conflicts when multiple agents work simultaneously on the same repository, writer roles (`backend`, `frontend`, `devops`, `worker`) must operate in isolated, ticket-prefixed git worktrees:
 
 ```bash
 # Worktree format: wt/<ticket-id>-<slug>

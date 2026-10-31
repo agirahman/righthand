@@ -21,7 +21,7 @@ if [[ -n "$TICKET" ]]; then
   LABEL="$ROLE-$TICKET"
 fi
 
-WRITER_ROLES=("backend" "frontend" "devops" "worker" "editor")
+WRITER_ROLES=("backend" "frontend" "devops" "worker")
 IS_WRITER=false
 
 for r in "${WRITER_ROLES[@]}"; do

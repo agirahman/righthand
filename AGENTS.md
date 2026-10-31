@@ -39,7 +39,7 @@ All external contributions follow the standard GitHub Fork and Pull Request mode
 Before submitting any Pull Request, you MUST run and verify all three local validation checks:
 
 ```bash
-# 1. Validate all 12 persona profiles, 12 skills, and 10 cross-harness manifests
+# 1. Validate all 11 persona profiles, 11 skills, and 10 cross-harness manifests
 npm test
 
 # 2. Typecheck TypeScript across all harness extensions (0 errors required)
@@ -63,7 +63,7 @@ When modifying or adding a persona in `profiles/`:
 1. Ensure `profiles/<name>.md` has valid frontmatter.
 2. Mirror the persona changes into `skills/righthand-<name>/SKILL.md`.
 3. Update autocomplete lists in `.commandcode/mods/righthand.ts`, `.pi/extensions/righthand.ts`, and `bin/state.js` if adding a new persona.
-4. Run `npm test` to verify all 12 profiles, 12 skills, and 10 manifests pass validation.
+4. Run `npm test` to verify all 11 profiles, 11 skills, and 10 manifests pass validation.
 
 ---
 
