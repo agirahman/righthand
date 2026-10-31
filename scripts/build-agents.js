@@ -74,13 +74,20 @@ function writeFileIfChanged(filePath, buffer) {
   return true;
 }
 
-function main() {
-  const profileFiles = fs.readdirSync(PROFILES_DIR)
+function buildPlan(rootDir) {
+  const root = rootDir ? path.resolve(rootDir) : ROOT;
+  const profilesDir = path.join(root, 'profiles');
+  const skillsDir = path.join(root, 'skills');
+  const agentsDir = path.join(root, 'agents');
+  const codexAgentsDir = path.join(root, '.codex-plugin', 'agents');
+  const profileCopiesDir = path.join(root, '.commandcode-mod', 'profiles');
+
+  const profileFiles = fs.readdirSync(profilesDir)
     .filter((f) => f.endsWith('.md'))
     .sort();
 
   const profiles = profileFiles.map((file) => {
-    const fullPath = path.join(PROFILES_DIR, file);
+    const fullPath = path.join(profilesDir, file);
     const content = fs.readFileSync(fullPath, 'utf8');
     const parsed = parseProfile(content);
     return {
@@ -90,18 +97,16 @@ function main() {
       body: parsed.body,
       skills: parsed.skills,
       eol: detectEol(content),
-      sourceBuffer: Buffer.from(content, 'utf8'),
+      sourceContent: content,
     };
   });
 
-  // sort personas alphabetically by name
   profiles.sort((a, b) => a.name.localeCompare(b.name));
 
-  // load skills cache
   const skillCache = new Map();
   function getSkillBody(skillName) {
     if (skillCache.has(skillName)) return skillCache.get(skillName);
-    const skillPath = path.join(SKILLS_DIR, skillName, 'SKILL.md');
+    const skillPath = path.join(skillsDir, skillName, 'SKILL.md');
     if (!fs.existsSync(skillPath)) {
       throw new Error(`Missing skill file for '${skillName}': ${skillPath}`);
     }
@@ -111,17 +116,15 @@ function main() {
     return body;
   }
 
-  let written = 0;
-  const counts = { md: 0, toml: 0, copy: 0 };
+  const plan = {};
 
   for (const profile of profiles) {
-    const { name, meta, body: personaBody, skills, eol, file } = profile;
+    const { name, meta, body: personaBody, skills, eol, file, sourceContent } = profile;
     const role = meta.role;
     const description = meta.description;
 
     const sortedSkills = [...skills].sort((a, b) => a.localeCompare(b));
 
-    // validate skills exist
     for (const s of sortedSkills) {
       getSkillBody(s);
     }
@@ -131,7 +134,6 @@ function main() {
       body: getSkillBody(s),
     }));
 
-    // compose body
     const parts = [];
     if (!/^#\s/.test(personaBody)) {
       parts.push(`# ${role}`);
@@ -148,7 +150,6 @@ function main() {
     }
     const composedBody = parts.join(eol);
 
-    // agent md
     const mdContent = [
       '---',
       `name: ${name}`,
@@ -158,16 +159,9 @@ function main() {
       composedBody,
       '',
     ].join(eol);
-    // careful: join with eol then ensure trailing eol
-    const mdBuffer = Buffer.from(mdContent, 'utf8');
-    const mdPath = path.join(AGENTS_DIR, `${name}.md`);
-    counts.md++;
-    if (writeFileIfChanged(mdPath, mdBuffer)) {
-      console.log(`wrote agents/${name}.md`);
-      written++;
-    }
 
-    // toml
+    plan[`agents/${name}.md`] = mdContent;
+
     const tomlBody = escapeTomlMultiline(composedBody);
     const tomlContent = [
       `name = "${escapeTomlBasic(name)}"`,
@@ -177,21 +171,41 @@ function main() {
       `"""`,
       '',
     ].join(eol);
-    const tomlBuffer = Buffer.from(tomlContent, 'utf8');
-    const tomlPath = path.join(CODEX_AGENTS_DIR, `${name}.toml`);
-    counts.toml++;
-    if (writeFileIfChanged(tomlPath, tomlBuffer)) {
-      console.log(`wrote .codex-plugin/agents/${name}.toml`);
-      written++;
-    }
 
-    // profile copy
-    const copyPath = path.join(PROFILE_COPIES_DIR, `${name}.md`);
-    // note: profile filename may differ from name? use original file basename
-    const originalCopyPath = path.join(PROFILE_COPIES_DIR, profile.file);
-    counts.copy++;
-    if (writeFileIfChanged(originalCopyPath, profile.sourceBuffer)) {
-      console.log(`wrote .commandcode-mod/profiles/${file}`);
+    plan[`.codex-plugin/agents/${name}.toml`] = tomlContent;
+
+    plan[`.commandcode-mod/profiles/${file}`] = sourceContent;
+  }
+
+  // make plan iterable and indexable for compatibility
+  const iterable = plan;
+  Object.defineProperty(iterable, Symbol.iterator, {
+    value: function* () { for (const k of Object.keys(this)) yield [k, this[k]]; },
+    writable: true,
+    configurable: true,
+  });
+  Object.defineProperty(iterable, 'get', { value: function (k) { return this[k]; }, writable: true, configurable: true });
+  Object.defineProperty(iterable, 'has', { value: function (k) { return Object.prototype.hasOwnProperty.call(this, k); }, writable: true, configurable: true });
+  Object.defineProperty(iterable, 'size', { get: function () { return Object.keys(this).length; }, configurable: true });
+
+  return iterable;
+}
+
+function main() {
+  const root = ROOT;
+  const plan = buildPlan(root);
+
+  let written = 0;
+  const counts = { md: 0, toml: 0, copy: 0 };
+  for (const [relPath, content] of Object.entries(plan)) {
+    if (relPath.startsWith('agents/')) counts.md++;
+    else if (relPath.startsWith('.codex-plugin/agents/')) counts.toml++;
+    else if (relPath.startsWith('.commandcode-mod/profiles/')) counts.copy++;
+
+    const fullPath = path.join(root, relPath);
+    const buffer = Buffer.from(content, 'utf8');
+    if (writeFileIfChanged(fullPath, buffer)) {
+      console.log(`wrote ${relPath}`);
       written++;
     }
   }
@@ -203,8 +217,12 @@ function main() {
 }
 
 try {
-  main();
+  if (require.main === module) {
+    main();
+  }
 } catch (err) {
   console.error(`ERROR: ${err.message}`);
   process.exit(1);
 }
+
+module.exports = { buildPlan };

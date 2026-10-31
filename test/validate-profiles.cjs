@@ -1,7 +1,9 @@
 const fs = require('node:fs');
 const path = require('node:path');
 
-const profilesDir = path.join(__dirname, '..', 'profiles');
+const root = path.join(__dirname, '..');
+const profilesDir = path.join(root, 'profiles');
+const skillsRoot = path.join(root, 'skills');
 const files = fs.readdirSync(profilesDir).filter((f) => f.endsWith('.md'));
 
 console.log(`Checking ${files.length} profile files in ${profilesDir}...`);
@@ -9,6 +11,7 @@ console.log(`Checking ${files.length} profile files in ${profilesDir}...`);
 let failed = 0;
 const expectedKeys = ['name', 'role', 'description', 'mode', 'skills', 'output'];
 const roles = [];
+const referencedSkills = new Set();
 
 for (const file of files) {
   const filePath = path.join(profilesDir, file);
@@ -64,17 +67,59 @@ for (const file of files) {
       failed++;
     }
   }
+  // output must be subset of report/review (already enforced above) and writer must not declare review
+  if (metadata.mode === 'writer' && outputVals.includes('review')) {
+    console.error(`FAIL: [${file}] A persona with mode: writer must not declare 'review' in output`);
+    failed++;
+  }
 
-  // Check no fenced code block in orchestrator body
-  if (metadata.name === 'orchestrator') {
-    const bodyLines = (fmMatch[2] || '').split(/\r?\n/);
-    for (const bl of bodyLines) {
-      if (/^```/.test(bl)) {
-        console.error(`FAIL: [${file}] Fenced code block not allowed in persona body`);
+  // Parse skills entries
+  const skillsRaw = (metadata.skills || '').trim();
+  const skillsStripped = skillsRaw.replace(/^\[/, '').replace(/\]$/, '').trim();
+  const skillEntries = skillsStripped === '' ? [] : skillsStripped.split(',').map((s) => s.trim()).filter(Boolean);
+  for (const entry of skillEntries) referencedSkills.add(entry);
+
+  // Skills resolution: every entry must resolve to skills/<name>/SKILL.md
+  for (const entry of skillEntries) {
+    const skillPath = path.join(skillsRoot, entry, 'SKILL.md');
+    if (!fs.existsSync(skillPath)) {
+      console.error(`FAIL: [${file}] references missing skill '${entry}': ${path.relative(root, skillPath)}`);
+      failed++;
+    }
+  }
+
+  // Code fence: reject fenced blocks whose info string is a shell language.
+  // Blocks with no info string, or with markdown/json/text/etc., are allowed.
+  const shellLangs = new Set(['bash', 'sh', 'shell', 'zsh', 'pwsh', 'powershell', 'console', 'cmd']);
+  const bodyLines = (fmMatch[2] || '').split(/\r?\n/);
+  for (const bl of bodyLines) {
+    const m = bl.trim().match(/^```\s*(\S*)/);
+    if (m) {
+      const info = m[1].toLowerCase();
+      if (shellLangs.has(info)) {
+        console.error(`FAIL: [${file}] Shell fenced code block not allowed in persona body (info: ${info})`);
         failed++;
         break;
       }
     }
+  }
+
+  // Budget: persona body lines + bodies of referenced skills <= 400
+  const personaBodyLines = (fmMatch[2] || '').trim().split(/\r?\n/).length;
+  let skillBodyLines = 0;
+  for (const entry of skillEntries) {
+    const skillPath = path.join(skillsRoot, entry, 'SKILL.md');
+    if (!fs.existsSync(skillPath)) continue;
+    const skillContent = fs.readFileSync(skillPath, 'utf8');
+    const skillFm = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/.exec(skillContent);
+    const skillBody = skillFm ? (skillFm[2] || '').trim() : skillContent.trim();
+    skillBodyLines += skillBody === '' ? 0 : skillBody.split(/\r?\n/).length;
+  }
+  const totalLines = personaBodyLines + skillBodyLines;
+  console.log(`Budget: [${file}] ${totalLines} lines (persona ${personaBodyLines} + skills ${skillBodyLines}, limit 400)`);
+  if (totalLines > 400) {
+    console.error(`FAIL: [${file}] Budget exceeded: ${totalLines} lines > 400`);
+    failed++;
   }
 
   roles.push({
@@ -85,6 +130,20 @@ for (const file of files) {
     output: metadata.output,
   });
   console.log(`OK: [${file}] -> ${metadata.name} (${metadata.role}) [${metadata.mode}]`);
+}
+
+// Every directory under skills/ must be referenced by at least one profile or allowlisted.
+const allowedSkillDirs = [];
+if (fs.existsSync(skillsRoot)) {
+  for (const dir of fs.readdirSync(skillsRoot)) {
+    const dirPath = path.join(skillsRoot, dir);
+    if (!fs.statSync(dirPath).isDirectory()) continue;
+    if (allowedSkillDirs.includes(dir)) continue;
+    if (!referencedSkills.has(dir)) {
+      console.error(`FAIL: [skill] Directory '${dir}' under skills/ is not referenced by any profile`);
+      failed++;
+    }
+  }
 }
 
 if (failed > 0) {
