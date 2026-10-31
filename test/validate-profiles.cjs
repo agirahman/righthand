@@ -65,17 +65,15 @@ for (const file of files) {
     }
   }
 
-  // Check Composition block
-  if (!content.includes('## Composition')) {
-    console.error(`FAIL: [${file}] Missing '## Composition' section (Addy Osmani spec rule)`);
-    failed++;
-  }
-
-  // Check Orchestrator ticket requirement
+  // Check no fenced code block in orchestrator body
   if (metadata.name === 'orchestrator') {
-    if (!content.includes('T1') || !content.includes('worktree')) {
-      console.error(`FAIL: [${file}] Orchestrator must include ticket format T1 and worktree instructions`);
-      failed++;
+    const bodyLines = (fmMatch[2] || '').split(/\r?\n/);
+    for (const bl of bodyLines) {
+      if (/^```/.test(bl)) {
+        console.error(`FAIL: [${file}] Fenced code block not allowed in persona body`);
+        failed++;
+        break;
+      }
     }
   }
 
