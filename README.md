@@ -28,13 +28,13 @@ Instead of treating an AI agent as a generic monolith, RightHand injects targete
 - **Single-Perspective Personas**: Each persona embodies a specialized engineering role with a clear evaluation lens, rigid output format, and strict execution boundaries.
 - **No Recursive Persona Invocations**: Personas do not invoke other personas at runtime. Multi-agent coordination occurs at the user or orchestrator level across Herdr tabs.
 - **Ticket & Worktree Isolation**: Sub-agents communicate through explicit tickets, structured reports, and isolated git worktrees rather than unstructured shared state.
-- **Dedicated Harness Folders**: Native extensions and plugins are maintained in clean, harness-specific folders (`.commandcode/`, `.pi/`, `.omp/`, `.opencode/`), backed by a unified CLI and state engine.
+- **Dedicated Harness Folders**: Native extensions and plugins are maintained in clean, harness-specific folders (`.commandcode-mod/`, `.pi-plugin/`, `.omp/`, `.opencode-plugin/`), backed by a unified CLI and state engine.
 
 ---
 
 ## Persona Catalog
 
-The catalog combines developer team roles with Addy Osmani's specialized audit personas (12 personas: 7 `readonly`, 5 `writer`):
+The catalog combines developer team roles with Addy Osmani's specialized audit personas (11 personas: 7 `readonly`, 4 `writer`):
 
 | Profile | Mode | Role Title | Core Focus | Output Framework / Deliverable |
 |---|---|---|---|---|
@@ -44,7 +44,6 @@ The catalog combines developer team roles with Addy Osmani's specialized audit p
 | `worker` | `writer` | General Worker | General-purpose tasks: CLI tools, build automation, data migrations, glue code | Status report, minimal file diff, verification proof |
 | `backend` | `writer` | Backend Engineer | API contracts, database queries/migrations, server-side trust boundaries | API diff, automated test assertions, migration idempotency proof |
 | `frontend` | `writer` | Frontend Engineer | Semantic HTML, CSS-first layout, state colocation, responsive UX, accessibility (a11y) | Component diff, keyboard/screen-reader audit, visual check proof |
-| `editor` | `writer` | Video & Motion Editor | Programmatic animation, HyperFrames HTML-to-video timeline sync, motion design, rendering | Video diff, check validation proof, snapshot/render deliverables |
 | `devops` | `writer` | DevOps Engineer | Deterministic CI/CD pipelines, Docker containerization, secrets hygiene, rollbacks | Pipeline/container diff, reproducibility checklist, build verification |
 | `code-reviewer` | `readonly` | Senior Code Reviewer | Multi-dimensional evaluation across 5 engineering axes | 5-axis review report (P1–P4 severity) anchored to `file:line` |
 | `security-auditor` | `readonly` | Security Auditor | Vulnerability discovery, OWASP Top 10 compliance, sanitization, threat modeling | Threat matrix (Critical–Low) + actionable remediation snippets |
@@ -63,7 +62,7 @@ npm install -g @agirahman/righthand
 righthand setup cmdc        # Command Code (Linux/macOS: cmd, Windows: cmdc)
 righthand setup pi          # Pi Coding Agent
 righthand setup omp         # Oh My Pi (copies to .omp/extensions/)
-righthand setup opencode    # OpenCode (copies two plugins to .opencode/plugins/)
+righthand setup opencode    # OpenCode (copies two plugins to .opencode-plugin/plugins/)
 righthand setup all         # Set up every detected harness at once
 
 # 3. Check health
@@ -78,7 +77,7 @@ RightHand includes a built-in CLI for managing personas and harness integrations
 
 ```bash
 # --- Persona Commands ---
-righthand list                   # List all 12 personas + active state
+righthand list                   # List all 11 personas + active state
 righthand switch backend         # Activate a persona
 righthand switch security-auditor
 righthand off                    # Deactivate persona (restore default)
@@ -86,6 +85,7 @@ righthand inject                 # Print active persona prompt to stdout
 righthand status                 # One-liner: active persona + setup harnesses
 
 # --- Setup & Maintenance ---
+righthand init                  # Initialize .righthand/ in current project
 righthand setup <harness|all>    # Install RightHand into a harness
 righthand update [harness]       # Re-sync files for omp/opencode after npm update
 righthand doctor                 # Health check: PATH, files, active persona
@@ -95,13 +95,13 @@ righthand -v / --version         # Print version
 righthand -h / --help            # Print help
 ```
 
-Active persona state is stored in `.righthand/active-persona.json` (per project, gitignored).
+Active persona state is stored in `.righthand/state/active-persona.json` (per project, gitignored).
 
 ---
 
 ## Supported Harnesses & Installation
 
-### 1. Command Code (`.commandcode/`)
+### 1. Command Code (`.commandcode-mod/`)
 RightHand was originally built as a first-class Command Code mod.
 
 - **Install via CLI** (Linux/macOS: `cmd`, Windows: `cmdc` — auto-detected):
@@ -113,9 +113,9 @@ RightHand was originally built as a first-class Command Code mod.
   - `/righthand` or `/profile` — open fuzzy picker or show active persona.
   - `/righthand <persona>` — switch persona on-the-fly.
   - `/righthand off` — restore default prompt.
-- **Details**: See [`.commandcode/README.md`](./.commandcode/README.md).
+- **Details**: See [`.commandcode-mod/README.md`](./.commandcode-mod/README.md).
 
-### 2. Pi Coding Agent (`.pi/`)
+### 2. Pi Coding Agent (`.pi-plugin/`)
 Pi supports native extensions that hook agent lifecycle events.
 
 - **Install via CLI**:
@@ -124,10 +124,10 @@ Pi supports native extensions that hook agent lifecycle events.
   # Runs internally: pi install npm:@agirahman/righthand
   ```
 - **Slash Command**:
-  - `/righthand <persona>` — interactive slash command with full tab-autocomplete for all 12 personas.
+  - `/righthand <persona>` — interactive slash command with full tab-autocomplete for all 11 personas.
   - `/righthand off` — clear persona.
 - **Status Indicator**: Displays current persona badge in the Pi UI status bar.
-- **Details**: See [`.pi/README.md`](./.pi/README.md).
+- **Details**: See [`.pi-plugin/README.md`](./.pi-plugin/README.md).
 
 ### 3. Oh My Pi (`.omp/`)
 Oh My Pi automatically discovers native extensions placed in `<cwd>/.omp/extensions/`.
@@ -141,27 +141,27 @@ Oh My Pi automatically discovers native extensions placed in `<cwd>/.omp/extensi
 - **Update after npm upgrade**: `righthand update omp`
 - **Details**: See [`.omp/README.md`](./.omp/README.md).
 
-### 4. OpenCode (`.opencode/`)
+### 4. OpenCode (`.opencode-plugin/`)
 OpenCode uses the native `@opencode/plugin` and `@opencode/plugin/tui` APIs.
 
 - **Setup**:
   ```bash
   righthand setup opencode
-  # Copies two plugins into <cwd>/.opencode/plugins/
+  # Copies two plugins into <cwd>/.opencode-plugin/plugins/
   ```
 - **Two plugins installed**:
   - `righthand-server.js` — injects active persona into system prompt on every session context event (hooks `session.hook("context")`).
   - `righthand-tui.js` — registers native `/righthand` slash command with interactive persona picker, footer status indicator, and toast notifications. State is stored per session in `~/.local/state/opencode/righthand.json`.
 - **Slash Command**: `/righthand <persona>` | `/righthand off` | `/righthand list` | `/righthand` (picker)
 - **Update after npm upgrade**: `righthand update opencode`
-- **Details**: See [`.opencode/README.md`](./.opencode/README.md).
+- **Details**: See [`.opencode-plugin/README.md`](./.opencode-plugin/README.md).
 
 ### 5. Cross-Harness Portable Skills (`skills/`)
-For harnesses that support portable Agent Skills or custom plugins (Claude Code, Cursor, Codex, Kimi Code, Cline):
+For harnesses that support portable Agent Skills or custom plugins (Claude Code, Cursor, Codex, Kimi Code):
 
-- Persona skills are available under `skills/righthand-<persona>/SKILL.md`.
-- Activate by requesting the persona in conversation (e.g., *"Act as righthand-backend"*).
-- Compatible plugin manifests are included: `.claude-plugin/`, `.cursor-plugin/`, `.codex-plugin/`, `.kimi-plugin/`, `.cline-plugin/`, and `.agents/`.
+- Capability skills are available under `skills/<capability>/SKILL.md`.
+- Personas are defined in `profiles/<name>.md` and reference capabilities from their `skills:` field.
+- Compatible plugin manifests are included: `.claude-plugin/`, `.cursor-plugin/`, `.codex-plugin/`, `.kimi-plugin/`, and `.agents/`.
 
 ---
 
@@ -171,7 +171,7 @@ For harnesses that support portable Agent Skills or custom plugins (Claude Code,
 
 ### Worktree Isolation for Writer Personas
 
-To prevent merge conflicts when multiple agents work simultaneously on the same repository, writer roles (`backend`, `frontend`, `editor`, `devops`, `worker`) must operate in isolated, ticket-prefixed git worktrees:
+To prevent merge conflicts when multiple agents work simultaneously on the same repository, writer roles (`backend`, `frontend`, `devops`, `worker`) must operate in isolated, ticket-prefixed git worktrees:
 
 ```bash
 # Worktree format: wt/<ticket-id>-<slug>

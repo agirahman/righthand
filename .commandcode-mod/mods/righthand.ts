@@ -10,10 +10,11 @@
  * Profile files support YAML frontmatter (Addy Osmani specification) and legacy headers:
  *   ---
  *   name: code-reviewer
- *   description: 5-axis review
  *   role: Senior Code Reviewer
+ *   description: 5-axis review
  *   mode: readonly
- *   herdr_tab: code-reviewer
+ *   skills: [code-review, report-and-board]
+ *   output: [report, review]
  *   ---
  */
 
@@ -30,7 +31,8 @@ export interface ProfileMetadata {
   role: string;
   desc: string;
   mode: ProfileMode;
-  herdrTab?: string;
+  skills: string[];
+  output: string[];
   body: string;
   sourcePath: string;
 }
@@ -48,7 +50,8 @@ export function parseProfileFile(filePath: string, fallbackName: string): Profil
   let role = fallbackName;
   let desc = '';
   let mode: ProfileMode = 'readonly';
-  let herdrTab = fallbackName;
+  let skills: string[] = [];
+  let output: string[] = [];
   let body = raw.trim();
 
   // Parse YAML Frontmatter if present
@@ -67,7 +70,12 @@ export function parseProfileFile(filePath: string, fallbackName: string): Profil
       if (key === 'role') role = val;
       if (key === 'description' || key === 'desc') desc = val;
       if (key === 'mode') mode = val.toLowerCase() === 'writer' ? 'writer' : 'readonly';
-      if (key === 'herdr_tab' || key === 'herdrtab') herdrTab = val;
+      if (key === 'skills' || key === 'output') {
+        const stripped = val.replace(/^\[/, '').replace(/\]$/, '').trim();
+        const parsed = stripped === '' ? [] : stripped.split(',').map((s) => s.trim().replace(/^['"](.*)['"]$/, '$1')).filter(Boolean);
+        if (key === 'skills') skills = parsed;
+        else output = parsed;
+      }
     }
     label = role || name;
   }
@@ -111,7 +119,8 @@ export function parseProfileFile(filePath: string, fallbackName: string): Profil
     role,
     desc,
     mode,
-    herdrTab: herdrTab || name,
+    skills,
+    output,
     body,
     sourcePath: filePath,
   };
@@ -138,8 +147,8 @@ export function loadAllProfiles(cwd: string): Map<string, ProfileMetadata> {
   for (const dir of searchDirs) {
     let files: string[];
     try {
-      files = readdirSync(dir);
-    } catch {
+      files = readdirSync(dir).sort();
+      } catch {
       continue;
     }
 
@@ -266,7 +275,7 @@ export default function (cmd: ModApi): void {
       const profiles = loadAllProfiles(cmd.cwd);
       const current = profiles.get(currentName);
       if (!current) return undefined;
-      return `## Active RightHand persona: ${current.label} (${current.mode})\nHerdr Tab: ${current.herdrTab || current.name}\n\n${current.body}`;
+      return `## Active RightHand persona: ${current.label} (${current.mode})\nHerdr Tab: ${current.name}\n\n${current.body}`;
     },
   });
 
@@ -299,7 +308,7 @@ export default function (cmd: ModApi): void {
       const profile = activate(picked);
       return {
         message: profile
-          ? `Active persona: ${profile.label} [${profile.mode}] (Herdr tab: ${profile.herdrTab})`
+          ? `Active persona: ${profile.label} [${profile.mode}] (Herdr tab: ${profile.name})`
           : `Persona "${picked}" not found.`,
       };
     }
@@ -321,7 +330,7 @@ export default function (cmd: ModApi): void {
           const mode = `[${p.mode.toUpperCase()}]`;
           const header = `${marker}${p.name} ${mode} — ${p.role}${status}`;
           const desc = `    Role & Purpose: ${p.desc || p.label}`;
-          const tab = `    Herdr Tab: ${p.herdrTab || p.name}`;
+           const tab = `    Herdr Tab: ${p.name}`;
           return `${header}\n${desc}\n${tab}`;
         });
 
@@ -349,7 +358,7 @@ export default function (cmd: ModApi): void {
     const profile = activate(arg);
     if (profile) {
       return {
-        message: `Active persona: ${profile.label} [${profile.mode}] (Herdr tab: ${profile.herdrTab})`,
+          message: `Active persona: ${profile.label} [${profile.mode}] (Herdr tab: ${profile.name})`,
       };
     }
 

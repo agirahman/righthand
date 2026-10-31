@@ -43,7 +43,7 @@ tab: backend
 ### Synchronization
 When modifying or adding a persona in `profiles/`:
 1. Ensure `profiles/<name>.md` has valid frontmatter.
-2. Mirror the persona into `skills/righthand-<name>/SKILL.md`.
+2. Update capability references in `skills/` only when a new capability is added; profiles reference capabilities by name.
 3. Update autocomplete lists in `.commandcode/mods/righthand.ts`, `.pi/extensions/righthand.ts`, and `bin/state.js` if a new persona is added.
 
 ---
@@ -91,7 +91,7 @@ Before creating a new issue, please search existing issues to avoid duplicates.
    - Write clear, concise commit messages.
    - Do not include automated bot trailers or unrelated file changes.
 3. **Verify Everything Locally**:
-   - `npm test` must pass (12/12 profiles, 12/12 skills, 10/10 manifests).
+    - `npm test` must pass (11/11 profiles, 11/11 skills, 10/10 manifests).
    - `npm run typecheck` must pass with 0 errors.
    - `npm run build` must compile clean to `dist/`.
 4. **Submit PR**:

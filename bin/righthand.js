@@ -5,7 +5,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
-const { readState, writeState, readSetupState, writeSetupState } = require('./state');
+const { readState, writeState } = require('./state');
 
 const pkg = require('../package.json');
 const root = path.resolve(__dirname, '..');
@@ -120,6 +120,57 @@ function cmdVersion() {
   console.log(`righthand v${pkg.version}`);
 }
 
+function cmdInit() {
+  const cwd = process.cwd();
+  const rhDir = path.join(cwd, '.righthand');
+  const dirs = ['.righthand/tickets', '.righthand/skills', '.righthand/state'];
+
+  // Validate .righthand itself
+  if (fs.existsSync(rhDir)) {
+    const st = fs.statSync(rhDir);
+    if (!st.isDirectory()) {
+      console.error('Error: .righthand exists and is not a directory');
+      process.exit(1);
+    }
+  }
+
+  for (const rel of dirs) {
+    const full = path.join(cwd, rel);
+    if (fs.existsSync(full)) {
+      const st = fs.statSync(full);
+      if (!st.isDirectory()) {
+        console.error(`Error: ${rel} exists and is not a directory`);
+        process.exit(1);
+      }
+      console.log(`${rel} exists`);
+    } else {
+      fs.mkdirSync(full, { recursive: true });
+      console.log(`${rel} created`);
+    }
+  }
+
+  // .gitignore handling
+  const giPath = path.join(cwd, '.gitignore');
+  const line = '.righthand/state/';
+  let giStatus = 'unchanged';
+  if (!fs.existsSync(giPath)) {
+    fs.writeFileSync(giPath, line + '\n');
+    giStatus = 'updated';
+  } else {
+    const raw = fs.readFileSync(giPath, 'utf8');
+    const lines = raw.split(/\r?\n/);
+    const has = lines.some(l => l.trim() === line);
+    if (!has) {
+      let content = raw;
+      if (content.length > 0 && !content.endsWith('\n')) content += '\n';
+      content += line + '\n';
+      fs.writeFileSync(giPath, content);
+      giStatus = 'updated';
+    }
+  }
+  console.log(`.gitignore ${giStatus}`);
+}
+
 function cmdHelp() {
   console.log(`
 RightHand v${pkg.version} — specialist agent personas for coding harnesses
@@ -134,6 +185,7 @@ Persona Commands:
   status                   Show active persona and setup harnesses
 
 Setup Commands:
+  init                     Initialize .righthand/ in current project
   setup <harness|all>      Install RightHand into a harness
   update [harness]         Re-sync harness files (omp/opencode) after npm update
   doctor                   Check harness availability and setup health
@@ -197,7 +249,6 @@ function cmdInject() {
 
 function cmdStatus() {
   const state = readState(process.cwd());
-  const setup = readSetupState(process.cwd());
 
   if (state.active) {
     console.log(`Active persona : ${state.active}`);
@@ -205,12 +256,6 @@ function cmdStatus() {
   } else {
     console.log('Active persona : none');
     console.log('Run: righthand switch <persona>');
-  }
-
-  if (setup.harnesses && setup.harnesses.length > 0) {
-    console.log(`Setup harnesses: ${setup.harnesses.join(', ')}`);
-  } else {
-    console.log('Setup harnesses: none (run: righthand setup <harness>)');
   }
 }
 
@@ -226,9 +271,6 @@ function cmdSetup(target) {
     process.exit(1);
   }
 
-  const setup = readSetupState(cwd);
-  const installed = new Set(setup.harnesses || []);
-
   for (const key of targets) {
     const h = HARNESSES[key];
     console.log(`\n[${h.label}]`);
@@ -243,7 +285,6 @@ function cmdSetup(target) {
       const r = spawnSync(h.bin, h.args, { shell: true, stdio: 'inherit' });
       if (r.status === 0) {
         console.log(`  ✓ installed via ${h.bin}`);
-        installed.add(key);
       } else {
         console.log(`  ✗ install failed (exit ${r.status})`);
       }
@@ -261,33 +302,39 @@ function cmdSetup(target) {
         fs.copyFileSync(srcPath, destPath);
         console.log(`  ✓ copied → ${destPath}`);
       }
-      if (ok) installed.add(key);
     }
   }
-
-  writeSetupState({ harnesses: Array.from(installed), updatedAt: new Date().toISOString() }, cwd);
 }
 
 function cmdUpdate(target) {
   const cwd = process.cwd();
-  const setup = readSetupState(cwd);
-  const configured = setup.harnesses || [];
 
-  if (configured.length === 0 && !target) {
-    console.log('No harnesses configured. Run: righthand setup <harness>');
+  // Determine copy harness candidates
+  const allCopy = Object.keys(HARNESSES).filter(k => HARNESSES[k].type === 'copy');
+  const copyCandidates = target
+    ? [resolveHarness(target)].filter(k => k && HARNESSES[k]?.type === 'copy')
+    : allCopy;
+
+  // spawn targets
+  const spawnTargets = target
+    ? [resolveHarness(target)].filter(k => k && HARNESSES[k]?.type === 'spawn')
+    : [];
+
+  // Check if any copy harness has existing destination files
+  const existingCopy = copyCandidates.filter(key => {
+    const h = HARNESSES[key];
+    return h.files.some(({ dest }) => fs.existsSync(resolveDestPath(h, dest)));
+  });
+
+  if (copyCandidates.length > 0 && existingCopy.length === 0 && spawnTargets.length === 0) {
+    console.log('No harness files found. Run: righthand setup <harness>');
     return;
   }
 
-  // Determine what to re-sync
-  const resyncTargets = target
-    ? [resolveHarness(target)].filter(Boolean)
-    : configured.filter(key => HARNESSES[key]?.type === 'copy');
-
-  if (resyncTargets.length > 0) {
+  if (existingCopy.length > 0) {
     console.log('Re-syncing harness files...');
-    for (const key of resyncTargets) {
+    for (const key of existingCopy) {
       const h = HARNESSES[key];
-      if (!h || h.type !== 'copy') continue;
       console.log(`\n[${h.label}]`);
       for (const { src, dest } of h.files) {
         const srcPath = path.join(root, src);
@@ -300,6 +347,10 @@ function cmdUpdate(target) {
           console.log(`  ✗ dest folder not found: ${path.dirname(destPath)} (run setup first?)`);
           continue;
         }
+        if (!fs.existsSync(destPath)) {
+          // only re-sync existing files
+          continue;
+        }
         fs.copyFileSync(srcPath, destPath);
         console.log(`  ✓ updated → ${destPath}`);
       }
@@ -307,9 +358,6 @@ function cmdUpdate(target) {
   }
 
   // Spawn harnesses (cmdc/pi) auto-update via package manager
-  const spawnTargets = target
-    ? [resolveHarness(target)].filter(k => k && HARNESSES[k]?.type === 'spawn')
-    : [];
   if (spawnTargets.length > 0) {
     for (const key of spawnTargets) {
       const h = HARNESSES[key];
@@ -327,8 +375,13 @@ function cmdUpdate(target) {
     }
   }
 
-  if (resyncTargets.length === 0 && spawnTargets.length === 0) {
-    console.log('Nothing to update. For Pi/CommandCode, use their own package manager.');
+  if (existingCopy.length === 0 && spawnTargets.length === 0) {
+    // maybe target copy with no existing files
+    if (copyCandidates.length > 0) {
+      console.log('No harness files found. Run: righthand setup <harness>');
+    } else {
+      console.log('Nothing to update. For Pi/CommandCode, use their own package manager.');
+    }
   }
 }
 
@@ -360,8 +413,8 @@ function cmdDoctor() {
 
   // Setup status
   console.log('\nSetup Status (this project):');
-  const setup = readSetupState(cwd);
-  const configured = new Set(setup.harnesses || []);
+  console.log(`  righthand initialized: ${fs.existsSync(path.join(cwd, '.righthand', 'tickets')) ? 'yes' : 'no'}`);
+
   let anySetup = false;
 
   for (const [key, h] of Object.entries(HARNESSES)) {
@@ -388,9 +441,9 @@ function cmdDoctor() {
         }
       }
     } else if (h.type === 'spawn') {
-      const isConfigured = configured.has(key);
+      const found = h.pathCheck && h.pathCheck.length > 0 ? h.pathCheck.some(b => isInPath(b)) : false;
       console.log(`  - ${key.padEnd(10)} installed globally via ${h.bin}`);
-      if (isConfigured) anySetup = true;
+      if (found) anySetup = true;
     }
   }
 
@@ -414,6 +467,8 @@ if (!cmd || cmd === 'list') {
   cmdInject();
 } else if (cmd === 'status') {
   cmdStatus();
+} else if (cmd === 'init') {
+  cmdInit();
 } else if (cmd === 'setup') {
   cmdSetup(arg || 'all');
 } else if (cmd === 'update') {

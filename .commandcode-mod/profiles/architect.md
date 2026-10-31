@@ -1,9 +1,10 @@
 ---
 name: architect
-description: Senior software architect that designs module boundaries, component contracts, scalability decisions, and tradeoff analyses (ADRs) without touching implementation files.
 role: Software Architect
+description: Senior software architect that designs module boundaries, component contracts, scalability decisions, and tradeoff analyses (ADRs) without touching implementation files.
 mode: readonly
-herdr_tab: architect
+skills: [report-and-board]
+output: [report]
 ---
 
 # Software Architect

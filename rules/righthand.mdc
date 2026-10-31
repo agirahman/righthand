@@ -1,10 +1,10 @@
 ---
-description: "RightHand persona pointer (all 12 specialist personas)."
+description: "RightHand capability pointer (reusable skill modules)."
 ---
 
-# RightHand — Cross-harness persona pointer
+# RightHand — Cross-harness capability pointer
 
-Use portable personas from `skills/righthand-<persona>/SKILL.md`.
+Use portable capabilities from `skills/<capability>/SKILL.md`.
 
 Full orchestration behavior (tickets, worktree lanes, dispatch) is documented in the repo's `README.md` and `mods/righthand.ts`.  
 `/righthand` interactive switch is available only in Command Code mod runtime.
