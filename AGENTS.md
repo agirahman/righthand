@@ -12,7 +12,7 @@ RightHand provides specialist AI agent personas and multi-agent orchestration ac
 - **`.omp/`**: Oh My Pi native extension (`.omp/extensions/righthand.ts`).
 - **`.opencode/`**: OpenCode server and TUI plugins.
 - **`profiles/`**: Source persona profile definitions in Markdown with YAML frontmatter.
-- **`skills/`**: Portable cross-harness skill definitions (`skills/righthand-<persona>/SKILL.md`).
+- **`skills/`**: Portable capability modules (`skills/<capability>/SKILL.md`) referenced by profiles via `skills:`.
 - **`bin/`**: Unified CLI executable (`righthand switch`, `inject`, `list`, `off`).
 - **`test/`**: Validation test suites for profiles, skills, and cross-harness manifests.
 
@@ -61,7 +61,7 @@ Each persona is defined in `profiles/<name>.md` with frontmatter:
 
 When modifying or adding a persona in `profiles/`:
 1. Ensure `profiles/<name>.md` has valid frontmatter.
-2. Mirror the persona changes into `skills/righthand-<name>/SKILL.md`.
+2. Update capability references in `skills/` only when a new capability is added; profiles reference capabilities by name.
 3. Update autocomplete lists in `.commandcode/mods/righthand.ts`, `.pi/extensions/righthand.ts`, and `bin/state.js` if adding a new persona.
 4. Run `npm test` to verify all 11 profiles, 11 skills, and 10 manifests pass validation.
 

@@ -158,8 +158,8 @@ OpenCode uses the native `@opencode/plugin` and `@opencode/plugin/tui` APIs.
 ### 5. Cross-Harness Portable Skills (`skills/`)
 For harnesses that support portable Agent Skills or custom plugins (Claude Code, Cursor, Codex, Kimi Code):
 
-- Persona skills are available under `skills/righthand-<persona>/SKILL.md`.
-- Activate by requesting the persona in conversation (e.g., *"Act as righthand-backend"*).
+- Capability skills are available under `skills/<capability>/SKILL.md`.
+- Personas are defined in `profiles/<name>.md` and reference capabilities from their `skills:` field.
 - Compatible plugin manifests are included: `.claude-plugin/`, `.cursor-plugin/`, `.codex-plugin/`, `.kimi-plugin/`, and `.agents/`.
 
 ---
