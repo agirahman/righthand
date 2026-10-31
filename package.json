@@ -32,6 +32,7 @@
   },
   "scripts": {
     "build": "tsc",
+    "build:agents": "node scripts/build-agents.js",
     "typecheck": "tsc --noEmit",
     "test": "node test/validate-profiles.cjs \u0026\u0026 node test/validate-skills.cjs"
   },
@@ -73,7 +74,9 @@
     "GUIDE.md",
     "CONTRIBUTING.md",
     "LICENSE",
-    ".agents"
+    ".agents",
+    "agents",
+    ".codex-plugin"
   ],
   "devDependencies": {
     "@types/node": "^20.11.0",
