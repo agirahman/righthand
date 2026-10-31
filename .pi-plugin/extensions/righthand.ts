@@ -66,7 +66,7 @@ function loadAllPersonas(cwd: string): Map<string, PersonaMetadata> {
   for (const dir of searchDirs) {
     if (!existsSync(dir)) continue;
     try {
-      const files = readdirSync(dir);
+      const files = readdirSync(dir).sort();
       for (const file of files) {
         if (!file.endsWith(".md") || file.startsWith(".")) continue;
         const fallbackName = file.slice(0, -3).toLowerCase();

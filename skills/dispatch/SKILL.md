@@ -8,8 +8,8 @@ description: Launch a ticket-scoped agent in another harness: provision the lane
 ## When to use
 
 - A ticket is ready to delegate to an agent in a supported harness.
-- The orchestrator needs to launch work in another harness (Command Code, Pi, OMP, OpenCode, Claude Code, Cursor, Codex, Kimi).
-- A writer or readonly persona must run in an isolated lane with a verified model from `dispatch.config.json`.
+- The orchestrator needs to launch work in a supported harness. Supported harnesses: Command Code, Pi, OMP, OpenCode, Claude Code, Cursor, Codex, Kimi. Verified adapters: only Command Code mechanics were verified in this repository during tickets T1-T9; the other adapters are unverified.
+- A writer persona runs in an isolated lane; a readonly persona attaches to that writer's lane; with a verified model from `dispatch.config.json`.
 
 ## Adapters
 

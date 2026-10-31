@@ -76,22 +76,33 @@ const codexDir = path.join(root, '.codex-plugin', 'agents');
 if (fs.existsSync(codexDir)) {
   for (const f of fs.readdirSync(codexDir).filter((x) => x.endsWith('.toml'))) {
     const content = fs.readFileSync(path.join(codexDir, f), 'utf8');
-    if (!content.startsWith('name = ')) {
-      console.error(`FAIL: [toml] ${f} does not start with 'name = '`);
+    if (!content.startsWith('name = "')) {
+      console.error(`FAIL: [toml] ${f} does not start with 'name = \"'`);
       failed++;
     }
-    if (!content.includes('description = ')) {
-      console.error(`FAIL: [toml] ${f} missing 'description = '`);
+    const tomlLines = content.split(/\r?\n/);
+    if (!tomlLines.some((l) => l.startsWith('description = "'))) {
+      console.error(`FAIL: [toml] ${f} missing a line starting 'description = \"'`);
       failed++;
     }
-    if (!content.includes('developer_instructions = """')) {
-      console.error(`FAIL: [toml] ${f} missing 'developer_instructions = """'`);
+    if (!tomlLines.some((l) => l.startsWith('developer_instructions = """'))) {
+      console.error(`FAIL: [toml] ${f} missing a line starting 'developer_instructions = \"\"\"'`);
       failed++;
     }
-    const trimmed = content.replace(/\r?\n$/, '');
-    if (!trimmed.endsWith('"""')) {
-      console.error(`FAIL: [toml] ${f} does not end the literal block properly (expected trailing \"\"\")`);
+    if (!(content.endsWith('"""\n') || content.endsWith('"""\r\n'))) {
+      console.error(`FAIL: [toml] ${f} must end with '\"\"\"' followed by a newline`);
       failed++;
+    }
+    // Reject unescaped """ inside the instructions body
+    const marker = 'developer_instructions = """';
+    const markerIdx = content.indexOf(marker);
+    if (markerIdx >= 0) {
+      const after = content.slice(markerIdx + marker.length);
+      const body = after.replace(/"""\r?\n$/, '');
+      if (body.includes('"""')) {
+        console.error(`FAIL: [toml] ${f} contains an unescaped '\"\"\"' inside the instructions body`);
+        failed++;
+      }
     }
   }
 }

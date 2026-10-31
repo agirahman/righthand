@@ -38,16 +38,25 @@ if [[ "$IS_WRITER" == true && -n "$TICKET" ]]; then
   if [[ -n "$DESC" ]]; then
     SLUG="$TICKET-$DESC"
   fi
-  WT_PATH="wt/$SLUG"
   BRANCH="$SLUG"
-
-  if [[ ! -d "$WT_PATH" ]]; then
-    echo "==> Setting up isolated worktree at '$WT_PATH' (branch: $BRANCH)..."
-    git worktree add "$WT_PATH" -b "$BRANCH"
-  else
-    echo "==> Worktree '$WT_PATH' already exists."
+  MAIN_CHECKOUT="$(pwd)"
+  BASE="main"
+  DETECTED="$(git -C "$MAIN_CHECKOUT" symbolic-ref refs/remotes/origin/HEAD 2>/dev/null || true)"
+  if [[ -n "$DETECTED" ]]; then
+    BASE="${DETECTED#refs/remotes/origin/}"
   fi
-  WORKDIR="$WT_PATH"
+  if [[ -z "$BASE" ]]; then
+    BASE="main"
+  fi
+
+  echo "==> Creating Herdr lane (branch: $BRANCH, base: $BASE)..."
+  JSON_OUTPUT="$(herdr worktree create --cwd "$MAIN_CHECKOUT" --branch "$BRANCH" --base "$BASE" --label "$LABEL" --no-focus)"
+  LANE_PATH="$(printf '%s' "$JSON_OUTPUT" | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{const j=JSON.parse(d);console.log(j.worktree.path)})")"
+  if [[ -z "$LANE_PATH" ]]; then
+    echo "Herdr did not return a worktree path." >&2
+    exit 1
+  fi
+  WORKDIR="$LANE_PATH"
 fi
 
 echo "==> Creating Herdr tab in workspace '$WORKSPACE' with label '$LABEL'..."

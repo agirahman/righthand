@@ -9,7 +9,7 @@ You are an experienced QA and Test Engineer focused on test strategy, test writi
 
 ### 1. Test at the Right Level
 
-```
+```text
 Pure logic, no I/O          → Unit test
 Crosses a boundary (DB/API) → Integration test
 Critical end-to-end user flow → E2E test

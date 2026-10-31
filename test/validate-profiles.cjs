@@ -4,7 +4,7 @@ const path = require('node:path');
 const root = path.join(__dirname, '..');
 const profilesDir = path.join(root, 'profiles');
 const skillsRoot = path.join(root, 'skills');
-const files = fs.readdirSync(profilesDir).filter((f) => f.endsWith('.md'));
+const files = fs.readdirSync(profilesDir).filter((f) => f.endsWith('.md')).sort();
 
 console.log(`Checking ${files.length} profile files in ${profilesDir}...`);
 
@@ -12,6 +12,7 @@ let failed = 0;
 const expectedKeys = ['name', 'role', 'description', 'mode', 'skills', 'output'];
 const roles = [];
 const referencedSkills = new Set();
+const profileNames = [];
 
 for (const file of files) {
   const filePath = path.join(profilesDir, file);
@@ -79,8 +80,17 @@ for (const file of files) {
   const skillEntries = skillsStripped === '' ? [] : skillsStripped.split(',').map((s) => s.trim()).filter(Boolean);
   for (const entry of skillEntries) referencedSkills.add(entry);
 
+  // Skill entry shape: simple name only
+  for (const entry of skillEntries) {
+    if (!/^[a-zA-Z0-9_-]+$/.test(entry)) {
+      console.error(`FAIL: [${file}] invalid skill entry '${entry}': must match /^[a-zA-Z0-9_-]+$/`);
+      failed++;
+    }
+  }
+
   // Skills resolution: every entry must resolve to skills/<name>/SKILL.md
   for (const entry of skillEntries) {
+    if (!/^[a-zA-Z0-9_-]+$/.test(entry)) continue;
     const skillPath = path.join(skillsRoot, entry, 'SKILL.md');
     if (!fs.existsSync(skillPath)) {
       console.error(`FAIL: [${file}] references missing skill '${entry}': ${path.relative(root, skillPath)}`);
@@ -88,18 +98,24 @@ for (const file of files) {
     }
   }
 
-  // Code fence: reject fenced blocks whose info string is a shell language.
-  // Blocks with no info string, or with markdown/json/text/etc., are allowed.
-  const shellLangs = new Set(['bash', 'sh', 'shell', 'zsh', 'pwsh', 'powershell', 'console', 'cmd']);
+  // Code fence: a fenced block is allowed only when its info string is a
+  // declared, non-shell language. A fence with no info string is rejected.
+  const allowedFenceInfos = new Set(['markdown', 'json', 'text', 'yaml']);
   const bodyLines = (fmMatch[2] || '').split(/\r?\n/);
+  let inFence = false;
   for (const bl of bodyLines) {
     const m = bl.trim().match(/^```\s*(\S*)/);
     if (m) {
-      const info = m[1].toLowerCase();
-      if (shellLangs.has(info)) {
-        console.error(`FAIL: [${file}] Shell fenced code block not allowed in persona body (info: ${info})`);
-        failed++;
-        break;
+      if (!inFence) {
+        const info = m[1].toLowerCase();
+        if (!allowedFenceInfos.has(info)) {
+          console.error(`FAIL: [${file}] Fenced code block not allowed in persona body (info: ${info || '(none)'})`);
+          failed++;
+          break;
+        }
+        inFence = true;
+      } else {
+        inFence = false;
       }
     }
   }
@@ -122,6 +138,7 @@ for (const file of files) {
     failed++;
   }
 
+  profileNames.push(String(metadata.name).toLowerCase());
   roles.push({
     name: metadata.name,
     role: metadata.role,
@@ -130,6 +147,16 @@ for (const file of files) {
     output: metadata.output,
   });
   console.log(`OK: [${file}] -> ${metadata.name} (${metadata.role}) [${metadata.mode}]`);
+}
+
+// Profile name uniqueness
+const seenNames = new Set();
+for (const n of profileNames) {
+  if (seenNames.has(n)) {
+    console.error(`FAIL: duplicate profile name '${n}'`);
+    failed++;
+  }
+  seenNames.add(n);
 }
 
 // Every directory under skills/ must be referenced by at least one profile or allowlisted.

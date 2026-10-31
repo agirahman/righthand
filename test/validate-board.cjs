@@ -50,6 +50,19 @@ for (const bp of boardFiles) {
         failed++;
       }
     }
+    // type checks
+    if ('v' in obj && typeof obj.v !== 'number') {
+      console.error(`FAIL: [${rel}:${lineNo}] v must be a number`);
+      failed++;
+    }
+    if ('ticket' in obj && (typeof obj.ticket !== 'string' || obj.ticket.trim() === '')) {
+      console.error(`FAIL: [${rel}:${lineNo}] ticket must be a non-empty string`);
+      failed++;
+    }
+    if ('persona' in obj && (typeof obj.persona !== 'string' || obj.persona.trim() === '')) {
+      console.error(`FAIL: [${rel}:${lineNo}] persona must be a non-empty string`);
+      failed++;
+    }
     // ts ISO 8601
     if (obj.ts !== undefined) {
       const d = new Date(obj.ts);
@@ -73,12 +86,17 @@ for (const bp of boardFiles) {
         failed++;
       }
     }
-    // done events carry report field pointing at existing file
-    if (obj.event === 'done' && 'report' in obj) {
-      const reportPath = path.join(root, obj.report);
-      if (!fs.existsSync(reportPath)) {
-        console.error(`FAIL: [${rel}:${lineNo}] report file does not exist: ${obj.report}`);
+    // done events must carry a non-empty report string pointing at an existing file
+    if (obj.event === 'done') {
+      if (typeof obj.report !== 'string' || obj.report.trim() === '') {
+        console.error(`FAIL: [${rel}:${lineNo}] done event must carry a non-empty report string`);
         failed++;
+      } else {
+        const reportPath = path.join(root, obj.report);
+        if (!fs.existsSync(reportPath) || !fs.statSync(reportPath).isFile()) {
+          console.error(`FAIL: [${rel}:${lineNo}] report file does not exist: ${obj.report}`);
+          failed++;
+        }
       }
     }
   }

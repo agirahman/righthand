@@ -147,8 +147,8 @@ export function loadAllProfiles(cwd: string): Map<string, ProfileMetadata> {
   for (const dir of searchDirs) {
     let files: string[];
     try {
-      files = readdirSync(dir);
-    } catch {
+      files = readdirSync(dir).sort();
+      } catch {
       continue;
     }
 
