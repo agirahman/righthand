@@ -15,9 +15,9 @@ body:
       description: Which coding agent harness or environment were you using RightHand in?
       options:
         - Command Code
-        - Pi (.pi)
+        - Pi (.pi-plugin)
         - Oh My Pi (.omp)
-        - OpenCode (.opencode)
+        - OpenCode (.opencode-plugin)
         - Cursor (.cursor-plugin)
         - DeepSeek Harness (DSH)
         - Claude Code (.claude-plugin)
