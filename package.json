@@ -2,41 +2,29 @@
   "name": "@agirahman/righthand",
   "version": "1.2.0",
   "description": "RightHand: specialist agent personas and multi-agent orchestration for Herdr workspaces across coding harnesses",
-  "main": "dist/.commandcode/mods/righthand.js",
-  "types": "dist/.commandcode/mods/righthand.d.ts",
+  "main": "dist/.commandcode-mod/mods/righthand.js",
+  "types": "dist/.commandcode-mod/mods/righthand.d.ts",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/agirahman/righthand.git"
   },
   "opencode": {
     "plugins": [
-      "./.opencode/plugins/righthand-server.js",
-      "./.opencode/plugins/righthand-tui.js"
+      "./.opencode-plugin/plugins/righthand-server.js",
+      "./.opencode-plugin/plugins/righthand-tui.js"
     ]
   },
   "commandcode": {
     "mods": [
-      "./.commandcode/mods/righthand.ts"
+      "./.commandcode-mod/mods/righthand.ts"
     ]
   },
   "pi": {
     "extensions": [
-      "./.pi/extensions/righthand.ts"
+      "./.pi-plugin/extensions/righthand.ts"
     ],
     "skills": [
       "./skills"
-    ]
-  },
-  "cline": {
-    "plugins": [
-      {
-        "paths": [
-          "./.cline-plugin/plugin.js"
-        ],
-        "capabilities": [
-          "skills"
-        ]
-      }
     ]
   },
   "bin": {
@@ -71,9 +59,9 @@
   },
   "files": [
     "dist",
-    ".commandcode",
-    ".pi",
-    ".opencode",
+    ".commandcode-mod",
+    ".pi-plugin",
+    ".opencode-plugin",
     ".omp",
     "bin",
     "profiles",

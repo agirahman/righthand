@@ -15,14 +15,13 @@ body:
       description: Which coding agent harness or environment were you using RightHand in?
       options:
         - Command Code
-        - Pi (.pi)
+        - Pi (.pi-plugin)
         - Oh My Pi (.omp)
-        - OpenCode (.opencode)
+        - OpenCode (.opencode-plugin)
         - Cursor (.cursor-plugin)
         - DeepSeek Harness (DSH)
         - Claude Code (.claude-plugin)
         - Codex (.codex-plugin)
-        - Cline (.cline-plugin)
         - Kimi (.kimi-plugin)
         - CLI Executable (bin/righthand.js)
         - Other / Not Applicable
@@ -49,7 +48,6 @@ body:
         - backend (Backend Engineer)
         - code-reviewer (Senior Code Reviewer)
         - devops (DevOps Engineer)
-        - editor (Video & Motion Editor)
         - frontend (Frontend Engineer)
         - orchestrator (Team Orchestrator)
         - product-manager (Product Manager)

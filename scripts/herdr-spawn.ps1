@@ -4,8 +4,9 @@
 
 .DESCRIPTION
   Creates a new Herdr tab in the specified workspace with a standardized label
-  '<role>-<ticket>', prepares a ticket-numbered git worktree for writer roles,
-  and starts Command Code with the requested persona.
+  '<role>-<ticket>', prepares a ticket-numbered git worktree for writer roles
+  via Herdr (never an in-repo worktree directory), and starts Command Code with
+  the requested persona.
 
 .PARAMETER Workspace
   Herdr workspace ID (e.g. w1, w2)
@@ -38,27 +39,31 @@ param(
     [string]$Description = ""
 )
 
-$WriterRoles = @('backend', 'frontend', 'devops', 'worker', 'editor')
+$WriterRoles = @('backend', 'frontend', 'devops', 'worker')
 $IsWriter = $WriterRoles -contains $Role.ToLower()
 
 $Label = if ($Ticket) { "$Role-$Ticket" } else { $Role }
 
 Write-Host "==> Creating Herdr tab in workspace '$Workspace' with label '$Label'..." -ForegroundColor Cyan
 
-# 1. Prepare worktree if writer role
+# 1. Prepare worktree if writer role (Herdr-managed lane, never an in-repo worktree dir)
 $WorkDir = "."
 if ($IsWriter -and $Ticket) {
     $Slug = if ($Description) { "$Ticket-$Description" } else { "$Ticket-$Role" }
-    $WorktreePath = "wt/$Slug"
     $BranchName = $Slug
+    $MainCheckout = (Get-Location).Path
+    $Base = "main"
+    try {
+        $detected = (git -C $MainCheckout symbolic-ref refs/remotes/origin/HEAD 2>$null)
+        if ($detected) { $Base = $detected.Trim() -replace '^refs/remotes/origin/', '' }
+    } catch { }
+    if (-not $Base) { $Base = "main" }
 
-    if (-not (Test-Path $WorktreePath)) {
-        Write-Host "==> Setting up isolated worktree at '$WorktreePath' (branch: $BranchName)..." -ForegroundColor Yellow
-        git worktree add $WorktreePath -b $BranchName
-    } else {
-        Write-Host "==> Worktree '$WorktreePath' already exists." -ForegroundColor Yellow
-    }
-    $WorkDir = $WorktreePath
+    Write-Host "==> Creating Herdr lane (branch: $BranchName, base: $Base)..." -ForegroundColor Yellow
+    $JsonOutput = herdr worktree create --cwd $MainCheckout --branch $BranchName --base $Base --label "$Label" --no-focus
+    $LanePath = ($JsonOutput | ConvertFrom-Json).worktree.path
+    if (-not $LanePath) { throw "Herdr did not return a worktree path." }
+    $WorkDir = $LanePath
 }
 
 # 2. Spawn Herdr tab
