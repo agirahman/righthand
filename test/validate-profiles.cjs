@@ -1,14 +1,18 @@
 const fs = require('node:fs');
 const path = require('node:path');
 
-const profilesDir = path.join(__dirname, '..', 'profiles');
-const files = fs.readdirSync(profilesDir).filter((f) => f.endsWith('.md'));
+const root = path.join(__dirname, '..');
+const profilesDir = path.join(root, 'profiles');
+const skillsRoot = path.join(root, 'skills');
+const files = fs.readdirSync(profilesDir).filter((f) => f.endsWith('.md')).sort();
 
 console.log(`Checking ${files.length} profile files in ${profilesDir}...`);
 
 let failed = 0;
 const expectedKeys = ['name', 'role', 'description', 'mode', 'skills', 'output'];
 const roles = [];
+const referencedSkills = new Set();
+const profileNames = [];
 
 for (const file of files) {
   const filePath = path.join(profilesDir, file);
@@ -64,19 +68,77 @@ for (const file of files) {
       failed++;
     }
   }
+  // output must be subset of report/review (already enforced above) and writer must not declare review
+  if (metadata.mode === 'writer' && outputVals.includes('review')) {
+    console.error(`FAIL: [${file}] A persona with mode: writer must not declare 'review' in output`);
+    failed++;
+  }
 
-  // Check no fenced code block in orchestrator body
-  if (metadata.name === 'orchestrator') {
-    const bodyLines = (fmMatch[2] || '').split(/\r?\n/);
-    for (const bl of bodyLines) {
-      if (/^```/.test(bl)) {
-        console.error(`FAIL: [${file}] Fenced code block not allowed in persona body`);
-        failed++;
-        break;
+  // Parse skills entries
+  const skillsRaw = (metadata.skills || '').trim();
+  const skillsStripped = skillsRaw.replace(/^\[/, '').replace(/\]$/, '').trim();
+  const skillEntries = skillsStripped === '' ? [] : skillsStripped.split(',').map((s) => s.trim()).filter(Boolean);
+  for (const entry of skillEntries) referencedSkills.add(entry);
+
+  // Skill entry shape: simple name only
+  for (const entry of skillEntries) {
+    if (!/^[a-zA-Z0-9_-]+$/.test(entry)) {
+      console.error(`FAIL: [${file}] invalid skill entry '${entry}': must match /^[a-zA-Z0-9_-]+$/`);
+      failed++;
+    }
+  }
+
+  // Skills resolution: every entry must resolve to skills/<name>/SKILL.md
+  for (const entry of skillEntries) {
+    if (!/^[a-zA-Z0-9_-]+$/.test(entry)) continue;
+    const skillPath = path.join(skillsRoot, entry, 'SKILL.md');
+    if (!fs.existsSync(skillPath)) {
+      console.error(`FAIL: [${file}] references missing skill '${entry}': ${path.relative(root, skillPath)}`);
+      failed++;
+    }
+  }
+
+  // Code fence: a fenced block is allowed only when its info string is a
+  // declared, non-shell language. A fence with no info string is rejected.
+  const allowedFenceInfos = new Set(['markdown', 'json', 'text', 'yaml']);
+  const bodyLines = (fmMatch[2] || '').split(/\r?\n/);
+  let inFence = false;
+  for (const bl of bodyLines) {
+    const m = bl.trim().match(/^```\s*(\S*)/);
+    if (m) {
+      if (!inFence) {
+        const info = m[1].toLowerCase();
+        if (!allowedFenceInfos.has(info)) {
+          console.error(`FAIL: [${file}] Fenced code block not allowed in persona body (info: ${info || '(none)'})`);
+          failed++;
+          break;
+        }
+        inFence = true;
+      } else {
+        inFence = false;
       }
     }
   }
 
+  // Budget: persona body lines + bodies of referenced skills <= 400
+  const personaBodyLines = (fmMatch[2] || '').trim().split(/\r?\n/).length;
+  let skillBodyLines = 0;
+  for (const entry of skillEntries) {
+    const skillPath = path.join(skillsRoot, entry, 'SKILL.md');
+    if (!fs.existsSync(skillPath)) continue;
+    const skillContent = fs.readFileSync(skillPath, 'utf8');
+    const skillFm = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/.exec(skillContent);
+    const skillBody = skillFm ? (skillFm[2] || '').trim() : skillContent.trim();
+    skillBodyLines += skillBody === '' ? 0 : skillBody.split(/\r?\n/).length;
+  }
+  const totalLines = personaBodyLines + skillBodyLines;
+  console.log(`Budget: [${file}] ${totalLines} lines (persona ${personaBodyLines} + skills ${skillBodyLines}, limit 400)`);
+  if (totalLines > 400) {
+    console.error(`FAIL: [${file}] Budget exceeded: ${totalLines} lines > 400`);
+    failed++;
+  }
+
+  profileNames.push(String(metadata.name).toLowerCase());
   roles.push({
     name: metadata.name,
     role: metadata.role,
@@ -85,6 +147,30 @@ for (const file of files) {
     output: metadata.output,
   });
   console.log(`OK: [${file}] -> ${metadata.name} (${metadata.role}) [${metadata.mode}]`);
+}
+
+// Profile name uniqueness
+const seenNames = new Set();
+for (const n of profileNames) {
+  if (seenNames.has(n)) {
+    console.error(`FAIL: duplicate profile name '${n}'`);
+    failed++;
+  }
+  seenNames.add(n);
+}
+
+// Every directory under skills/ must be referenced by at least one profile or allowlisted.
+const allowedSkillDirs = [];
+if (fs.existsSync(skillsRoot)) {
+  for (const dir of fs.readdirSync(skillsRoot)) {
+    const dirPath = path.join(skillsRoot, dir);
+    if (!fs.statSync(dirPath).isDirectory()) continue;
+    if (allowedSkillDirs.includes(dir)) continue;
+    if (!referencedSkills.has(dir)) {
+      console.error(`FAIL: [skill] Directory '${dir}' under skills/ is not referenced by any profile`);
+      failed++;
+    }
+  }
 }
 
 if (failed > 0) {
