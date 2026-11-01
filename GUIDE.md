@@ -57,7 +57,7 @@ On Windows use `Copy-Item -Recurse`.
 
 ## Verification
 
-After install, list available skills (harness UI or CLI). You should see 12 `righthand-*` personas.
+After install, list available skills (harness UI or CLI). You should see the capability modules under `skills/`.
 
 ## Known limitations
 

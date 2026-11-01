@@ -16,7 +16,7 @@ const manifestDirs = [
   path.join(root, '.agents', 'plugins', 'marketplace.json'),
 ];
 
-console.log(`Checking cross-harness manifests and persona skills...`);
+console.log(`Checking cross-harness manifests and capability skills...`);
 
 let failed = 0;
 const profileFiles = fs.readdirSync(profilesDir).filter((f) => f.endsWith('.md'));
@@ -37,19 +37,14 @@ for (const manifestPath of manifestDirs) {
   }
 }
 
-// Validate skills parity + frontmatter.
+// Parse profile frontmatter and collect skills references.
+const referencedSkills = new Set();
+const profileSkills = new Map();
 for (const profileFile of profileFiles) {
-  const profileName = profileFile.slice(0, -3);
-  const skillPath = path.join(skillsRoot, `righthand-${profileName}`, 'SKILL.md');
-  if (!fs.existsSync(skillPath)) {
-    console.error(`FAIL: [skill] Missing skill for profile ${profileFile}: ${path.relative(root, skillPath)}`);
-    failed++;
-    continue;
-  }
-  const raw = fs.readFileSync(skillPath, 'utf8');
+  const raw = fs.readFileSync(path.join(profilesDir, profileFile), 'utf8');
   const m = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/.exec(raw);
   if (!m) {
-    console.error(`FAIL: [skill] Missing YAML frontmatter: ${path.relative(root, skillPath)}`);
+    console.error(`FAIL: [profile] Missing frontmatter: ${profileFile}`);
     failed++;
     continue;
   }
@@ -59,27 +54,76 @@ for (const profileFile of profileFiles) {
     const kv = /^([a-zA-Z0-9_-]+)\s*:\s*(.*)$/.exec(line);
     if (kv) metadata[kv[1].toLowerCase()] = kv[2].trim().replace(/^['"](.*)['"]$/, '$1');
   }
-  if (!metadata.name) {
-    console.error(`FAIL: [skill] Missing "name" in ${path.relative(root, skillPath)}`);
-    failed++;
-  }
-  if (!metadata.description) {
-    console.error(`FAIL: [skill] Missing "description" in ${path.relative(root, skillPath)}`);
-    failed++;
-  }
-  if (!metadata.mode) {
-    console.error(`FAIL: [skill] Missing "mode" in ${path.relative(root, skillPath)}`);
-    failed++;
-  }
+  const skillsRaw = metadata.skills || '';
+  const stripped = skillsRaw.replace(/^\[/, '').replace(/\]$/, '').trim();
+  const entries = stripped === '' ? [] : stripped.split(',').map((s) => s.trim()).filter(Boolean);
+  profileSkills.set(profileFile, entries);
+  for (const entry of entries) referencedSkills.add(entry);
+}
 
-  // Minimal drift sanity: ensure skill body retains "## Composition" heading marker.
-  const body = m[2] || '';
-  if (!body.includes('## Composition')) {
-    console.error(`FAIL: [skill] Missing "## Composition" in ${path.relative(root, skillPath)}`);
-    failed++;
+// Every skills entry in every profile must resolve to skills/<name>/SKILL.md, except dispatch.
+const requiredSections = ['## When to use', '## Procedure', '## Checklist', '## Evidence'];
+for (const profileFile of profileFiles) {
+  const entries = profileSkills.get(profileFile) || [];
+  for (const entry of entries) {
+    const skillPath = path.join(skillsRoot, entry, 'SKILL.md');
+    if (!fs.existsSync(skillPath)) {
+      console.error(`FAIL: [skill] ${profileFile} references missing skill '${entry}': ${path.relative(root, skillPath)}`);
+      failed++;
+      continue;
+    }
+    const raw = fs.readFileSync(skillPath, 'utf8');
+    const fm = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/.exec(raw);
+    if (!fm) {
+      console.error(`FAIL: [skill] Missing YAML frontmatter: ${path.relative(root, skillPath)}`);
+      failed++;
+      continue;
+    }
+    const fmLines = fm[1].split(/\r?\n/);
+    const metadata = {};
+    for (const line of fmLines) {
+      const kv = /^([a-zA-Z0-9_-]+)\s*:\s*(.*)$/.exec(line);
+      if (kv) metadata[kv[1].toLowerCase()] = kv[2].trim().replace(/^['"](.*)['"]$/, '$1');
+    }
+    if (!metadata.name) {
+      console.error(`FAIL: [skill] Missing "name" in ${path.relative(root, skillPath)}`);
+      failed++;
+    }
+    if (!metadata.description) {
+      console.error(`FAIL: [skill] Missing "description" in ${path.relative(root, skillPath)}`);
+      failed++;
+    }
+    if (metadata.name && metadata.name !== entry) {
+      console.error(`FAIL: [skill] name '${metadata.name}' does not match directory '${entry}' in ${path.relative(root, skillPath)}`);
+      failed++;
+    }
+    const body = fm[2] || '';
+    const bodyLines = body.split(/\r?\n/);
+    for (const section of requiredSections) {
+      if (!bodyLines.some((l) => l.trim() === section)) {
+        console.error(`FAIL: [skill] Missing "${section}" in ${path.relative(root, skillPath)}`);
+        failed++;
+      }
+    }
+    console.log(`OK Skill: ${entry}`);
   }
+}
 
-  console.log(`OK Skill: righthand-${profileName}`);
+// Every directory under skills/ must be referenced by at least one profile or be dispatch.
+if (fs.existsSync(skillsRoot)) {
+  for (const dir of fs.readdirSync(skillsRoot)) {
+    const dirPath = path.join(skillsRoot, dir);
+    if (!fs.statSync(dirPath).isDirectory()) continue;
+    if (dir.startsWith('righthand-')) {
+      console.error(`FAIL: [skill] Legacy persona envelope directory present: ${dir}`);
+      failed++;
+      continue;
+    }
+    if (!referencedSkills.has(dir)) {
+      console.error(`FAIL: [skill] Directory '${dir}' under skills/ is not referenced by any profile`);
+      failed++;
+    }
+  }
 }
 
 if (failed > 0) {
@@ -87,5 +131,4 @@ if (failed > 0) {
   process.exit(1);
 }
 
-console.log(`\nALL ${profileFiles.length} CROSS-HARNESS PERSONA SKILLS VALID!`);
-console.log(`ALL ${manifestDirs.length} CROSS-HARNESS MANIFESTS VALID!`);
+console.log(`\nALL capability skills and manifests VALID!`);

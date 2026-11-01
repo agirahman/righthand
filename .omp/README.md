@@ -8,7 +8,7 @@ Native integration for [Oh My Pi](https://github.com/canisminor-hex/oh-my-pi).
 - **Dynamic Slash Command**: `/righthand` with autocomplete for all 12 personas, `/righthand list`, and `/righthand off`
 - **Automatic Context Injection**: Injects active persona into `systemPromptOptions.sections.righthand` before agent start
 - **Status Indicator**: Shows active persona in OMP's status bar via `ctx.ui.setStatus`
-- **CLI Sync**: Shares persistent state in `.righthand/active-persona.json` with the `righthand` CLI
+- **CLI Sync**: Shares persistent state in `.righthand/state/active-persona.json` with the `righthand` CLI
 
 ## Setup
 

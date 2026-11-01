@@ -61,7 +61,7 @@ Each persona is defined in `profiles/<name>.md` with frontmatter:
 
 When modifying or adding a persona in `profiles/`:
 1. Ensure `profiles/<name>.md` has valid frontmatter.
-2. Mirror the persona changes into `skills/righthand-<name>/SKILL.md`.
+2. Update capability references in `skills/` only when a new capability is added; profiles reference capabilities by name.
 3. Update autocomplete lists in `.commandcode-mod/mods/righthand.ts`, `.pi-plugin/extensions/righthand.ts`, and `bin/state.js` if adding a new persona.
 4. Run `npm test` to verify all 11 profiles, 11 skills, and 10 manifests pass validation.
 
