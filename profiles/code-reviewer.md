@@ -1,9 +1,10 @@
 ---
 name: code-reviewer
-description: Senior code reviewer that evaluates changes across five dimensions — correctness, readability, architecture, security, and performance. Use for thorough code review before merge.
 role: Senior Code Reviewer
+description: Senior code reviewer that evaluates changes across five dimensions — correctness, readability, architecture, security, and performance. Use for thorough code review before merge.
 mode: readonly
-herdr_tab: code-reviewer
+skills: [code-review, report-and-board]
+output: [report, review]
 ---
 
 # Senior Code Reviewer
