@@ -22,7 +22,6 @@ body:
         - DeepSeek Harness (DSH)
         - Claude Code (.claude-plugin)
         - Codex (.codex-plugin)
-        - Cline (.cline-plugin)
         - Kimi (.kimi-plugin)
         - CLI Executable (bin/righthand.js)
         - Other / Not Applicable
