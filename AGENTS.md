@@ -73,3 +73,20 @@ When modifying or adding a persona in `profiles/`:
 - Follow existing patterns in the codebase.
 - Extract complex conditions into meaningful boolean variables.
 - Write clear, concise commit messages without automated bot trailers.
+
+---
+
+## 6. Scope Boundary: Development Only
+
+Work in this repository stops once a pull request is open. The developer loop is:
+
+1. Open an issue for a large task. A small task goes straight to a branch.
+2. Create a topic branch: `feat/*`, `fix/*`, or `chore/*`. Never commit to `main`.
+3. Edit the code.
+4. Commit with a conventional commit message.
+5. Push the branch to origin.
+6. Open a pull request against `main`.
+
+Review, security scanning, approval, merging, version bumps, tagging, npm publishing and GitHub releases belong to the maintainer. An agent must not run `gh pr merge`, `gh pr review`, `git tag`, `npm publish` or `gh release create`, and must not close or merge an open pull request.
+
+Local verification before committing (`npm test`, `npm run typecheck`, `npm run build`) is still required. That is developer work, not review.
