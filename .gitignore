@@ -6,3 +6,4 @@ PLAN.md
 .DS_Store
 Thumbs.db
 .dsh-acl-recovery/
+.commandcode/
