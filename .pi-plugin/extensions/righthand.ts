@@ -73,7 +73,7 @@ function loadAllPersonas(cwd: string): Map<string, PersonaMetadata> {
 }
 
 function getStatePath(cwd: string): string {
-  return join(cwd, ".righthand", "active-persona.json");
+  return join(cwd, ".righthand", "state", "active-persona.json");
 }
 
 function readActivePersona(cwd: string): string | null {
@@ -89,7 +89,7 @@ function readActivePersona(cwd: string): string | null {
 
 function writeActivePersona(cwd: string, persona: string | null): void {
   try {
-    const dir = join(cwd, ".righthand");
+    const dir = join(cwd, ".righthand", "state");
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
     writeFileSync(
       getStatePath(cwd),
