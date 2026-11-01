@@ -98,8 +98,9 @@ for (const profileFile of profileFiles) {
       failed++;
     }
     const body = fm[2] || '';
+    const bodyLines = body.split(/\r?\n/);
     for (const section of requiredSections) {
-      if (!body.includes(section)) {
+      if (!bodyLines.some((l) => l.trim() === section)) {
         console.error(`FAIL: [skill] Missing "${section}" in ${path.relative(root, skillPath)}`);
         failed++;
       }
