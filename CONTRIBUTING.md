@@ -10,10 +10,10 @@ RightHand supports multiple coding harnesses through dedicated, isolated harness
 
 ```
 righthand/
-├── .commandcode/         # Command Code mod, manifests, and profiles
-├── .pi/                  # Pi native extension (.pi/extensions/righthand.ts)
+├── .commandcode-mod/     # Command Code mod, manifests, and profiles
+├── .pi-plugin/           # Pi native extension (.pi-plugin/extensions/righthand.ts)
 ├── .omp/                 # Oh My Pi native extension (.omp/extensions/righthand.ts)
-├── .opencode/            # OpenCode server plugin (.opencode/plugins/righthand.js)
+├── .opencode-plugin/     # OpenCode server plugin (.opencode-plugin/plugins/righthand-server.js)
 ├── bin/                  # Unified CLI (`righthand switch`, `inject`, `list`, `off`)
 ├── profiles/             # Source persona profiles (Markdown with YAML frontmatter)
 ├── skills/               # Portable cross-harness skill definitions (SKILL.md)
@@ -38,13 +38,13 @@ tab: backend
 
 ### Modes
 - **`readonly`**: For inspection, code review, architecture planning, security auditing, and test design. Agents in readonly mode do not modify implementation files.
-- **`writer`**: For implementation tasks (frontend, backend, devops, worker). Agents work in isolated git worktree lanes (`wt/<ticket>-<slug>`).
+- **`writer`**: For implementation tasks (frontend, backend, devops, worker). Agents work in isolated lanes created by Herdr outside this repository, never a `wt/` directory inside it.
 
 ### Synchronization
 When modifying or adding a persona in `profiles/`:
 1. Ensure `profiles/<name>.md` has valid frontmatter.
 2. Mirror the persona into `skills/righthand-<name>/SKILL.md`.
-3. Update autocomplete lists in `.commandcode/mods/righthand.ts`, `.pi/extensions/righthand.ts`, and `bin/state.js` if a new persona is added.
+3. Update autocomplete lists in `.commandcode-mod/mods/righthand.ts`, `.pi-plugin/extensions/righthand.ts`, and `bin/state.js` if a new persona is added.
 
 ---
 

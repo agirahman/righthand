@@ -49,8 +49,8 @@ const HARNESSES = {
     label: 'OpenCode',
     pathCheck: ['opencode'],
     files: [
-      { src: '.opencode/plugins/righthand-server.js', dest: '.opencode/plugins/righthand-server.js' },
-      { src: '.opencode/plugins/righthand-tui.js',    dest: '.opencode/plugins/righthand-tui.js' },
+      { src: '.opencode-plugin/plugins/righthand-server.js', dest: '.opencode/plugins/righthand-server.js' },
+      { src: '.opencode-plugin/plugins/righthand-tui.js',    dest: '.opencode/plugins/righthand-tui.js' },
     ],
   },
 };

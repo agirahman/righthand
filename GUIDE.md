@@ -55,7 +55,7 @@ On Windows use `Copy-Item -Recurse`.
 
 - Native `/righthand` slash commands and interactive persona switching are supported in **Command Code**, **Pi**, **Oh My Pi**, **OpenCode**, and via the **RightHand CLI** (`righthand switch <persona>`).
 - On other harnesses (Claude Code, Cursor, Codex, Kimi, Cline), activate by requesting the persona in conversation: *"Act as righthand-backend"* or *"Use the righthand-orchestrator skill"*.
-- Writer personas should run in isolated git worktrees (`wt/<ticket>-<slug>`), using `scripts/herdr-spawn.*`.
+- Writer personas should run in isolated lanes created by Herdr outside this repository, using `scripts/herdr-spawn.*`.
 
 ## Verification
 

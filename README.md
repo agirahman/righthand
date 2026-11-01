@@ -28,7 +28,7 @@ Instead of treating an AI agent as a generic monolith, RightHand injects targete
 - **Single-Perspective Personas**: Each persona embodies a specialized engineering role with a clear evaluation lens, rigid output format, and strict execution boundaries.
 - **No Recursive Persona Invocations**: Personas do not invoke other personas at runtime. Multi-agent coordination occurs at the user or orchestrator level across Herdr tabs.
 - **Ticket & Worktree Isolation**: Sub-agents communicate through explicit tickets, structured reports, and isolated git worktrees rather than unstructured shared state.
-- **Dedicated Harness Folders**: Native extensions and plugins are maintained in clean, harness-specific folders (`.commandcode/`, `.pi/`, `.omp/`, `.opencode/`), backed by a unified CLI and state engine.
+- **Dedicated Harness Folders**: Native extensions and plugins are maintained in clean, harness-specific folders (`.commandcode-mod/`, `.pi-plugin/`, `.omp/`, `.opencode-plugin/`), backed by a unified CLI and state engine.
 
 ---
 
@@ -101,7 +101,7 @@ Active persona state is stored in `.righthand/active-persona.json` (per project,
 
 ## Supported Harnesses & Installation
 
-### 1. Command Code (`.commandcode/`)
+### 1. Command Code (`.commandcode-mod/`)
 RightHand was originally built as a first-class Command Code mod.
 
 - **Install via CLI** (Linux/macOS: `cmd`, Windows: `cmdc` — auto-detected):
@@ -113,9 +113,9 @@ RightHand was originally built as a first-class Command Code mod.
   - `/righthand` or `/profile` — open fuzzy picker or show active persona.
   - `/righthand <persona>` — switch persona on-the-fly.
   - `/righthand off` — restore default prompt.
-- **Details**: See [`.commandcode/README.md`](./.commandcode/README.md).
+- **Details**: See [`.commandcode-mod/README.md`](./.commandcode-mod/README.md).
 
-### 2. Pi Coding Agent (`.pi/`)
+### 2. Pi Coding Agent (`.pi-plugin/`)
 Pi supports native extensions that hook agent lifecycle events.
 
 - **Install via CLI**:
@@ -127,7 +127,7 @@ Pi supports native extensions that hook agent lifecycle events.
   - `/righthand <persona>` — interactive slash command with full tab-autocomplete for all 12 personas.
   - `/righthand off` — clear persona.
 - **Status Indicator**: Displays current persona badge in the Pi UI status bar.
-- **Details**: See [`.pi/README.md`](./.pi/README.md).
+- **Details**: See [`.pi-plugin/README.md`](./.pi-plugin/README.md).
 
 ### 3. Oh My Pi (`.omp/`)
 Oh My Pi automatically discovers native extensions placed in `<cwd>/.omp/extensions/`.
@@ -141,7 +141,7 @@ Oh My Pi automatically discovers native extensions placed in `<cwd>/.omp/extensi
 - **Update after npm upgrade**: `righthand update omp`
 - **Details**: See [`.omp/README.md`](./.omp/README.md).
 
-### 4. OpenCode (`.opencode/`)
+### 4. OpenCode (`.opencode-plugin/`)
 OpenCode uses the native `@opencode/plugin` and `@opencode/plugin/tui` APIs.
 
 - **Setup**:
@@ -154,7 +154,7 @@ OpenCode uses the native `@opencode/plugin` and `@opencode/plugin/tui` APIs.
   - `righthand-tui.js` — registers native `/righthand` slash command with interactive persona picker, footer status indicator, and toast notifications. State is stored per session in `~/.local/state/opencode/righthand.json`.
 - **Slash Command**: `/righthand <persona>` | `/righthand off` | `/righthand list` | `/righthand` (picker)
 - **Update after npm upgrade**: `righthand update opencode`
-- **Details**: See [`.opencode/README.md`](./.opencode/README.md).
+- **Details**: See [`.opencode-plugin/README.md`](./.opencode-plugin/README.md).
 
 ### 5. Cross-Harness Portable Skills (`skills/`)
 For harnesses that support portable Agent Skills or custom plugins (Claude Code, Cursor, Codex, Kimi Code, Cline):
@@ -174,8 +174,8 @@ For harnesses that support portable Agent Skills or custom plugins (Claude Code,
 To prevent merge conflicts when multiple agents work simultaneously on the same repository, writer roles (`backend`, `frontend`, `editor`, `devops`, `worker`) must operate in isolated, ticket-prefixed git worktrees:
 
 ```bash
-# Worktree format: wt/<ticket-id>-<slug>
-git worktree add "wt/T1-auth-api" -b "T1-auth-api"
+# Lanes live outside the repository, under Herdr's worktree root.
+herdr worktree create --cwd . --branch T1-auth-api --base main --label backend-T1
 ```
 
 Readonly roles (`orchestrator`, `architect`, `code-reviewer`, `security-auditor`, `test-engineer`, `web-performance-auditor`, `product-manager`) inspect the main working tree directly without spawning worktree branches.

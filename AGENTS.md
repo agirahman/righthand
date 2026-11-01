@@ -7,10 +7,10 @@ Welcome to **RightHand**! This guide is intended for human contributors and AI a
 ## 1. Project Overview & Architecture
 
 RightHand provides specialist AI agent personas and multi-agent orchestration across multiple coding harnesses:
-- **`.commandcode/`**: Command Code mod hooks and profile definitions.
-- **`.pi/`**: Pi native extension (`.pi/extensions/righthand.ts`).
+- **`.commandcode-mod/`**: Command Code mod hooks and profile definitions.
+- **`.pi-plugin/`**: Pi native extension (`.pi-plugin/extensions/righthand.ts`).
 - **`.omp/`**: Oh My Pi native extension (`.omp/extensions/righthand.ts`).
-- **`.opencode/`**: OpenCode server and TUI plugins.
+- **`.opencode-plugin/`**: OpenCode server and TUI plugins.
 - **`profiles/`**: Source persona profile definitions in Markdown with YAML frontmatter.
 - **`skills/`**: Portable cross-harness skill definitions (`skills/righthand-<persona>/SKILL.md`).
 - **`bin/`**: Unified CLI executable (`righthand switch`, `inject`, `list`, `off`).
@@ -57,12 +57,12 @@ PRs with failing tests or type errors will not be merged.
 
 Each persona is defined in `profiles/<name>.md` with frontmatter:
 - **`mode: readonly`**: Inspection, review, architecture, security auditing, testing.
-- **`mode: writer`**: Implementation tasks in isolated git worktree lanes (`wt/<ticket>-<slug>`).
+- **`mode: writer`**: Implementation tasks in isolated lanes created by Herdr outside this repository, never a `wt/` directory inside it.
 
 When modifying or adding a persona in `profiles/`:
 1. Ensure `profiles/<name>.md` has valid frontmatter.
 2. Mirror the persona changes into `skills/righthand-<name>/SKILL.md`.
-3. Update autocomplete lists in `.commandcode/mods/righthand.ts`, `.pi/extensions/righthand.ts`, and `bin/state.js` if adding a new persona.
+3. Update autocomplete lists in `.commandcode-mod/mods/righthand.ts`, `.pi-plugin/extensions/righthand.ts`, and `bin/state.js` if adding a new persona.
 4. Run `npm test` to verify all 12 profiles, 12 skills, and 10 manifests pass validation.
 
 ---
