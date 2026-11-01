@@ -83,6 +83,7 @@ righthand switch backend         # Activate a persona
 righthand switch security-auditor
 righthand off                    # Deactivate persona (restore default)
 righthand inject                 # Print active persona prompt to stdout
+righthand init                   # Provision .righthand/ in the current project
 righthand status                 # One-liner: active persona + setup harnesses
 
 # --- Setup & Maintenance ---
@@ -95,7 +96,7 @@ righthand -v / --version         # Print version
 righthand -h / --help            # Print help
 ```
 
-Active persona state is stored in `.righthand/active-persona.json` (per project, gitignored).
+Active persona state is stored in `.righthand/state/active-persona.json` (per project, gitignored).
 
 ---
 
