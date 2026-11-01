@@ -1,3 +1,7 @@
+## Linked Issue (optional)
+<!-- Link related issue, e.g. Fixes #5 -->
+Closes #
+
 ## Summary
 
 <!-- Provide a concise description of the changes introduced in this Pull Request. -->

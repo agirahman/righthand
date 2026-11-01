@@ -9,3 +9,6 @@ contact_links:
   - name: Persona System Architecture
     url: https://github.com/agirahman/righthand/blob/main/README.md
     about: Overview of RightHand personas, modes, and harness integrations.
+  - name: 💬 Discussions
+    url: https://github.com/agirahman/righthand/discussions
+    about: Ask questions, share ideas, and get help

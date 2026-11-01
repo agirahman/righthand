@@ -107,6 +107,18 @@ body:
       required: true
 
   - type: textarea
+    id: steps
+    attributes:
+      label: Steps to Reproduce
+      description: Numbered list of steps to reproduce the bug
+      placeholder: |
+        1. Run `righthand setup opencode`
+        2. Check plugin installation path
+        3. Observe wrong directory
+    validations:
+      required: true
+
+  - type: textarea
     id: output
     attributes:
       label: Output / Error Logs
