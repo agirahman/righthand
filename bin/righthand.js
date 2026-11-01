@@ -49,7 +49,7 @@ const HARNESSES = {
     aliases: [],
     label: 'OpenCode',
     pathCheck: ['opencode'],
-    destBase: 'config',
+    destBase: 'home',
     legacyFiles: ['.opencode/plugins/righthand-server.js', '.opencode/plugins/righthand-tui.js'],
     files: [
       { src: '.opencode-plugin/plugins/righthand-server.js', dest: 'opencode/plugins/righthand-server.js' },
@@ -79,7 +79,7 @@ function configBaseDir() {
 }
 
 function resolveDestBase(h) {
-  if (h && h.destBase === 'config') return configBaseDir();
+  if (h && h.destBase === 'home') return configBaseDir();
   return process.cwd();
 }
 
@@ -347,6 +347,10 @@ function cmdUpdate(target) {
           console.log(`  ✗ dest folder not found: ${path.dirname(destPath)} (run setup first?)`);
           continue;
         }
+        if (!fs.existsSync(destPath)) {
+          // only re-sync existing files
+          continue;
+        }
         fs.copyFileSync(srcPath, destPath);
         console.log(`  ✓ updated → ${destPath}`);
       }
@@ -432,7 +436,7 @@ function cmdDoctor() {
           .map(p => path.isAbsolute(p) ? p : path.join(os.homedir(), p))
           .filter(p => fs.existsSync(p));
         if (stale.length > 0) {
-          console.log('             ⚠ legacy install found outside the XDG path (remove manually):');
+          console.log(`             ⚠ legacy stale install found (remove manually):`);
           for (const p of stale) console.log(`               ${p}`);
         }
       }

@@ -1,9 +1,10 @@
 ---
 name: test-engineer
-description: QA engineer specialized in test strategy, coverage analysis, edge cases, and the Prove-It verification pattern.
 role: Test Engineer
+description: QA engineer specialized in test strategy, coverage analysis, edge cases, and the Prove-It verification pattern.
 mode: readonly
-herdr_tab: test-engineer
+skills: [verification, report-and-board]
+output: [report, review]
 ---
 
 # Test Engineer

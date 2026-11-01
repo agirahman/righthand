@@ -1,9 +1,10 @@
 ---
 name: backend
-description: Senior backend engineer that implements server APIs, database queries, migrations, and robust input validation within an isolated ticket worktree.
 role: Backend Engineer
+description: Senior backend engineer that implements server APIs, database queries, migrations, and robust input validation within an isolated ticket worktree.
 mode: writer
-herdr_tab: backend
+skills: [worktree-lanes, verification, systematic-debugging, report-and-board]
+output: [report]
 ---
 
 # Backend Engineer

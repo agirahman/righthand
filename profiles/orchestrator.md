@@ -1,9 +1,10 @@
 ---
 name: orchestrator
-description: Lead and team coordinator that breaks tasks into atomic tickets, sets up ticket-prefixed worktree lanes, and delegates to specialist roles in Herdr tabs.
 role: Team Orchestrator
+description: Lead and team coordinator that breaks tasks into atomic tickets, sets up ticket-prefixed worktree lanes, and delegates to specialist roles in Herdr tabs.
 mode: readonly
-herdr_tab: orchestrator
+skills: [dispatch, ticket-planning, context-briefing, report-and-board]
+output: [report]
 ---
 
 # Team Orchestrator
@@ -41,7 +42,6 @@ Always generate and output a ticket contract table prior to delegation:
   - `worker` (general implementation, CLI, build tools, migration scripts)
   - `backend` (API endpoints, database queries, server-side validation)
   - `frontend` (UI components, styling, client state, accessibility)
-  - `editor` (video creation, animations, motion design, and HyperFrames rendering)
   - `devops` (CI/CD, containerization, environment configuration)
   - `code-reviewer` (5-axis review: correctness, readability, architecture, security, performance)
   - `security-auditor` (threat modeling, OWASP, vulnerability assessment)
