@@ -301,7 +301,7 @@ function cmdConfig(personaArg) {
       process.exit(1);
     }
     try {
-      console.log(formatResolution(cwd, personaArg, { orchestratorModel: om }));
+      console.log(formatResolution(cwd, personaArg, { orchestratorModel: om, config: config }));
     } catch (e) {
       if (e instanceof ConfigError) {
         console.error(`Error: ${e.message}`);
@@ -314,7 +314,7 @@ function cmdConfig(personaArg) {
 
   for (const n of names) {
     try {
-      console.log(formatResolution(cwd, n, { orchestratorModel: om }));
+      console.log(formatResolution(cwd, n, { orchestratorModel: om, config: config }));
     } catch (e) {
       if (e instanceof ConfigError) {
         console.error(`Error: ${e.message}`);
@@ -540,10 +540,10 @@ if (!cmd || cmd === 'list') {
 } else if (cmd === 'update') {
   cmdUpdate(arg);
 } else if (cmd === 'doctor') {
-    cmdDoctor();
-  } else if (cmd === 'config') {
-    cmdConfig(arg);
-  } else if (cmd === '-v' || cmd === '--version' || cmd === 'version') {
+  cmdDoctor();
+} else if (cmd === 'config') {
+  cmdConfig(arg);
+} else if (cmd === '-v' || cmd === '--version' || cmd === 'version') {
   cmdVersion();
 } else if (cmd === '-h' || cmd === '--help' || cmd === 'help') {
   cmdHelp();

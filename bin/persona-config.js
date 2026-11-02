@@ -27,56 +27,57 @@ function validateConfig(input, file) {
       try {
         data = fs.readFileSync(input, 'utf8');
       } catch (e) {
-        throw new ConfigError(`Unable to read ${fileLabel || input}: ${e.message}`);
+        throw new ConfigError(`Unable to read ${fileLabel || input} (${CONFIG_REL}): ${e.message}`);
       }
     }
     if (typeof data === 'string') {
       try {
         data = JSON.parse(data);
       } catch (e) {
-        throw new ConfigError(`Invalid JSON in ${fileLabel || CONFIG_REL}: ${e.message}`);
+        throw new ConfigError(`invalid JSON in ${fileLabel || CONFIG_REL}: ${e.message}`);
       }
     }
   }
   if (!fileLabel) fileLabel = CONFIG_REL;
+  const displayLabel = String(fileLabel).includes('/') ? fileLabel : `${fileLabel} (${CONFIG_REL})`;
 
   if (typeof data !== 'object' || data === null || Array.isArray(data)) {
-    throw new ConfigError(`${fileLabel}: root must be a JSON object`);
+    throw new ConfigError(`${displayLabel}: root must be a JSON object`);
   }
 
   for (const key of Object.keys(data)) {
     if (key !== 'personas') {
-      throw new ConfigError(`${fileLabel}: unknown top-level key "${key}"`);
+      throw new ConfigError(`${displayLabel}: unknown top-level key "${key}"`);
     }
   }
 
   if (Object.prototype.hasOwnProperty.call(data, 'personas')) {
     const personas = data.personas;
     if (typeof personas !== 'object' || personas === null || Array.isArray(personas)) {
-      throw new ConfigError(`${fileLabel}: "personas" must be an object`);
+      throw new ConfigError(`${displayLabel}: "personas" must be an object`);
     }
     for (const [name, entry] of Object.entries(personas)) {
       if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) {
-        throw new ConfigError(`${fileLabel}: persona "${name}" entry must be an object`);
+        throw new ConfigError(`${displayLabel}: persona "${name}" entry must be an object`);
       }
       for (const field of Object.keys(entry)) {
         if (field !== 'model' && field !== 'harness') {
-          throw new ConfigError(`${fileLabel}: unknown field "${field}" in persona "${name}"`);
+          throw new ConfigError(`${displayLabel}: unknown field "${field}" in persona "${name}"`);
         }
       }
       if (Object.prototype.hasOwnProperty.call(entry, 'model')) {
         const m = entry.model;
         if (typeof m !== 'string' || m.trim() === '') {
-          throw new ConfigError(`${fileLabel}: "model" must be a non-empty string for persona "${name}"`);
+          throw new ConfigError(`${displayLabel}: "model" must be a non-empty string for persona "${name}"`);
         }
       }
       if (Object.prototype.hasOwnProperty.call(entry, 'harness')) {
         const h = entry.harness;
         if (typeof h !== 'string' || h.trim() === '') {
-          throw new ConfigError(`${fileLabel}: "harness" must be a non-empty string for persona "${name}"`);
+          throw new ConfigError(`${displayLabel}: "harness" must be a non-empty string for persona "${name}"`);
         }
         if (h !== 'commandcode') {
-          throw new ConfigError(`${fileLabel}: unsupported harness "${h}" for persona "${name}"; supported harnesses: ${SUPPORTED_DISPATCH_HARNESSES.join(', ')}`);
+          throw new ConfigError(`${displayLabel}: harness "${h}" for persona "${name}" is not supported for dispatch; supported harnesses: ${SUPPORTED_DISPATCH_HARNESSES.join(', ')}`);
         }
       }
     }
@@ -92,13 +93,13 @@ function readConfig(cwd = process.cwd()) {
   try {
     raw = fs.readFileSync(p, 'utf8');
   } catch (e) {
-    throw new ConfigError(`Unable to read ${p}: ${e.message}`);
+    throw new ConfigError(`Unable to read ${p} (${CONFIG_REL}): ${e.message}`);
   }
   let data;
   try {
     data = JSON.parse(raw);
   } catch (e) {
-    throw new ConfigError(`Invalid JSON in ${p}: ${e.message}`);
+    throw new ConfigError(`invalid JSON in ${p} (${CONFIG_REL}): ${e.message}`);
   }
   return validateConfig(data, p);
 }
@@ -133,7 +134,9 @@ function orchestratorModel() {
 
 function resolvePersona(cwd, name, options) {
   options = options || {};
-  const config = readConfig(cwd);
+  const config = Object.prototype.hasOwnProperty.call(options, 'config')
+    ? (options.config || {})
+    : readConfig(cwd);
   const personas = (config && config.personas) || {};
   const entry = Object.prototype.hasOwnProperty.call(personas, name) ? personas[name] : null;
 

@@ -197,7 +197,7 @@ Helper scripts automate creating Herdr workspace tabs and provisioning ticket wo
 
 ### Per-persona dispatch model and harness
 
-Dispatch harness and model are resolved per persona from `<main checkout>/.righthand/persona.json` (optional, local only). Inspect with `righthand config [persona]`. Only `commandcode` is supported as a harness today.
+Dispatch harness and model are resolved per persona from `<main checkout>/.righthand/persona.json` (optional, local only). Inspect with `righthand config [persona]`. Only `commandcode` is supported as a harness today. The model value must be an id the harness actually accepts (for example `9router-direct/ag/gemini-3.8-flash-medium`); discover available ids with `cmdc --list-models`.
 
 ---
 

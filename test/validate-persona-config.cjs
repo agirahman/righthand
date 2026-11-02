@@ -27,19 +27,29 @@ function check(label, fn) {
   }
 }
 
-function expectThrow(label, fn) {
+function expectThrow(label, fragment, fn) {
   try {
     fn();
     console.error(`FAIL: ${label} -> expected throw`);
     failed++;
   } catch (e) {
-    if (e instanceof pc.ConfigError) {
-      console.log(`OK: ${label}`);
-      passed++;
-    } else {
+    if (!(e instanceof pc.ConfigError)) {
       console.error(`FAIL: ${label} -> threw non-ConfigError: ${e && e.message ? e.message : e}`);
       failed++;
+      return;
     }
+    if (!String(e.message).includes('.righthand/persona.json')) {
+      console.error(`FAIL: ${label} -> message missing file path: ${e.message}`);
+      failed++;
+      return;
+    }
+    if (fragment && !String(e.message).includes(fragment)) {
+      console.error(`FAIL: ${label} -> message missing "${fragment}": ${e.message}`);
+      failed++;
+      return;
+    }
+    console.log(`OK: ${label}`);
+    passed++;
   }
 }
 
@@ -55,7 +65,19 @@ check('missing file inherits harness and model', () => {
   } finally { rmTmp(d); }
 });
 
-// 2. model-only entry
+// 2. no config and no orchestrator model -> harness-default
+check('no config and no orchestrator model resolves to harness-default', () => {
+  const d = mkTmp();
+  try {
+    const r = pc.resolvePersona(d, 'backend', { orchestratorModel: null });
+    if (r.harness !== 'commandcode') throw new Error('harness');
+    if (r.harness_source !== 'orchestrator') throw new Error('harness_source');
+    if (r.model !== '') throw new Error('model');
+    if (r.model_source !== 'harness-default') throw new Error('model_source');
+  } finally { rmTmp(d); }
+});
+
+// 3. model-only entry
 check('model-only entry gives model_source=persona', () => {
   const d = mkTmp();
   try {
@@ -70,7 +92,7 @@ check('model-only entry gives model_source=persona', () => {
   } finally { rmTmp(d); }
 });
 
-// 3. harness-only entry inherits model from override
+// 4. harness-only entry inherits model from override
 check('harness-only entry gives harness_source=persona and inherits model', () => {
   const d = mkTmp();
   try {
@@ -85,8 +107,23 @@ check('harness-only entry gives harness_source=persona and inherits model', () =
   } finally { rmTmp(d); }
 });
 
-// 4. unsupported harness
-expectThrow('unsupported harness throws ConfigError', () => {
+// 5. empty entry resolves (inherits)
+check('empty persona entry resolves with inheritance', () => {
+  const d = mkTmp();
+  try {
+    const dir = path.join(d, '.righthand');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'persona.json'), JSON.stringify({ personas: { backend: {} } }));
+    const r = pc.resolvePersona(d, 'backend', { orchestratorModel: 'deepseek/deepseek-v4.1-flash' });
+    if (r.harness !== 'commandcode') throw new Error('harness');
+    if (r.harness_source !== 'orchestrator') throw new Error('harness_source');
+    if (r.model !== 'deepseek/deepseek-v4.1-flash') throw new Error('model');
+    if (r.model_source !== 'orchestrator') throw new Error('model_source');
+  } finally { rmTmp(d); }
+});
+
+// 6. unsupported harness
+expectThrow('unsupported harness throws ConfigError', 'not supported for dispatch', () => {
   const d = mkTmp();
   try {
     const dir = path.join(d, '.righthand');
@@ -96,8 +133,8 @@ expectThrow('unsupported harness throws ConfigError', () => {
   } finally { rmTmp(d); }
 });
 
-// 5. invalid JSON
-expectThrow('invalid JSON throws ConfigError', () => {
+// 7. invalid JSON
+expectThrow('invalid JSON throws ConfigError', 'invalid JSON', () => {
   const d = mkTmp();
   try {
     const dir = path.join(d, '.righthand');
@@ -107,8 +144,8 @@ expectThrow('invalid JSON throws ConfigError', () => {
   } finally { rmTmp(d); }
 });
 
-// 6. unknown field
-expectThrow('unknown field throws ConfigError', () => {
+// 8. unknown field
+expectThrow('unknown field throws ConfigError', 'unknown field', () => {
   const d = mkTmp();
   try {
     const dir = path.join(d, '.righthand');
@@ -118,8 +155,8 @@ expectThrow('unknown field throws ConfigError', () => {
   } finally { rmTmp(d); }
 });
 
-// 7. unknown top-level key
-expectThrow('unknown top-level key throws ConfigError', () => {
+// 9. unknown top-level key
+expectThrow('unknown top-level key throws ConfigError', 'unknown top-level key', () => {
   const d = mkTmp();
   try {
     const dir = path.join(d, '.righthand');
@@ -129,8 +166,8 @@ expectThrow('unknown top-level key throws ConfigError', () => {
   } finally { rmTmp(d); }
 });
 
-// 8. empty model
-expectThrow('empty model throws ConfigError', () => {
+// 10. empty model
+expectThrow('empty model throws ConfigError', 'must be a non-empty string', () => {
   const d = mkTmp();
   try {
     const dir = path.join(d, '.righthand');
@@ -140,7 +177,51 @@ expectThrow('empty model throws ConfigError', () => {
   } finally { rmTmp(d); }
 });
 
-// 9. formatResolution nothing resolves
+// 11. empty harness
+expectThrow('empty harness throws ConfigError', 'must be a non-empty string', () => {
+  const d = mkTmp();
+  try {
+    const dir = path.join(d, '.righthand');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'persona.json'), JSON.stringify({ personas: { backend: { harness: '' } } }));
+    pc.resolvePersona(d, 'backend', { orchestratorModel: 'm' });
+  } finally { rmTmp(d); }
+});
+
+// 12. root null
+expectThrow('root null throws ConfigError', 'root must be a JSON object', () => {
+  const d = mkTmp();
+  try {
+    const dir = path.join(d, '.righthand');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'persona.json'), 'null');
+    pc.resolvePersona(d, 'backend', { orchestratorModel: 'm' });
+  } finally { rmTmp(d); }
+});
+
+// 13. root array
+expectThrow('root array throws ConfigError', 'root must be a JSON object', () => {
+  const d = mkTmp();
+  try {
+    const dir = path.join(d, '.righthand');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'persona.json'), '[]');
+    pc.resolvePersona(d, 'backend', { orchestratorModel: 'm' });
+  } finally { rmTmp(d); }
+});
+
+// 14. non-object persona entry
+expectThrow('non-object persona entry throws ConfigError', 'entry must be an object', () => {
+  const d = mkTmp();
+  try {
+    const dir = path.join(d, '.righthand');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'persona.json'), JSON.stringify({ personas: { backend: 42 } }));
+    pc.resolvePersona(d, 'backend', { orchestratorModel: 'm' });
+  } finally { rmTmp(d); }
+});
+
+// 15. formatResolution empty model
 check('formatResolution empty model', () => {
   const line = pc.formatResolution({ persona: 'x', harness: 'commandcode', harness_source: 'orchestrator', model: '', model_source: 'harness-default' });
   if (line !== 'persona=x harness=commandcode harness_source=orchestrator model= model_source=harness-default') throw new Error(line);

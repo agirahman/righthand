@@ -134,7 +134,7 @@ Per-persona dispatch settings live in `<main checkout>/.righthand/persona.json` 
 ```json
 {
   "personas": {
-    "code-reviewer": { "model": "ag/gemini-3.8-flash-medium" },
+    "code-reviewer": { "model": "9router-direct/ag/gemini-3.8-flash-medium" },
     "backend": { "harness": "commandcode" }
   }
 }
@@ -145,7 +145,7 @@ Resolution order, field by field:
 - `harness`: value from the persona entry; otherwise `commandcode` (the orchestrator's own harness). Source is `persona` or `orchestrator`.
 - `model`: value from the persona entry; otherwise the orchestrator's live model; otherwise empty. Source is `persona`, `orchestrator`, or `harness-default`. Empty model means omit `-m` and use the harness default.
 
-Missing file, missing `personas`, or a persona not present all mean full inheritance; the file is a delta, not a full table. Only `commandcode` is supported as a harness value today. This configuration only affects agents launched by the orchestrator. A user working directly in a harness picks the model with `/model`, and RightHand must never override it.
+Missing file, missing `personas`, or a persona not present all mean full inheritance; the file is a delta, not a full table. Only `commandcode` is supported as a harness value today. This configuration only affects agents launched by the orchestrator. A user working directly in a harness picks the model with `/model`, and RightHand must never override it. The model value must be an id the harness actually accepts (for example `9router-direct/ag/gemini-3.8-flash-medium`); discover available ids with `cmdc --list-models`.
 
 ## Procedure
 
