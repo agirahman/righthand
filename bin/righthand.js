@@ -508,6 +508,18 @@ function cmdUpdate(target, opts) {
   }
 }
 
+function runModsList() {
+  if (process.platform === 'win32') {
+    const comspec = process.env.ComSpec || 'cmd.exe';
+    return spawnSync(comspec, ['/d', '/s', '/c', 'cmdc mods list'], {
+      encoding: 'utf8', timeout: 10000, shell: false, stdio: ['ignore', 'pipe', 'pipe'],
+    });
+  }
+  return spawnSync('cmdc', ['mods', 'list'], {
+    encoding: 'utf8', timeout: 10000, shell: false, stdio: ['ignore', 'pipe', 'pipe'],
+  });
+}
+
 function cmdDoctor() {
   const cwd = process.cwd();
   const strict = process.argv.includes('--strict');
@@ -546,12 +558,11 @@ function cmdDoctor() {
     console.log(`  - unsupported harness: ${h.persona} ${h.harness}`);
   }
 
-  const modBin = 'cmdc';
   let modParsed = false;
   let modInstalled = false;
   let modVersion = null;
   try {
-    const r = spawnSync(modBin, ['mods', 'list'], { encoding: 'utf8', timeout: 10000, shell: true, stdio: ['ignore', 'pipe', 'pipe'] });
+    const r = runModsList();
     const out = (r && r.stdout) ? r.stdout : '';
     if (r && !r.error && r.status === 0) {
       const parsed = dc.parseModsList(out);
