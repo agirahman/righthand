@@ -1,6 +1,0 @@
-{
-  "models": {
-    "writer": { "commandcode": "reflection/beam:free" },
-    "readonly": { "commandcode": "9router-direct/gemini/gemini-3.6-flash" }
-  }
-}
