@@ -20,7 +20,7 @@
  */
 
 import type {ModApi} from '@commandcode/harness';
-import {readFileSync, readdirSync, writeFileSync, mkdirSync, existsSync} from 'node:fs';
+import {readFileSync, readdirSync, writeFileSync, mkdirSync, existsSync, renameSync} from 'node:fs';
 import {homedir} from 'node:os';
 import {join} from 'node:path';
 
@@ -201,8 +201,7 @@ function writeStateFilePersona(cwd: string, active: string | null): void {
     const tmp = join(dir, `.active-persona.${process.pid}.tmp`);
     const state: PersistedPersonaState = {active, updatedAt: new Date().toISOString()};
     writeFileSync(tmp, JSON.stringify(state, null, 2) + '\n');
-    const fsMod = eval('require')('node:fs');
-    fsMod.renameSync(tmp, target);
+    renameSync(tmp, target);
   } catch {
     // ignore write failures (read-only lane checkout)
   }
@@ -269,7 +268,6 @@ export default function (cmd: ModApi): void {
     if (existsSync(stateFilePath) || existsSync(legacyStatePath)) {
       const filePersona = readStateFilePersona(cmd.cwd);
       activeProfile = filePersona;
-      cmd.state?.set('activeProfile', filePersona);
       return activeProfile;
     }
 
