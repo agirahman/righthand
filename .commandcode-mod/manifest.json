@@ -5,7 +5,6 @@
   ],
   "profilesDir": "./profiles",
   "commands": [
-    "righthand",
-    "profile"
+    "righthand"
   ]
 }
