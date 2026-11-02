@@ -34,7 +34,7 @@
                     "build":  "tsc",
                     "build:agents":  "node scripts/build-agents.js",
                     "typecheck":  "tsc --noEmit",
-                    "test": "node test/run.cjs",
+                    "test":  "node test/run.cjs",
                     "pretest":  "tsc"
                 },
     "keywords":  [

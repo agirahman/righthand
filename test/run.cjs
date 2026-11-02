@@ -9,6 +9,11 @@ const validators = fs.readdirSync(testDir)
   .filter((f) => f.startsWith('validate-') && f.endsWith('.cjs'))
   .sort();
 
+if (validators.length === 0) {
+  console.error('ERROR: No validators found matching test/validate-*.cjs');
+  process.exit(1);
+}
+
 console.log(`Discovered ${validators.length} validators: ${validators.join(', ')}\n`);
 
 let failed = [];
@@ -22,7 +27,12 @@ for (const validator of validators) {
     stdio: 'inherit',
   });
 
-  if (result.status !== 0) {
+  if (result.error) {
+    failed.push({
+      name: validator,
+      status: `spawn error: ${result.error.message}`,
+    });
+  } else if (result.status !== 0) {
     const signal = result.signal;
     const code = result.status;
     failed.push({
