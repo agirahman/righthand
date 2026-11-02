@@ -109,7 +109,7 @@ RightHand was originally built as a first-class Command Code mod.
   ```bash
   righthand setup cmdc
   # Runs internally: cmdc mods add -g @agirahman/righthand
-  # and syncs the eight capability skills to ~/.commandcode/skills
+  # and syncs the nine capability skills to ~/.commandcode/skills
   ```
 - **Slash Commands in session**:
   - `/righthand` — open fuzzy picker or show active persona.

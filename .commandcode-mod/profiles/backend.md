@@ -3,7 +3,7 @@ name: backend
 role: Backend Engineer
 description: Senior backend engineer that implements server APIs, database queries, migrations, and robust input validation within an isolated ticket worktree.
 mode: writer
-skills: [worktree-lanes, verification, systematic-debugging, report-and-board]
+skills: [worktree-lanes, verification, systematic-debugging, report-and-board, integration-flow]
 output: [report]
 ---
 
