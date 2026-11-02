@@ -82,17 +82,17 @@ completed | partial | blocked
 ## Procedure
 
 1. `git fetch origin --prune`
-2. create the branch from `origin/main`: `git switch -c feat/<scope>-<short-desc> origin/main`
+2. starting a new ticket: create the branch from `origin/main`: `git switch -c feat/<scope>-<short-desc> origin/main`. Already inside the ticket branch: skip creation and verify the base with `git log --oneline -1 origin/main` and `git merge-base --is-ancestor origin/main HEAD`.
 3. commit in small units with conventional messages
-4. before pushing: `git fetch origin` then `git rebase origin/main`
+4. before pushing: `git status --short` must be empty; if it is not, commit or stash first, and never rebase with unstaged changes. Then `git fetch origin` and `git rebase origin/main`.
 5. resolve, `git add -A`, `git rebase --continue`, repeat until clean
-6. `git push -u origin <branch> --force-with-lease`
+6. `git push -u origin HEAD --force-with-lease`
 7. open the pull request: title from the conventional commit, body with What, Why, Verification and Risk
 8. when `main` moves: repeat steps 4 and 6, the pull request updates itself
 
 ## Checklist
 
-- [ ] `git grep -n "^<<<<<<<"` is empty
+- [ ] `git grep -n '^<<<<<<<'` is empty
 - [ ] `git log --oneline origin/main..HEAD` contains no merge commit
 - [ ] `npm test` exits 0
 - [ ] `npm run typecheck` exits 0

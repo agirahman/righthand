@@ -98,7 +98,7 @@ The brief must carry these fields:
 
 ## Integration
 
-The worker rebases onto `origin/main` before pushing and uses `--force-with-lease`, and never merges main into its branch.
+The worker follows `integration-flow`: rebase onto `origin/main` before pushing, use `--force-with-lease`, and never merge main into its branch.
 
 ## Checklist
 
