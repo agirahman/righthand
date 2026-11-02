@@ -79,6 +79,10 @@ After install, list available skills (harness UI or CLI). You should see the cap
 
 For Command Code, `righthand setup cmdc` and `righthand update cmdc` also sync the eight capability skills into `~/.commandcode/skills`, leaving any unrelated skill directory untouched.
 
+## Troubleshooting
+
+`righthand doctor` checks harness availability, package health, the project persona config at `.righthand/persona.json`, the installed Command Code mod and its version, and the eight capability skills in `~/.commandcode/skills`. Pass `--strict` to make the command exit with status 1 when any check prints an `✗`; without it the command always exits 0. Config validation is intentionally not part of `npm test`, because `npm test` must never read or require user-owned data.
+
 ## Known limitations
 
 - For harnesses without native extension APIs (Claude Code, Cursor, Codex), persona switching relies on standard skill activation prompts rather than UI pickers.
