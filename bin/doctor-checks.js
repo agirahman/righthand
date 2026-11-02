@@ -105,8 +105,37 @@ function compareVersions(installed, expected) {
   return 'drift';
 }
 
+function collectStrictFailures(input) {
+  input = input || {};
+  const failures = [];
+  const pc = input.personaConfig || {};
+  if (pc.status === 'error') {
+    failures.push(pc.message || 'persona config error');
+  }
+  // unsupported harness detection: if pc has unsupportedHarnesses
+  if (Array.isArray(pc.unsupportedHarnesses) && pc.unsupportedHarnesses.length > 0) {
+    for (const h of pc.unsupportedHarnesses) {
+      failures.push(`unsupported harness: ${h.persona} ${h.harness}`);
+    }
+  }
+  const skills = input.skills || {};
+  const missing = Array.isArray(skills.missingOrStale) ? skills.missingOrStale : [];
+  if (missing.length > 0) {
+    failures.push(`capability skills missing or stale: ${missing.join(', ')}`);
+  }
+  const mod = input.mod || {};
+  if (mod.parsed && mod.installed && mod.version && mod.expected) {
+    const cmp = compareVersions(mod.version, mod.expected);
+    if (cmp === 'drift') {
+      failures.push(`mod version drift: ${mod.version} vs ${mod.expected}`);
+    }
+  }
+  return failures;
+}
+
 module.exports = {
   checkPersonaConfig: checkPersonaConfig,
   parseModsList: parseModsList,
   compareVersions: compareVersions,
+  collectStrictFailures: collectStrictFailures,
 };

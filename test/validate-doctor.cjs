@@ -107,6 +107,56 @@ check('compareVersions unknown', () => {
   if (dc.compareVersions('1.2.0', null) !== 'unknown') throw new Error('unknown2');
 });
 
+// collectStrictFailures
+check('collectStrictFailures healthy', () => {
+  const r = dc.collectStrictFailures({
+    personaConfig: { status: 'ok', entries: 1, unknownPersonas: [], unsupportedHarnesses: [] },
+    skills: { installed: 8, total: 8, missingOrStale: [] },
+    mod: { parsed: true, installed: true, version: '1.2.0', expected: '1.2.0' }
+  });
+  if (r.length !== 0) throw new Error('expected empty: ' + r.join(', '));
+});
+check('collectStrictFailures config error', () => {
+  const r = dc.collectStrictFailures({
+    personaConfig: { status: 'error', message: 'bad json', unsupportedHarnesses: [] },
+    skills: { installed: 8, total: 8, missingOrStale: [] },
+    mod: { parsed: true, installed: true, version: null, expected: '1.2.0' }
+  });
+  if (r.length === 0) throw new Error('expected failure');
+});
+check('collectStrictFailures unsupported harness', () => {
+  const r = dc.collectStrictFailures({
+    personaConfig: { status: 'ok', entries: 1, unknownPersonas: [], unsupportedHarnesses: [{ persona: 'backend', harness: 'pi' }] },
+    skills: { installed: 8, total: 8, missingOrStale: [] },
+    mod: { parsed: true, installed: true, version: null, expected: '1.2.0' }
+  });
+  if (r.length === 0) throw new Error('expected failure');
+});
+check('collectStrictFailures skills missing', () => {
+  const r = dc.collectStrictFailures({
+    personaConfig: { status: 'ok', entries: 1, unknownPersonas: [], unsupportedHarnesses: [] },
+    skills: { installed: 7, total: 8, missingOrStale: ['foo'] },
+    mod: { parsed: true, installed: true, version: null, expected: '1.2.0' }
+  });
+  if (r.length === 0) throw new Error('expected failure');
+});
+check('collectStrictFailures mod drift', () => {
+  const r = dc.collectStrictFailures({
+    personaConfig: { status: 'ok', entries: 1, unknownPersonas: [], unsupportedHarnesses: [] },
+    skills: { installed: 8, total: 8, missingOrStale: [] },
+    mod: { parsed: true, installed: true, version: '1.1.0', expected: '1.2.0' }
+  });
+  if (r.length === 0) throw new Error('expected failure');
+});
+check('collectStrictFailures informational only', () => {
+  const r = dc.collectStrictFailures({
+    personaConfig: { status: 'missing', entries: 0, unknownPersonas: ['x'], unsupportedHarnesses: [] },
+    skills: { installed: 8, total: 8, missingOrStale: [] },
+    mod: { parsed: false, installed: false, version: null, expected: '1.2.0' }
+  });
+  if (r.length !== 0) throw new Error('expected empty: ' + r.join(', '));
+});
+
 if (failed > 0) {
   console.error(`\nDoctor validation FAILED with ${failed} errors.`);
   process.exit(1);

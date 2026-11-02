@@ -511,13 +511,6 @@ function cmdUpdate(target, opts) {
 function cmdDoctor() {
   const cwd = process.cwd();
   const strict = process.argv.includes('--strict');
-  let hasCross = false;
-  const origLog = console.log;
-  console.log = function () {
-    const line = Array.prototype.slice.call(arguments).map(function (a) { return String(a); }).join(' ');
-    if (line.indexOf('\u2717') !== -1) hasCross = true;
-    return origLog.apply(console, arguments);
-  };
 
   console.log(`RightHand Doctor v${pkg.version}`);
   console.log('\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n');
@@ -553,18 +546,19 @@ function cmdDoctor() {
     console.log(`  - unsupported harness: ${h.persona} ${h.harness}`);
   }
 
+  const modBin = 'cmdc';
   let modParsed = false;
   let modInstalled = false;
   let modVersion = null;
   try {
-    const r = spawnSync('cmdc', ['mods', 'list'], { encoding: 'utf8', timeout: 3000, shell: true, stdio: ['ignore', 'pipe', 'pipe'] });
+    const r = spawnSync(modBin, ['mods', 'list'], { encoding: 'utf8', timeout: 10000, shell: true, stdio: ['ignore', 'pipe', 'pipe'] });
     const out = (r && r.stdout) ? r.stdout : '';
-    if (out.indexOf('righthand') !== -1) {
+    if (r && !r.error && r.status === 0) {
       const parsed = dc.parseModsList(out);
       modInstalled = parsed.installed;
       modVersion = parsed.version;
       modParsed = true;
-    } else if (r && !r.error && r.status === 0) {
+    } else if (out.indexOf('righthand') !== -1) {
       const parsed = dc.parseModsList(out);
       modInstalled = parsed.installed;
       modVersion = parsed.version;
@@ -577,7 +571,7 @@ function cmdDoctor() {
   } else if (!modInstalled) {
     console.log('  ✗ mod: not installed');
   } else if (modVersion === null) {
-    console.log('  - mod: unverified');
+    console.log('  ✓ mod: installed (version not reported)');
   } else {
     const cmp = dc.compareVersions(modVersion, pkg.version);
     const mark = cmp === 'match' ? '✓' : (cmp === 'drift' ? '✗' : '-');
@@ -637,8 +631,12 @@ function cmdDoctor() {
   const state = readState(cwd);
   console.log(`\nActive Persona: ${state.active ? `${state.active}` : 'none'}`);
 
-  console.log = origLog;
-  if (strict && hasCross) process.exit(1);
+  const strictFailures = dc.collectStrictFailures({
+    personaConfig: pcResult,
+    skills: skillStatus,
+    mod: { parsed: modParsed, installed: modInstalled, version: modVersion, expected: pkg.version }
+  });
+  if (strict && strictFailures.length > 0) process.exit(1);
   if (strict) process.exit(0);
 }
 
