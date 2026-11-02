@@ -110,7 +110,7 @@ RightHand was originally built as a first-class Command Code mod.
   # Runs internally: cmdc mods add -g @agirahman/righthand
   ```
 - **Slash Commands in session**:
-  - `/righthand` or `/profile` — open fuzzy picker or show active persona.
+  - `/righthand` — open fuzzy picker or show active persona.
   - `/righthand <persona>` — switch persona on-the-fly.
   - `/righthand off` — restore default prompt.
 - **Details**: See [`.commandcode-mod/README.md`](./.commandcode-mod/README.md).

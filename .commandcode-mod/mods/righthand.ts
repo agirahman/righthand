@@ -1,5 +1,5 @@
 ﻿/**
- * Mod `righthand`: switch agent persona via `/righthand <name>` (or `/profile <name>`).
+ * Mod `righthand`: switch agent persona via `/righthand <name>`.
  * Multi-agent orchestration engine for Herdr workspaces, adapted from Addy Osmani agent-skills architecture.
  *
  * Profiles are discovered and loaded from:
@@ -19,7 +19,8 @@
  */
 
 import type {ModApi} from '@commandcode/harness';
-import {readFileSync, readdirSync} from 'node:fs';
+import {readFileSync, readdirSync, writeFileSync, mkdirSync, existsSync} from 'node:fs';
+import * as nodeFs from 'node:fs';
 import {homedir} from 'node:os';
 import {join} from 'node:path';
 
@@ -167,6 +168,45 @@ export function loadAllProfiles(cwd: string): Map<string, ProfileMetadata> {
 
 const SESSION_ENTRY_TYPE = 'righthand/persona';
 
+interface PersistedPersonaState {
+  active: string | null;
+  updatedAt?: string;
+}
+
+function readStateFilePersona(cwd: string): string | null {
+  const candidates = [
+    join(cwd, '.righthand', 'state', 'active-persona.json'),
+    join(cwd, '.righthand', 'active-persona.json'),
+  ];
+  for (const filePath of candidates) {
+    try {
+      const raw = readFileSync(filePath, 'utf8');
+      const parsed = JSON.parse(raw) as PersistedPersonaState;
+      if (parsed && (typeof parsed.active === 'string' || parsed.active === null)) {
+        return typeof parsed.active === 'string' ? parsed.active.trim().toLowerCase() : null;
+      }
+      return null;
+    } catch {
+      // missing or corrupt => no persona
+    }
+  }
+  return null;
+}
+
+function writeStateFilePersona(cwd: string, active: string | null): void {
+  try {
+    const dir = join(cwd, '.righthand', 'state');
+    mkdirSync(dir, {recursive: true});
+    const target = join(dir, 'active-persona.json');
+    const tmp = join(dir, `.active-persona.${process.pid}.tmp`);
+    const state: PersistedPersonaState = {active, updatedAt: new Date().toISOString()};
+    writeFileSync(tmp, JSON.stringify(state, null, 2) + '\n');
+    (nodeFs as any).renameSync(tmp, target);
+  } catch {
+    // ignore write failures (read-only lane checkout)
+  }
+}
+
 export default function (cmd: ModApi): void {
   let activeProfile: string | null | undefined = undefined;
 
@@ -213,7 +253,17 @@ export default function (cmd: ModApi): void {
       return activeProfile;
     }
 
-    // 3. Fallback to CLI startup flag --mod-option default=<name>
+    // 3. State file written by the CLI (righthand switch / off)
+    const stateFilePath = join(cmd.cwd, '.righthand', 'state', 'active-persona.json');
+    const legacyStatePath = join(cmd.cwd, '.righthand', 'active-persona.json');
+    if (existsSync(stateFilePath) || existsSync(legacyStatePath)) {
+      const filePersona = readStateFilePersona(cmd.cwd);
+      activeProfile = filePersona;
+      cmd.state?.set('activeProfile', filePersona);
+      return activeProfile;
+    }
+
+    // 4. Fallback to CLI startup flag --mod-option default=<name>
     const def = cmd.getFlag('default');
     if (typeof def === 'string' && def.trim()) {
       const defProfile = def.trim().toLowerCase();
@@ -222,6 +272,7 @@ export default function (cmd: ModApi): void {
       return activeProfile;
     }
 
+    // 5. No persona
     activeProfile = null;
     return null;
   };
@@ -236,6 +287,7 @@ export default function (cmd: ModApi): void {
       customType: SESSION_ENTRY_TYPE,
       data: {persona: target.name},
     });
+    writeStateFilePersona(cmd.cwd, target.name);
     setStatus(`righthand: ${target.label} [${target.mode}]`);
     return target;
   };
@@ -247,6 +299,7 @@ export default function (cmd: ModApi): void {
       customType: SESSION_ENTRY_TYPE,
       data: {persona: null},
     });
+    writeStateFilePersona(cmd.cwd, null);
     setStatus(null);
   };
 
@@ -343,7 +396,6 @@ export default function (cmd: ModApi): void {
           '',
           '--------------------------------------------------------',
           'Usage: /righthand <name>  |  /righthand off  |  /righthand pick  |  /righthand list',
-          '(Note: /profile is supported as an alias)',
         ].join('\n'),
       };
     }
@@ -373,13 +425,6 @@ export default function (cmd: ModApi): void {
   cmd.addCommand({
     name: 'righthand',
     description: 'Switch specialist agent persona in Herdr multi-agent team',
-    argumentHint: '[name|pick|list|off]',
-    handler: commandHandler,
-  });
-
-  cmd.addCommand({
-    name: 'profile',
-    description: 'Alias for /righthand',
     argumentHint: '[name|pick|list|off]',
     handler: commandHandler,
   });
