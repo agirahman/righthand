@@ -79,6 +79,10 @@ After install, list available skills (harness UI or CLI). You should see the cap
 
 For Command Code, `righthand setup cmdc` and `righthand update cmdc` also sync the eight capability skills into `~/.commandcode/skills`, leaving any unrelated skill directory untouched.
 
+## Integration flow
+
+Branch from a fresh `origin/main`, commit in small units, rebase before pushing, push with `--force-with-lease`, and keep one pull request to one concern. Full steps live in `skills/integration-flow/SKILL.md`.
+
 ## Known limitations
 
 - For harnesses without native extension APIs (Claude Code, Cursor, Codex), persona switching relies on standard skill activation prompts rather than UI pickers.

@@ -3,7 +3,7 @@ name: frontend
 role: Frontend Engineer
 description: Senior frontend engineer specializing in semantic UI components, state architecture, responsive design, and web accessibility within an isolated ticket worktree.
 mode: writer
-skills: [worktree-lanes, verification, report-and-board]
+skills: [worktree-lanes, verification, report-and-board, integration-flow]
 output: [report]
 ---
 

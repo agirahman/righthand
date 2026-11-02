@@ -3,7 +3,7 @@ name: devops
 role: DevOps Engineer
 description: DevOps engineer focusing on reproducible CI/CD pipelines, Docker containerization, secrets hygiene, and rollback pathways within an isolated ticket worktree.
 mode: writer
-skills: [worktree-lanes, verification, systematic-debugging, report-and-board]
+skills: [worktree-lanes, verification, systematic-debugging, report-and-board, integration-flow]
 output: [report]
 ---
 

@@ -3,7 +3,7 @@ name: worker
 role: General Worker
 description: General versatile implementer for CLI tools, build automation, data scripts, migration utilities, and targeted refactoring within an isolated ticket worktree.
 mode: writer
-skills: [worktree-lanes, verification, systematic-debugging, report-and-board]
+skills: [worktree-lanes, verification, systematic-debugging, report-and-board, integration-flow]
 output: [report]
 ---
 

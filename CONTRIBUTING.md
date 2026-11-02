@@ -112,3 +112,5 @@ Before creating a new issue, please search existing issues to avoid duplicates.
 6. One pull request, one concern. Two tickets that edit the same file run one after the other, not in parallel.
 7. When `main` moves and the PR goes stale: rebase again, `--force-with-lease`, the PR updates itself.
 8. A PR body answers What and Why, then Verification (commands and results), then Risk.
+
+The canonical, agent-loadable version of this flow lives in `skills/integration-flow/SKILL.md`.
