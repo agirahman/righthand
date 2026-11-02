@@ -55,6 +55,10 @@ On Windows use `Copy-Item -Recurse`.
 - On other harnesses (Claude Code, Cursor, Codex, Kimi), activate by requesting the persona in conversation: *"Act as righthand-backend"* or *"Use the righthand-orchestrator skill"*.
 - Writer personas should run in isolated lanes created by Herdr outside this repository, using `scripts/herdr-spawn.*`.
 
+## Per-persona dispatch model and harness
+
+Dispatch harness and model are resolved per persona from `<main checkout>/.righthand/persona.json` (optional, local only). Use `righthand config [persona]` to inspect the resolved values. Only `commandcode` is supported as a harness today. The model value is passed through untouched, so it must be an id the target harness accepts; discover available ids with `cmdc --list-models`.
+
 ## Verification
 
 After install, list available skills (harness UI or CLI). You should see the capability modules under `skills/`.

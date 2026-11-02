@@ -97,7 +97,7 @@ No mechanics are restated; refer to the skills for procedure.
 
 - A ticket is ready to delegate to an agent in a supported harness.
 - The orchestrator needs to launch work in another harness (Command Code, Pi, OMP, OpenCode, Claude Code, Cursor, Codex, Kimi).
-- A writer or readonly persona must run in an isolated lane with a verified model from `dispatch.config.json`.
+- A writer or readonly persona must run in an isolated lane with a verified model from `righthand config <persona>`.
 
 ## Adapters
 
@@ -105,7 +105,7 @@ Harness id, launch command, persona injection, model selection, prompt submissio
 
 | Harness id | Launch command | Persona injection | Model selection | Prompt submission | Caveat |
 |---|---|---|---|---|---|
-| commandcode | `cmdc -t --yolo -m <model> --mod-option default=<persona>` | `--mod-option default=<persona>` | `-m <model>` (value from `dispatch.config.json`) | `herdr pane send-text <pane> "<prompt>"` then `herdr pane send-keys <pane> enter` | See verified mechanics below. |
+| commandcode | `cmdc -t --yolo -m <model> --mod-option default=<persona>` | `--mod-option default=<persona>` | `-m <model>` (value from `righthand config <persona>`; omitted when `model=` is empty) | `herdr pane send-text <pane> "<prompt>"` then `herdr pane send-keys <pane> enter` | See verified mechanics below. |
 | pi | unverified | unverified | unverified | unverified | unverified |
 | omp | unverified | unverified | unverified | unverified | unverified |
 | opencode | unverified | unverified | unverified | unverified | unverified |
@@ -127,11 +127,31 @@ Harness id, launch command, persona injection, model selection, prompt submissio
 
 Lane creation follows the `worktree-lanes` skill. Reporting and board events follow `report-and-board`. Verification follows `verification`. Brief assembly follows `context-briefing`.
 
+## Model and harness
+
+Per-persona dispatch settings live in `<main checkout>/.righthand/persona.json` (optional, local only). It is always read from the main checkout, never from a lane. Schema:
+
+```json
+{
+  "personas": {
+    "code-reviewer": { "model": "opus 5.5", "harness": "pi" },
+    "worker": { "model": "my-fast-model" }
+  }
+}
+```
+
+Resolution order, field by field:
+
+- `harness`: value from the persona entry; otherwise `commandcode` (the orchestrator's own harness). Source is `persona` or `orchestrator`.
+- `model`: value from the persona entry; otherwise the orchestrator's live model; otherwise empty. Source is `persona`, `orchestrator`, or `harness-default`. Empty model means omit `-m` and use the harness default.
+
+Missing file, missing `personas`, or a persona not present all mean full inheritance; the file is a delta, not a full table. Only `commandcode` is supported as a harness value today. This configuration only affects agents launched by the orchestrator. A user working directly in a harness picks the model with `/model`, and RightHand must never override it. The model value is passed through untouched, so it must be an id the target harness accepts. Today only `commandcode` is accepted as a harness, so an illustrative value such as `pi` is not launchable yet. Discover available ids with `cmdc --list-models`.
+
 ## Procedure
 
 0. Preflight: confirm `.righthand/` exists, otherwise run `righthand init`; confirm the main checkout state; confirm no existing lane or tab for the ticket.
 1. Lane: create the worktree lane for a writer ticket, or attach to the writer's lane for a readonly ticket (see `worktree-lanes`).
-2. Launch: start the agent for the harness using the persona and the model for the ticket's mode, read from `dispatch.config.json` (see adapter table).
+2. Launch: start the agent for the harness using the persona and the model for the ticket's mode, read from `righthand config <persona>` (see adapter table); `-m` is omitted when `model=` is empty.
 3. Brief: create `.righthand/tickets/<TICKET>/task.md` and submit a short pointer prompt that tells the agent to read it (see `context-briefing`).
 4. Observe: wait for a settled state and confirm the transition happened.
 5. Collect: read `.righthand/tickets/<TICKET>/reports/<persona>.md` and the board event (see `report-and-board`).
@@ -146,7 +166,7 @@ The brief must carry these fields:
 - `mode`: `writer` or `readonly`.
 - `lane`: ticket slug / lane identifier.
 - `cwd`: absolute worktree path the agent runs in.
-- `model`: model id for the ticket's mode, read from `dispatch.config.json`.
+- `model`: model id for the ticket's mode, read from `righthand config <persona>`.
 - `skills`: capability skills the agent must follow.
 - `report_root`: absolute path to the main checkout. A lane's `.righthand/` is a different directory than the orchestrator's, so this must be absolute.
 - `base`: base branch or ticket the lane stacks on.
@@ -170,7 +190,7 @@ The brief must carry these fields:
 - [ ] Main checkout state confirmed.
 - [ ] No existing lane or tab for the ticket.
 - [ ] Lane created with `--cwd` pointing at the main checkout.
-- [ ] Agent launched with persona and model from `dispatch.config.json`.
+- [ ] Agent launched with persona and model from `righthand config <persona>`.
 - [ ] Brief written to `.righthand/tickets/<TICKET>/task.md` with all schema fields.
 - [ ] Prompt submitted through the pane surface and state confirmed `working`.
 - [ ] Settled state observed (`idle`/`done` ready, `blocked` inspected).
