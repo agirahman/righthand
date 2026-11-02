@@ -221,11 +221,15 @@ function cmdSetup(target, opts) {
         }
       }
       if (key === 'cmdc') {
-        const names = listSkillNames();
-        for (const n of names) {
-          console.log(`  ✓ ${n}${dryRun ? ' (dry run)' : ''}`);
-        }
         const res = syncSkills('cmdc', { dryRun });
+        for (const name of listSkillNames()) {
+          const s = (res.skills && res.skills[name]) || { failed: 0 };
+          const mark = s.failed > 0 ? '✗' : '✓';
+          console.log(`  ${mark} ${name}${dryRun ? ' (dry run)' : ''}`);
+          for (const p of (res.failed || []).filter((f) => f.startsWith(name + '/'))) {
+            console.log(`    ✗ ${p}`);
+          }
+        }
         console.log(`  ✓ skills: ${res.written} written, ${res.unchanged} unchanged`);
       }
     } else if (h.type === 'copy') {
@@ -325,11 +329,15 @@ function cmdUpdate(target, opts) {
         console.log(`  → (dry run) ${h.bin} ${h.args.join(' ')}`);
       }
       if (key === 'cmdc') {
-        const names = listSkillNames();
-        for (const n of names) {
-          console.log(`  ✓ ${n}${dryRun ? ' (dry run)' : ''}`);
-        }
         const res = syncSkills('cmdc', { dryRun });
+        for (const name of listSkillNames()) {
+          const s = (res.skills && res.skills[name]) || { failed: 0 };
+          const mark = s.failed > 0 ? '✗' : '✓';
+          console.log(`  ${mark} ${name}${dryRun ? ' (dry run)' : ''}`);
+          for (const p of (res.failed || []).filter((f) => f.startsWith(name + '/'))) {
+            console.log(`    ✗ ${p}`);
+          }
+        }
         console.log(`  ✓ skills: ${res.written} written, ${res.unchanged} unchanged`);
       }
     }
@@ -358,7 +366,8 @@ function cmdDoctor() {
   console.log(`  ✓ righthand  v${pkg.version}`);
   console.log(`  ${profileCount > 0 ? '✓' : '✗'} profiles   ${profileCount} personas`);
   console.log(`  ${skillCount > 0 ? '✓' : '✗'} skills     ${skillCount} skills`);
-  console.log(`  ${skillStatus.installed === skillStatus.total ? '✓' : '✗'} skills installed: ${skillStatus.installed}/${skillStatus.total}`);
+  const skillOk = skillStatus.total > 0 && skillStatus.installed === skillStatus.total;
+  console.log(`  ${skillOk ? '✓' : '✗'} skills installed: ${skillStatus.installed}/${skillStatus.total}`);
   if (skillStatus.missingOrStale.length > 0) {
     console.log(`             missing/stale: ${skillStatus.missingOrStale.join(', ')}`);
   }

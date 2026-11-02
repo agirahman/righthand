@@ -85,9 +85,9 @@ function isInPath(bin) {
 function listSkillNames() {
   if (!fs.existsSync(skillsDir)) return [];
   return fs.readdirSync(skillsDir)
-    .filter((f) => {
+    .filter((f) => !f.startsWith('.') && (() => {
       try { return fs.statSync(path.join(skillsDir, f)).isDirectory(); } catch (e) { return false; }
-    })
+    })())
     .sort();
 }
 
@@ -134,11 +134,14 @@ function syncSkills(harness, opts) {
   let written = 0;
   let unchanged = 0;
   const files = [];
+  const failed = [];
+  const skills = {};
 
   for (const name of names) {
     const srcRoot = path.join(skillsDir, name);
     const destRoot = path.join(targetRoot, name);
     const relFiles = walkFiles(srcRoot, srcRoot);
+    const skillStats = { written: 0, unchanged: 0, failed: 0, files: [] };
     for (const rel of relFiles) {
       const srcFile = path.join(srcRoot, rel);
       const destFile = path.join(destRoot, rel);
@@ -146,25 +149,32 @@ function syncSkills(harness, opts) {
       try { srcBuf = fs.readFileSync(srcFile); } catch (e) { continue; }
       const destBuf = readSafe(destFile);
       const identical = destBuf !== null && Buffer.compare(srcBuf, destBuf) === 0;
-      files.push(rel.split(path.sep).join('/'));
+      const prefixed = name + '/' + rel.split(path.sep).join('/');
+      files.push(prefixed);
+      skillStats.files.push(prefixed);
       if (identical) {
         unchanged++;
+        skillStats.unchanged++;
         continue;
       }
       if (dryRun) {
         written++;
+        skillStats.written++;
         continue;
       }
       try {
         fs.mkdirSync(path.dirname(destFile), { recursive: true });
         fs.writeFileSync(destFile, srcBuf);
         written++;
+        skillStats.written++;
       } catch (e) {
-        // never throw on a single unreadable file
+        failed.push(prefixed);
+        skillStats.failed++;
       }
     }
+    skills[name] = skillStats;
   }
-  return { written, unchanged, files };
+  return { written, unchanged, files, failed, skills };
 }
 
 function checkSkills(opts) {
