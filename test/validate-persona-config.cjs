@@ -57,10 +57,10 @@ function expectThrow(label, fragment, fn) {
 check('missing file inherits harness and model', () => {
   const d = mkTmp();
   try {
-    const r = pc.resolvePersona(d, 'backend', { orchestratorModel: 'deepseek/deepseek-v4.1-flash' });
+    const r = pc.resolvePersona(d, 'backend', { orchestratorModel: 'orch/model' });
     if (r.harness !== 'commandcode') throw new Error('harness');
     if (r.harness_source !== 'orchestrator') throw new Error('harness_source');
-    if (r.model !== 'deepseek/deepseek-v4.1-flash') throw new Error('model');
+    if (r.model !== 'orch/model') throw new Error('model');
     if (r.model_source !== 'orchestrator') throw new Error('model_source');
   } finally { rmTmp(d); }
 });
@@ -83,9 +83,9 @@ check('model-only entry gives model_source=persona', () => {
   try {
     const dir = path.join(d, '.righthand');
     fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(path.join(dir, 'persona.json'), JSON.stringify({ personas: { 'code-reviewer': { model: 'ag/gemini-3.8-flash-medium' } } }));
+    fs.writeFileSync(path.join(dir, 'persona.json'), JSON.stringify({ personas: { 'code-reviewer': { model: 'provider/model-a' } } }));
     const r = pc.resolvePersona(d, 'code-reviewer', { orchestratorModel: 'orch/model' });
-    if (r.model !== 'ag/gemini-3.8-flash-medium') throw new Error('model');
+    if (r.model !== 'provider/model-a') throw new Error('model');
     if (r.model_source !== 'persona') throw new Error('model_source');
     if (r.harness !== 'commandcode') throw new Error('harness');
     if (r.harness_source !== 'orchestrator') throw new Error('harness_source');
@@ -99,10 +99,10 @@ check('harness-only entry gives harness_source=persona and inherits model', () =
     const dir = path.join(d, '.righthand');
     fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(path.join(dir, 'persona.json'), JSON.stringify({ personas: { backend: { harness: 'commandcode' } } }));
-    const r = pc.resolvePersona(d, 'backend', { orchestratorModel: 'deepseek/deepseek-v4.1-flash' });
+    const r = pc.resolvePersona(d, 'backend', { orchestratorModel: 'orch/model' });
     if (r.harness !== 'commandcode') throw new Error('harness');
     if (r.harness_source !== 'persona') throw new Error('harness_source');
-    if (r.model !== 'deepseek/deepseek-v4.1-flash') throw new Error('model');
+    if (r.model !== 'orch/model') throw new Error('model');
     if (r.model_source !== 'orchestrator') throw new Error('model_source');
   } finally { rmTmp(d); }
 });
@@ -114,10 +114,10 @@ check('empty persona entry resolves with inheritance', () => {
     const dir = path.join(d, '.righthand');
     fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(path.join(dir, 'persona.json'), JSON.stringify({ personas: { backend: {} } }));
-    const r = pc.resolvePersona(d, 'backend', { orchestratorModel: 'deepseek/deepseek-v4.1-flash' });
+    const r = pc.resolvePersona(d, 'backend', { orchestratorModel: 'orch/model' });
     if (r.harness !== 'commandcode') throw new Error('harness');
     if (r.harness_source !== 'orchestrator') throw new Error('harness_source');
-    if (r.model !== 'deepseek/deepseek-v4.1-flash') throw new Error('model');
+    if (r.model !== 'orch/model') throw new Error('model');
     if (r.model_source !== 'orchestrator') throw new Error('model_source');
   } finally { rmTmp(d); }
 });
