@@ -1,83 +1,84 @@
-{
-  "name": "@agirahman/righthand",
-  "version": "1.2.0",
-  "description": "RightHand: specialist agent personas and multi-agent orchestration for Herdr workspaces across coding harnesses",
-  "main": "dist/.commandcode-mod/mods/righthand.js",
-  "types": "dist/.commandcode-mod/mods/righthand.d.ts",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/agirahman/righthand.git"
-  },
-  "opencode": {
-    "plugins": [
-      "./.opencode-plugin/plugins/righthand-server.js",
-      "./.opencode-plugin/plugins/righthand-tui.js"
-    ]
-  },
-  "commandcode": {
-    "mods": [
-      "./.commandcode-mod/mods/righthand.ts"
-    ]
-  },
-  "pi": {
-    "extensions": [
-      "./.pi-plugin/extensions/righthand.ts"
-    ],
-    "skills": [
-      "./skills"
-    ]
-  },
-  "bin": {
-    "righthand": "./bin/righthand.js"
-  },
-  "scripts": {
-    "build": "tsc",
-    "pretest": "tsc",
-    "build:agents": "node scripts/build-agents.js",
-    "typecheck": "tsc --noEmit",
-    "test": "node test/validate-profiles.cjs && node test/validate-skills.cjs && node test/validate-artifacts.cjs && node test/validate-board.cjs && node test/validate-persona-config.cjs && node test/validate-skill-sync.cjs && node test/validate-launch.cjs && node test/validate-readonly.cjs"\n  },
-  "keywords": [
-    "cmd-mod",
-    "cmd-mod-command",
-    "cmd-mod-hook",
-    "pi-package",
-    "righthand",
-    "herdr",
-    "commandcode",
-    "agents",
-    "personas",
-    "orchestration",
-    "addyosmani",
-    "worktrees"
-  ],
-  "author": {
-    "name": "agi",
-    "url": "https://github.com/agirahman"
-  },
-  "license": "MIT",
-  "publishConfig": {
-    "access": "public"
-  },
-  "files": [
-    "dist",
-    ".commandcode-mod",
-    ".pi-plugin",
-    ".opencode-plugin",
-    ".omp",
-    "bin",
-    "profiles",
-    "skills",
-    "rules",
-    "scripts",
-    "types",
-    "README.md",
-    "GUIDE.md",
-    "CONTRIBUTING.md",
-    "LICENSE",
-    ".agents"
-  ],
-  "devDependencies": {
-    "@types/node": "^20.11.0",
-    "typescript": "^5.3.3"
-  }
+﻿{
+    "name":  "@agirahman/righthand",
+    "version":  "1.2.0",
+    "description":  "RightHand: specialist agent personas and multi-agent orchestration for Herdr workspaces across coding harnesses",
+    "main":  "dist/.commandcode-mod/mods/righthand.js",
+    "types":  "dist/.commandcode-mod/mods/righthand.d.ts",
+    "repository":  {
+                       "type":  "git",
+                       "url":  "git+https://github.com/agirahman/righthand.git"
+                   },
+    "opencode":  {
+                     "plugins":  [
+                                     "./.opencode-plugin/plugins/righthand-server.js",
+                                     "./.opencode-plugin/plugins/righthand-tui.js"
+                                 ]
+                 },
+    "commandcode":  {
+                        "mods":  [
+                                     "./.commandcode-mod/mods/righthand.ts"
+                                 ]
+                    },
+    "pi":  {
+               "extensions":  [
+                                  "./.pi-plugin/extensions/righthand.ts"
+                              ],
+               "skills":  [
+                              "./skills"
+                          ]
+           },
+    "bin":  {
+                "righthand":  "./bin/righthand.js"
+            },
+    "scripts":  {
+                    "build":  "tsc",
+                    "build:agents":  "node scripts/build-agents.js",
+                    "typecheck":  "tsc --noEmit",
+                    "test":  "node test/validate-profiles.cjs \u0026\u0026 node test/validate-skills.cjs \u0026\u0026 node test/validate-artifacts.cjs \u0026\u0026 node test/validate-board.cjs \u0026\u0026 node test/validate-persona-config.cjs \u0026\u0026 node test/validate-skill-sync.cjs \u0026\u0026 node test/validate-launch.cjs \u0026\u0026 node test/validate-readonly.cjs",
+                    "pretest":  "tsc"
+                },
+    "keywords":  [
+                     "cmd-mod",
+                     "cmd-mod-command",
+                     "cmd-mod-hook",
+                     "pi-package",
+                     "righthand",
+                     "herdr",
+                     "commandcode",
+                     "agents",
+                     "personas",
+                     "orchestration",
+                     "addyosmani",
+                     "worktrees"
+                 ],
+    "author":  {
+                   "name":  "agi",
+                   "url":  "https://github.com/agirahman"
+               },
+    "license":  "MIT",
+    "publishConfig":  {
+                          "access":  "public"
+                      },
+    "files":  [
+                  "dist",
+                  ".commandcode-mod",
+                  ".pi-plugin",
+                  ".opencode-plugin",
+                  ".omp",
+                  "bin",
+                  "profiles",
+                  "skills",
+                  "rules",
+                  "scripts",
+                  "types",
+                  "README.md",
+                  "GUIDE.md",
+                  "CONTRIBUTING.md",
+                  "LICENSE",
+                  ".agents"
+              ],
+    "devDependencies":  {
+                            "@types/node":  "^20.11.0",
+                            "typescript":  "^5.3.3"
+                        }
 }
