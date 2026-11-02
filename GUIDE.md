@@ -63,6 +63,8 @@ Dispatch harness and model are resolved per persona from `<main checkout>/.right
 
 After install, list available skills (harness UI or CLI). You should see the capability modules under `skills/`.
 
+For Command Code, `righthand setup cmdc` and `righthand update cmdc` also sync the eight capability skills into `~/.commandcode/skills`, leaving any unrelated skill directory untouched.
+
 ## Known limitations
 
 - For harnesses without native extension APIs (Claude Code, Cursor, Codex), persona switching relies on standard skill activation prompts rather than UI pickers.

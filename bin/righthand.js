@@ -11,82 +11,19 @@ const { readConfig, resolvePersona, formatResolution, ConfigError } = require('.
 const pkg = require('../package.json');
 const root = path.resolve(__dirname, '..');
 const profilesDir = path.join(root, 'profiles');
-const skillsDir = path.join(root, 'skills');
+
+const harness = require('./harness');
+const HARNESSES = harness.HARNESSES;
+const resolveHarness = harness.resolveHarness;
+const resolveDestBase = harness.resolveDestBase;
+const resolveDestPath = harness.resolveDestPath;
+const isInPath = harness.isInPath;
+const skillsDir = harness.skillsDir;
+const syncSkills = harness.syncSkills;
+const listSkillNames = harness.listSkillNames;
+const checkSkills = harness.checkSkills;
 
 const IS_WIN = process.platform === 'win32';
-const CMDC_BIN = IS_WIN ? 'cmdc' : 'cmd';
-
-// ---------------------------------------------------------------------------
-// Harness table (data-driven)
-// ---------------------------------------------------------------------------
-const HARNESSES = {
-  cmdc: {
-    type: 'spawn',
-    bin: CMDC_BIN,
-    args: ['mods', 'add', '-g', '@agirahman/righthand'],
-    aliases: ['commandcode'],
-    label: 'Command Code',
-    pathCheck: [CMDC_BIN],
-  },
-  pi: {
-    type: 'spawn',
-    bin: 'pi',
-    args: ['install', 'npm:@agirahman/righthand'],
-    aliases: [],
-    label: 'Pi Coding Agent',
-    pathCheck: ['pi'],
-  },
-  omp: {
-    type: 'copy',
-    aliases: [],
-    label: 'Oh-My-Pi (OMP)',
-    pathCheck: [],
-    files: [
-      { src: '.omp/extensions/righthand.ts', dest: '.omp/extensions/righthand.ts' },
-    ],
-  },
-  opencode: {
-    type: 'copy',
-    aliases: [],
-    label: 'OpenCode',
-    pathCheck: ['opencode'],
-    destBase: 'home',
-    legacyFiles: ['.opencode/plugins/righthand-server.js', '.opencode/plugins/righthand-tui.js'],
-    files: [
-      { src: '.opencode-plugin/plugins/righthand-server.js', dest: 'opencode/plugins/righthand-server.js' },
-      { src: '.opencode-plugin/plugins/righthand-tui.js',    dest: 'opencode/plugins/righthand-tui.js' },
-    ],
-  },
-};
-
-// Resolve alias → canonical name
-function resolveHarness(name) {
-  if (!name) return null;
-  const lower = name.toLowerCase();
-  if (HARNESSES[lower]) return lower;
-  for (const [key, cfg] of Object.entries(HARNESSES)) {
-    if (cfg.aliases && cfg.aliases.includes(lower)) return key;
-  }
-  return null;
-}
-
-// ---------------------------------------------------------------------------
-// Destination resolution (shared by setup/update/doctor)
-// ---------------------------------------------------------------------------
-function configBaseDir() {
-  const env = process.env.XDG_CONFIG_HOME;
-  if (env && path.isAbsolute(env)) return env;
-  return path.join(os.homedir(), '.config');
-}
-
-function resolveDestBase(h) {
-  if (h && h.destBase === 'home') return configBaseDir();
-  return process.cwd();
-}
-
-function resolveDestPath(h, dest) {
-  return path.join(resolveDestBase(h), dest);
-}
 
 // ---------------------------------------------------------------------------
 // Persona helpers
@@ -103,15 +40,6 @@ function loadProfile(name) {
   const p = path.join(profilesDir, `${name}.md`);
   if (!fs.existsSync(p)) return null;
   return fs.readFileSync(p, 'utf8');
-}
-
-// ---------------------------------------------------------------------------
-// PATH check
-// ---------------------------------------------------------------------------
-function isInPath(bin) {
-  const cmd = IS_WIN ? `where ${bin}` : `which ${bin}`;
-  const r = spawnSync(cmd, { shell: true, encoding: 'utf8' });
-  return r.status === 0 && r.stdout.trim().length > 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -325,8 +253,9 @@ function cmdConfig(personaArg) {
   }
 }
 
-function cmdSetup(target) {
-  const cwd = process.cwd();
+function cmdSetup(target, opts) {
+  opts = opts || {};
+  const dryRun = !!opts.dryRun;
   const targets = target === 'all'
     ? Object.keys(HARNESSES)
     : target ? [resolveHarness(target)].filter(Boolean) : null;
@@ -342,26 +271,43 @@ function cmdSetup(target) {
     console.log(`\n[${h.label}]`);
 
     if (h.type === 'spawn') {
-      // Check binary available
       if (!isInPath(h.bin)) {
         console.log(`  ✗ "${h.bin}" not found in PATH — install ${h.label} first`);
         continue;
       }
-      console.log(`  → running: ${h.bin} ${h.args.join(' ')}`);
-      const r = spawnSync(h.bin, h.args, { shell: true, stdio: 'inherit' });
-      if (r.status === 0) {
-        console.log(`  ✓ installed via ${h.bin}`);
+      if (dryRun) {
+        console.log(`  → (dry run) ${h.bin} ${h.args.join(' ')}`);
       } else {
-        console.log(`  ✗ install failed (exit ${r.status})`);
+        console.log(`  → running: ${h.bin} ${h.args.join(' ')}`);
+        const r = spawnSync(h.bin, h.args, { shell: true, stdio: 'inherit' });
+        if (r.status === 0) {
+          console.log(`  ✓ installed via ${h.bin}`);
+        } else {
+          console.log(`  ✗ install failed (exit ${r.status})`);
+        }
+      }
+      if (key === 'cmdc') {
+        const res = syncSkills('cmdc', { dryRun });
+        for (const name of listSkillNames()) {
+          const s = (res.skills && res.skills[name]) || { failed: 0 };
+          const mark = s.failed > 0 ? '✗' : '✓';
+          console.log(`  ${mark} ${name}${dryRun ? ' (dry run)' : ''}`);
+          for (const p of (res.failed || []).filter((f) => f.startsWith(name + '/'))) {
+            console.log(`    ✗ ${p}`);
+          }
+        }
+        console.log(`  ✓ skills: ${res.written} written, ${res.unchanged} unchanged`);
       }
     } else if (h.type === 'copy') {
-      let ok = true;
       for (const { src, dest } of h.files) {
         const srcPath = path.join(root, src);
         const destPath = resolveDestPath(h, dest);
         if (!fs.existsSync(srcPath)) {
           console.log(`  ✗ source not found: ${src}`);
-          ok = false;
+          continue;
+        }
+        if (dryRun) {
+          console.log(`  ✓ (dry run) ${destPath}`);
           continue;
         }
         fs.mkdirSync(path.dirname(destPath), { recursive: true });
@@ -372,7 +318,9 @@ function cmdSetup(target) {
   }
 }
 
-function cmdUpdate(target) {
+function cmdUpdate(target, opts) {
+  opts = opts || {};
+  const dryRun = !!opts.dryRun;
   const cwd = process.cwd();
 
   // Determine copy harness candidates
@@ -417,6 +365,10 @@ function cmdUpdate(target) {
           // only re-sync existing files
           continue;
         }
+        if (dryRun) {
+          console.log(`  ✓ (dry run) ${destPath}`);
+          continue;
+        }
         fs.copyFileSync(srcPath, destPath);
         console.log(`  ✓ updated → ${destPath}`);
       }
@@ -432,11 +384,27 @@ function cmdUpdate(target) {
         console.log(`  ✗ "${h.bin}" not found in PATH`);
         continue;
       }
-      const r = spawnSync(h.bin, h.args, { shell: true, stdio: 'inherit' });
-      if (r.status === 0) {
-        console.log(`  ✓ updated`);
+      if (!dryRun) {
+        const r = spawnSync(h.bin, h.args, { shell: true, stdio: 'inherit' });
+        if (r.status === 0) {
+          console.log(`  ✓ updated`);
+        } else {
+          console.log(`  ✗ update failed (exit ${r.status})`);
+        }
       } else {
-        console.log(`  ✗ update failed (exit ${r.status})`);
+        console.log(`  → (dry run) ${h.bin} ${h.args.join(' ')}`);
+      }
+      if (key === 'cmdc') {
+        const res = syncSkills('cmdc', { dryRun });
+        for (const name of listSkillNames()) {
+          const s = (res.skills && res.skills[name]) || { failed: 0 };
+          const mark = s.failed > 0 ? '✗' : '✓';
+          console.log(`  ${mark} ${name}${dryRun ? ' (dry run)' : ''}`);
+          for (const p of (res.failed || []).filter((f) => f.startsWith(name + '/'))) {
+            console.log(`    ✗ ${p}`);
+          }
+        }
+        console.log(`  ✓ skills: ${res.written} written, ${res.unchanged} unchanged`);
       }
     }
   }
@@ -459,10 +427,16 @@ function cmdDoctor() {
   // Package health
   const profileCount = listProfiles().length;
   const skillCount = fs.existsSync(skillsDir) ? fs.readdirSync(skillsDir).filter(f => !f.startsWith('.')).length : 0;
+  const skillStatus = checkSkills();
   console.log('Package:');
   console.log(`  ✓ righthand  v${pkg.version}`);
   console.log(`  ${profileCount > 0 ? '✓' : '✗'} profiles   ${profileCount} personas`);
   console.log(`  ${skillCount > 0 ? '✓' : '✗'} skills     ${skillCount} skills`);
+  const skillOk = skillStatus.total > 0 && skillStatus.installed === skillStatus.total;
+  console.log(`  ${skillOk ? '✓' : '✗'} skills installed: ${skillStatus.installed}/${skillStatus.total}`);
+  if (skillStatus.missingOrStale.length > 0) {
+    console.log(`             missing/stale: ${skillStatus.missingOrStale.join(', ')}`);
+  }
 
   // Harness PATH check
   console.log('\nHarness PATH:');
@@ -521,7 +495,11 @@ function cmdDoctor() {
 // ---------------------------------------------------------------------------
 // CLI routing
 // ---------------------------------------------------------------------------
-const [,, cmd, arg] = process.argv;
+const argv = process.argv.slice(2);
+const cmd = argv[0];
+const dryRun = argv.includes('--dry-run');
+const positional = argv.filter((a) => !a.startsWith('--'));
+const arg = positional[1];
 
 if (!cmd || cmd === 'list') {
   cmdList();
@@ -536,9 +514,9 @@ if (!cmd || cmd === 'list') {
 } else if (cmd === 'init') {
   cmdInit();
 } else if (cmd === 'setup') {
-  cmdSetup(arg || 'all');
+  cmdSetup(positional[1] || 'all', { dryRun });
 } else if (cmd === 'update') {
-  cmdUpdate(arg);
+  cmdUpdate(positional[1], { dryRun });
 } else if (cmd === 'doctor') {
   cmdDoctor();
 } else if (cmd === 'config') {
