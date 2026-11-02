@@ -32,6 +32,7 @@
   },
   "scripts": {
     "build": "tsc",
+    "pretest": "tsc",
     "build:agents": "node scripts/build-agents.js",
     "typecheck": "tsc --noEmit",
     "test": "node test/validate-profiles.cjs && node test/validate-skills.cjs && node test/validate-artifacts.cjs && node test/validate-board.cjs && node test/validate-persona-config.cjs && node test/validate-skill-sync.cjs && node test/validate-launch.cjs && node test/validate-readonly.cjs"\n  },

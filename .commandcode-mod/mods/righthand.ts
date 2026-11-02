@@ -192,11 +192,14 @@ function isInsideRoot(target: string, root: string): boolean {
 }
 
 function isAllowedWritePath(target: string, scratchDirs?: string[]): boolean {
-  // Inside any .righthand directory
+  // Inside a .righthand directory whose containing directory is a checkout
   const segments = target.split(/[/\\\\]/);
   const idx = segments.lastIndexOf('.righthand');
-  if (idx !== -1 && idx < segments.length - 1) {
-    return true;
+  if (idx > 0 && idx < segments.length - 1) {
+    const candidateRoot = segments.slice(0, idx).join('\\');
+    if (existsSync(join(candidateRoot, '.git')) || existsSync(join(candidateRoot, 'package.json'))) {
+      return true;
+    }
   }
   // Inside scratch dirs
   if (scratchDirs) {
@@ -209,7 +212,7 @@ function isAllowedWritePath(target: string, scratchDirs?: string[]): boolean {
 
 function shellBlocked(command: string, cwd: string, scratchDirs?: string[]): boolean {
   const blockedPatterns: RegExp[] = [
-    />/,
+    /(^|[\s"'])>{1,2}(?!=)/,
     /\bSet-Content\b/i,
     /\bAdd-Content\b/i,
     /\bOut-File\b/i,
@@ -247,36 +250,52 @@ function shellBlocked(command: string, cwd: string, scratchDirs?: string[]): boo
   let m = /^\s*node(?:\.exe)?\s+(.+)$/i.exec(trimmed);
   if (m) {
     const arg = m[1].trim().split(/\s+/)[0].replace(/^["']|["']$/g, '');
-    if (arg.split(/[/\\\\]/).includes('..')) return true;
-    const target = resolve(cwd, arg);
-    if (!isAllowedWritePath(target, scratchDirs)) return true;
+    if (arg.startsWith('-')) {
+      // inline flag, no file path to check
+    } else {
+      if (arg.split(/[/\\\\]/).includes('..')) return true;
+      const target = resolve(cwd, arg);
+      if (!isAllowedWritePath(target, scratchDirs)) return true;
+    }
   }
 
   // powershell -File <path>
   m = /^\s*powershell(?:\.exe)?\s+.*-File\s+(.+)$/i.exec(trimmed);
   if (m) {
     const arg = m[1].trim().split(/\s+/)[0].replace(/^["']|["']$/g, '');
-    if (arg.split(/[/\\\\]/).includes('..')) return true;
-    const target = resolve(cwd, arg);
-    if (!isAllowedWritePath(target, scratchDirs)) return true;
+    if (arg.startsWith('-')) {
+      // inline flag, no file path to check
+    } else {
+      if (arg.split(/[/\\\\]/).includes('..')) return true;
+      const target = resolve(cwd, arg);
+      if (!isAllowedWritePath(target, scratchDirs)) return true;
+    }
   }
 
   // bash <path>
   m = /^\s*bash\s+(.+)$/i.exec(trimmed);
   if (m) {
     const arg = m[1].trim().split(/\s+/)[0].replace(/^["']|["']$/g, '');
-    if (arg.split(/[/\\\\]/).includes('..')) return true;
-    const target = resolve(cwd, arg);
-    if (!isAllowedWritePath(target, scratchDirs)) return true;
+    if (arg.startsWith('-')) {
+      // inline flag, no file path to check
+    } else {
+      if (arg.split(/[/\\\\]/).includes('..')) return true;
+      const target = resolve(cwd, arg);
+      if (!isAllowedWritePath(target, scratchDirs)) return true;
+    }
   }
 
   // python <path>
   m = /^\s*python(?:3)?(?:\.exe)?\s+(.+)$/i.exec(trimmed);
   if (m) {
     const arg = m[1].trim().split(/\s+/)[0].replace(/^["']|["']$/g, '');
-    if (arg.split(/[/\\\\]/).includes('..')) return true;
-    const target = resolve(cwd, arg);
-    if (!isAllowedWritePath(target, scratchDirs)) return true;
+    if (arg.startsWith('-')) {
+      // inline flag, no file path to check
+    } else {
+      if (arg.split(/[/\\\\]/).includes('..')) return true;
+      const target = resolve(cwd, arg);
+      if (!isAllowedWritePath(target, scratchDirs)) return true;
+    }
   }
 
   return false;
@@ -362,6 +381,7 @@ function writeStateFilePersona(cwd: string, active: string | null): void {
 
 export default function (cmd: ModApi): void {
   let activeProfile: string | null | undefined = undefined;
+  let activeModeCache: {name: string | null; mode: ProfileMode | null} | undefined = undefined;
 
   cmd.addFlag('default', {
     type: 'string',
@@ -429,11 +449,27 @@ export default function (cmd: ModApi): void {
     return null;
   };
 
+  const getActiveMode = (): ProfileMode | null => {
+    const currentName = resolveActiveProfile();
+    if (activeModeCache && activeModeCache.name === currentName) {
+      return activeModeCache.mode;
+    }
+    let mode: ProfileMode | null = null;
+    if (currentName) {
+      const profiles = loadAllProfiles(cmd.cwd);
+      const p = profiles.get(currentName);
+      if (p) mode = p.mode;
+    }
+    activeModeCache = {name: currentName, mode};
+    return mode;
+  };
+
   const activate = (name: string): ProfileMetadata | undefined => {
     const profiles = loadAllProfiles(cmd.cwd);
     const target = profiles.get(name.toLowerCase());
     if (!target) return undefined;
     activeProfile = target.name;
+    activeModeCache = undefined;
     cmd.state?.set('activeProfile', target.name);
     cmd.session?.appendCustomEntry({
       customType: SESSION_ENTRY_TYPE,
@@ -446,6 +482,7 @@ export default function (cmd: ModApi): void {
 
   const deactivate = (): void => {
     activeProfile = null;
+    activeModeCache = undefined;
     cmd.state?.set('activeProfile', null);
     cmd.session?.appendCustomEntry({
       customType: SESSION_ENTRY_TYPE,
@@ -457,6 +494,7 @@ export default function (cmd: ModApi): void {
 
   const syncState = (): void => {
     activeProfile = undefined;
+    activeModeCache = undefined;
     const name = resolveActiveProfile();
     if (name) {
       const profile = loadAllProfiles(cmd.cwd).get(name);
@@ -476,12 +514,7 @@ export default function (cmd: ModApi): void {
     },
     beforeToolCall: ({toolName, input}) => {
       const currentName = resolveActiveProfile();
-      let mode: ProfileMode | null = null;
-      if (currentName) {
-        const profiles = loadAllProfiles(cmd.cwd);
-        const p = profiles.get(currentName);
-        if (p) mode = p.mode;
-      }
+      const mode = getActiveMode();
       const scratchDirs = process.env.COMMANDCODE_SCRATCHPAD
         ? [process.env.COMMANDCODE_SCRATCHPAD]
         : [];
