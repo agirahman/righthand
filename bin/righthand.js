@@ -13,6 +13,7 @@ const root = path.resolve(__dirname, '..');
 const profilesDir = path.join(root, 'profiles');
 
 const harness = require('./harness');
+const dc = require('./doctor-checks');
 const HARNESSES = harness.HARNESSES;
 const resolveHarness = harness.resolveHarness;
 const resolveDestBase = harness.resolveDestBase;
@@ -507,10 +508,24 @@ function cmdUpdate(target, opts) {
   }
 }
 
+function runModsList() {
+  if (process.platform === 'win32') {
+    const comspec = process.env.ComSpec || 'cmd.exe';
+    return spawnSync(comspec, ['/d', '/s', '/c', 'cmdc mods list'], {
+      encoding: 'utf8', timeout: 10000, shell: false, stdio: ['ignore', 'pipe', 'pipe'],
+    });
+  }
+  return spawnSync('cmdc', ['mods', 'list'], {
+    encoding: 'utf8', timeout: 10000, shell: false, stdio: ['ignore', 'pipe', 'pipe'],
+  });
+}
+
 function cmdDoctor() {
   const cwd = process.cwd();
+  const strict = process.argv.includes('--strict');
+
   console.log(`RightHand Doctor v${pkg.version}`);
-  console.log('══════════════════════════════\n');
+  console.log('\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n');
 
   // Package health
   const profileCount = listProfiles().length;
@@ -524,6 +539,54 @@ function cmdDoctor() {
   console.log(`  ${skillOk ? '✓' : '✗'} skills installed: ${skillStatus.installed}/${skillStatus.total}`);
   if (skillStatus.missingOrStale.length > 0) {
     console.log(`             missing/stale: ${skillStatus.missingOrStale.join(', ')}`);
+  }
+
+  // Persona config + mod health
+  console.log('\nPersona config & mod:');
+  const pcResult = dc.checkPersonaConfig(cwd);
+  if (pcResult.status === 'missing') {
+    console.log('  - persona config: none');
+  } else if (pcResult.status === 'error') {
+    console.log(`  ✗ persona config: ${pcResult.path} ${pcResult.message}`);
+  } else {
+    console.log(`  ✓ persona config: ${pcResult.path} (${pcResult.entries} entries)`);
+  }
+  for (const name of pcResult.unknownPersonas) {
+    console.log(`  - unknown persona: ${name}`);
+  }
+  for (const h of pcResult.unsupportedHarnesses) {
+    console.log(`  - unsupported harness: ${h.persona} ${h.harness}`);
+  }
+
+  let modParsed = false;
+  let modInstalled = false;
+  let modVersion = null;
+  try {
+    const r = runModsList();
+    const out = (r && r.stdout) ? r.stdout : '';
+    if (r && !r.error && r.status === 0) {
+      const parsed = dc.parseModsList(out);
+      modInstalled = parsed.installed;
+      modVersion = parsed.version;
+      modParsed = true;
+    } else if (out.indexOf('righthand') !== -1) {
+      const parsed = dc.parseModsList(out);
+      modInstalled = parsed.installed;
+      modVersion = parsed.version;
+      modParsed = true;
+    }
+  } catch (e) {}
+
+  if (!modParsed) {
+    console.log('  - mod: unverified');
+  } else if (!modInstalled) {
+    console.log('  ✗ mod: not installed');
+  } else if (modVersion === null) {
+    console.log('  ✓ mod: installed (version not reported)');
+  } else {
+    const cmp = dc.compareVersions(modVersion, pkg.version);
+    const mark = cmp === 'match' ? '✓' : (cmp === 'drift' ? '✗' : '-');
+    console.log(`  ${mark} mod: installed v${modVersion}`);
   }
 
   // Harness PATH check
@@ -578,6 +641,14 @@ function cmdDoctor() {
   // Active persona
   const state = readState(cwd);
   console.log(`\nActive Persona: ${state.active ? `${state.active}` : 'none'}`);
+
+  const strictFailures = dc.collectStrictFailures({
+    personaConfig: pcResult,
+    skills: skillStatus,
+    mod: { parsed: modParsed, installed: modInstalled, version: modVersion, expected: pkg.version }
+  });
+  if (strict && strictFailures.length > 0) process.exit(1);
+  if (strict) process.exit(0);
 }
 
 // ---------------------------------------------------------------------------
