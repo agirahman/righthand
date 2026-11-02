@@ -22,7 +22,7 @@
 import type {ModApi} from '@commandcode/harness';
 import {readFileSync, readdirSync, writeFileSync, mkdirSync, existsSync, renameSync} from 'node:fs';
 import {homedir} from 'node:os';
-import {join, resolve} from 'node:path';
+import {join, resolve, dirname} from 'node:path';
 
 export type ProfileMode = 'writer' | 'readonly';
 
@@ -204,19 +204,33 @@ function hasUnsafeTraversal(rawPath: string): boolean {
   return false;
 }
 
+function allowedRighthandRoot(target: string): string | null {
+  let dir = dirname(target);
+  while (true) {
+    if (dir.split(/[/\\]/).pop() === '.righthand') {
+      const root = dirname(dir);
+      if (existsSync(join(root, '.git')) || existsSync(join(root, 'package.json'))) {
+        return dir;
+      }
+      return null;
+    }
+    const parent = dirname(dir);
+    if (parent === dir) return null;
+    dir = parent;
+  }
+}
+
 function isAllowedWritePath(target: string, scratchDirs?: string[], rawPath?: string): boolean {
   if (rawPath && hasUnsafeTraversal(rawPath)) {
     return false;
   }
-  const segments = target.split(/[/\\\\]/);
-  const idx = segments.lastIndexOf('.righthand');
-  if (idx > 0 && idx < segments.length - 1) {
-    const candidateRoot = join(...segments.slice(0, idx));
-    const normalizedTarget = target.replace(/\//g, '\\').toLowerCase();
-    const normalizedRoot = candidateRoot.replace(/\//g, '\\').toLowerCase();
-    const rootWithSep = normalizedRoot.endsWith('\\') ? normalizedRoot : normalizedRoot + '\\';
-    const inside = normalizedTarget.startsWith(rootWithSep + '.righthand\\');
-    if (inside && (existsSync(join(candidateRoot, '.git')) || existsSync(join(candidateRoot, 'package.json')))) {
+  const rhDir = allowedRighthandRoot(target);
+  if (rhDir) {
+    const normTarget = target.replace(/\//g, '\\').toLowerCase();
+    const normRh = rhDir.replace(/\//g, '\\').toLowerCase();
+    const sep = '\\';
+    const rootWithSep = normRh.endsWith(sep) ? normRh : normRh + sep;
+    if (normTarget.startsWith(rootWithSep)) {
       return true;
     }
   }
