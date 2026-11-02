@@ -185,23 +185,41 @@ function isInsideRoot(target: string, root: string): boolean {
   if (resolvedTarget === resolvedRoot) return false;
   const prefix = resolvedRoot.endsWith('/') || resolvedRoot.endsWith('\\') ? resolvedRoot : resolvedRoot + '\\';
   // handle both separators
-  const normalizedTarget = resolvedTarget.replace(/\//g, '\\');
-  const normalizedRoot = resolvedRoot.replace(/\//g, '\\');
+  let normalizedTarget = resolvedTarget.replace(/\//g, '\\');
+  let normalizedRoot = resolvedRoot.replace(/\//g, '\\');
+  if (process.platform === 'win32') {
+    normalizedTarget = normalizedTarget.toLowerCase();
+    normalizedRoot = normalizedRoot.toLowerCase();
+  }
   const rootWithSep = normalizedRoot.endsWith('\\') ? normalizedRoot : normalizedRoot + '\\';
   return normalizedTarget.startsWith(rootWithSep);
 }
 
-function isAllowedWritePath(target: string, scratchDirs?: string[]): boolean {
-  // Inside a .righthand directory whose containing directory is a checkout
+function hasUnsafeTraversal(rawPath: string): boolean {
+  const segments = rawPath.split(/[/\\\\]/);
+  for (const seg of segments) {
+    const cleaned = seg.trim();
+    if (cleaned === '..' || cleaned === '.') return true;
+  }
+  return false;
+}
+
+function isAllowedWritePath(target: string, scratchDirs?: string[], rawPath?: string): boolean {
+  if (rawPath && hasUnsafeTraversal(rawPath)) {
+    return false;
+  }
   const segments = target.split(/[/\\\\]/);
   const idx = segments.lastIndexOf('.righthand');
   if (idx > 0 && idx < segments.length - 1) {
-    const candidateRoot = segments.slice(0, idx).join('\\');
-    if (existsSync(join(candidateRoot, '.git')) || existsSync(join(candidateRoot, 'package.json'))) {
+    const candidateRoot = join(...segments.slice(0, idx));
+    const normalizedTarget = target.replace(/\//g, '\\').toLowerCase();
+    const normalizedRoot = candidateRoot.replace(/\//g, '\\').toLowerCase();
+    const rootWithSep = normalizedRoot.endsWith('\\') ? normalizedRoot : normalizedRoot + '\\';
+    const inside = normalizedTarget.startsWith(rootWithSep + '.righthand\\');
+    if (inside && (existsSync(join(candidateRoot, '.git')) || existsSync(join(candidateRoot, 'package.json')))) {
       return true;
     }
   }
-  // Inside scratch dirs
   if (scratchDirs) {
     for (const dir of scratchDirs) {
       if (isInsideRoot(target, dir)) return true;
@@ -211,8 +229,11 @@ function isAllowedWritePath(target: string, scratchDirs?: string[]): boolean {
 }
 
 function shellBlocked(command: string, cwd: string, scratchDirs?: string[]): boolean {
+  const trimmed = command.trim();
+  if (!trimmed) return true;
+
   const blockedPatterns: RegExp[] = [
-    /(^|[\s"'])>{1,2}(?!=)/,
+    /(^|[\s"'])>{1,2}(?!=)(?!&)/,
     /\bSet-Content\b/i,
     /\bAdd-Content\b/i,
     /\bOut-File\b/i,
@@ -235,6 +256,12 @@ function shellBlocked(command: string, cwd: string, scratchDirs?: string[]): boo
     /\bgit\s+checkout\s+--/i,
     /\bgit\s+clean\b/i,
     /\bgit\s+tag\b/i,
+    /\bgit\s+worktree\b/i,
+    /\bgit\s+apply\b/i,
+    /\bgit\s+restore\b/i,
+    /\bgit\s+stash\b/i,
+    /\bpatch\b/i,
+    /\bnpm\s+install\b/i,
     /\bnpm\s+publish\b/i,
     /\bgh\s+pr\s+merge\b/i,
     /\bgh\s+pr\s+close\b/i,
@@ -244,58 +271,98 @@ function shellBlocked(command: string, cwd: string, scratchDirs?: string[]): boo
     if (p.test(command)) return true;
   }
 
-  const trimmed = command.trim();
-
-  // node <path>
-  let m = /^\s*node(?:\.exe)?\s+(.+)$/i.exec(trimmed);
-  if (m) {
-    const arg = m[1].trim().split(/\s+/)[0].replace(/^["']|["']$/g, '');
-    if (arg.startsWith('-')) {
-      // inline flag, no file path to check
-    } else {
-      if (arg.split(/[/\\\\]/).includes('..')) return true;
-      const target = resolve(cwd, arg);
-      if (!isAllowedWritePath(target, scratchDirs)) return true;
+  // inline execution flags are never allowed
+  const inlineFlagPattern = /(?:^|\s)(-e|--eval|-c|-Command|-EncodedCommand)(?:\s|$)/i;
+  if (inlineFlagPattern.test(trimmed)) {
+    // only block if an interpreter is involved
+    if (/^\s*(node|python3?|pwsh|powershell|bash|sh|zsh)(?:\.exe)?\b/i.test(trimmed)) {
+      return true;
     }
   }
 
-  // powershell -File <path>
-  m = /^\s*powershell(?:\.exe)?\s+.*-File\s+(.+)$/i.exec(trimmed);
-  if (m) {
-    const arg = m[1].trim().split(/\s+/)[0].replace(/^["']|["']$/g, '');
-    if (arg.startsWith('-')) {
-      // inline flag, no file path to check
-    } else {
-      if (arg.split(/[/\\\\]/).includes('..')) return true;
-      const target = resolve(cwd, arg);
-      if (!isAllowedWritePath(target, scratchDirs)) return true;
+  // powershell/pwsh: only -File <path> allowed
+  const psMatch = /^\s*(powershell|pwsh)(?:\.exe)?\s+(.+)$/i.exec(trimmed);
+  if (psMatch) {
+    const rest = psMatch[2].trim();
+    const fileMatch = /^-File\s+(.+)$/i.exec(rest);
+    if (!fileMatch) {
+      return true; // any other invocation blocked
     }
+    const arg = fileMatch[1].trim().split(/\s+/)[0].replace(/^["']|["']$/g, '');
+    if (arg.split(/[/\\\\]/).includes('..')) return true;
+    if (hasUnsafeTraversal(arg)) return true;
+    const target = resolve(cwd, arg);
+    if (!isAllowedWritePath(target, scratchDirs, arg)) return true;
+    return false;
   }
 
-  // bash <path>
-  m = /^\s*bash\s+(.+)$/i.exec(trimmed);
-  if (m) {
-    const arg = m[1].trim().split(/\s+/)[0].replace(/^["']|["']$/g, '');
-    if (arg.startsWith('-')) {
-      // inline flag, no file path to check
-    } else {
-      if (arg.split(/[/\\\\]/).includes('..')) return true;
-      const target = resolve(cwd, arg);
-      if (!isAllowedWritePath(target, scratchDirs)) return true;
+  // node with flags before path: node --enable-source-maps <path>
+  const nodeMatch = /^\s*node(?:\.exe)?\s+(.+)$/i.exec(trimmed);
+  if (nodeMatch) {
+    const tokens = nodeMatch[1].trim().split(/\s+/);
+    // find last token that doesn't start with -
+    let scriptToken: string | undefined;
+    for (let i = tokens.length - 1; i >= 0; i--) {
+      if (!tokens[i].startsWith('-')) {
+        scriptToken = tokens[i];
+        break;
+      }
     }
+    if (scriptToken) {
+      const arg = scriptToken.replace(/^["']|["']$/g, '');
+      if (arg.startsWith('-')) {
+        // all flags, no script (e.g. node -e already handled)
+      } else {
+        if (hasUnsafeTraversal(arg)) return true;
+        const target = resolve(cwd, arg);
+        if (!isAllowedWritePath(target, scratchDirs, arg)) return true;
+      }
+    }
+    return false;
   }
 
-  // python <path>
-  m = /^\s*python(?:3)?(?:\.exe)?\s+(.+)$/i.exec(trimmed);
-  if (m) {
-    const arg = m[1].trim().split(/\s+/)[0].replace(/^["']|["']$/g, '');
-    if (arg.startsWith('-')) {
-      // inline flag, no file path to check
-    } else {
-      if (arg.split(/[/\\\\]/).includes('..')) return true;
-      const target = resolve(cwd, arg);
-      if (!isAllowedWritePath(target, scratchDirs)) return true;
+  // python with flags before path
+  const pyMatch = /^\s*python(?:3)?(?:\.exe)?\s+(.+)$/i.exec(trimmed);
+  if (pyMatch) {
+    const tokens = pyMatch[1].trim().split(/\s+/);
+    let scriptToken: string | undefined;
+    for (let i = tokens.length - 1; i >= 0; i--) {
+      if (!tokens[i].startsWith('-')) {
+        scriptToken = tokens[i];
+        break;
+      }
     }
+    if (scriptToken) {
+      const arg = scriptToken.replace(/^["']|["']$/g, '');
+      if (!arg.startsWith('-')) {
+        if (hasUnsafeTraversal(arg)) return true;
+        const target = resolve(cwd, arg);
+        if (!isAllowedWritePath(target, scratchDirs, arg)) return true;
+      }
+    }
+    return false;
+  }
+
+  // bash/sh/zsh with script path
+  const bashMatch = /^\s*(bash|sh|zsh)\s+(.+)$/i.exec(trimmed);
+  if (bashMatch) {
+    const tokens = bashMatch[2].trim().split(/\s+/);
+    let scriptToken: string | undefined;
+    for (let i = tokens.length - 1; i >= 0; i--) {
+      if (!tokens[i].startsWith('-')) {
+        scriptToken = tokens[i];
+        break;
+      }
+    }
+    if (scriptToken) {
+      const arg = scriptToken.replace(/^["']|["']$/g, '');
+      if (!arg.startsWith('-')) {
+        if (hasUnsafeTraversal(arg)) return true;
+        const target = resolve(cwd, arg);
+        if (!isAllowedWritePath(target, scratchDirs, arg)) return true;
+      }
+    }
+    return false;
   }
 
   return false;
@@ -310,28 +377,52 @@ export function evaluateToolGuard(mode: ProfileMode | null, ctx: GuardContext): 
   const allowReason = (ctx.persona || 'readonly persona') + ' is readonly: writes are limited to .righthand/ and the scratchpad. Put reports under .righthand/tickets/<ID>/reports/.';
 
   if (toolName === 'write_file' || toolName === 'edit_file') {
-    const input = (ctx.input && typeof ctx.input === 'object') ? (ctx.input as Record<string, unknown>) : {};
-    const rawPath = typeof input.file_path === 'string' ? input.file_path : (typeof input.path === 'string' ? input.path : '');
+    let rawPath = '';
+    try {
+      const input = (ctx.input && typeof ctx.input === 'object') ? (ctx.input as Record<string, unknown>) : {};
+      rawPath = typeof input.file_path === 'string' ? input.file_path : (typeof input.path === 'string' ? input.path : '');
+    } catch {
+      return { block: true, reason: allowReason };
+    }
     if (!rawPath) {
       return { block: true, reason: allowReason };
     }
-    if (rawPath.split(/[/\\\\]/).includes('..')) {
-      return { block: true, reason: allowReason };
-    }
     const target = resolve(ctx.cwd, rawPath);
-    if (!isAllowedWritePath(target, ctx.scratchDirs)) {
+    if (!isAllowedWritePath(target, ctx.scratchDirs, rawPath)) {
       return { block: true, reason: allowReason };
     }
     return { block: false };
   }
 
-  if (toolName === 'shell_command') {
-    const input = (ctx.input && typeof ctx.input === 'object') ? (ctx.input as Record<string, unknown>) : {};
-    const command = typeof input.command === 'string' ? input.command : '';
+  const shellTools = new Set(['shell_command', 'powershell', 'bash', 'terminal']);
+  if (shellTools.has(toolName)) {
+    if (!ctx.input || typeof ctx.input !== 'object') {
+      return { block: true, reason: allowReason };
+    }
+    const input = ctx.input as Record<string, unknown>;
+    const rawCmd = input.command ?? input.script;
+    if (typeof rawCmd !== 'string' || rawCmd.trim() === '') {
+      return { block: true, reason: allowReason };
+    }
+    const command = rawCmd;
     if (shellBlocked(command, ctx.cwd, ctx.scratchDirs)) {
       return { block: true, reason: allowReason };
     }
     return { block: false };
+  }
+
+  const safeTools = new Set(['read_file', 'grep', 'glob', 'ls', 'cat']);
+  if (safeTools.has(toolName)) {
+    return { block: false };
+  }
+
+  // unknown tool: fail closed if mutating fields present
+  if (ctx.input && typeof ctx.input === 'object') {
+    const input = ctx.input as Record<string, unknown>;
+    const mutating = ['command', 'script', 'file_path', 'path', 'patch', 'content'];
+    if (mutating.some((k) => k in input)) {
+      return { block: true, reason: allowReason };
+    }
   }
 
   // read-only tools untouched
@@ -513,22 +604,26 @@ export default function (cmd: ModApi): void {
       syncState();
     },
     beforeToolCall: ({toolName, input}) => {
-      const currentName = resolveActiveProfile();
-      const mode = getActiveMode();
-      const scratchDirs = process.env.COMMANDCODE_SCRATCHPAD
-        ? [process.env.COMMANDCODE_SCRATCHPAD]
-        : [];
-      const decision = evaluateToolGuard(mode, {
-        toolName,
-        input,
-        cwd: cmd.cwd,
-        scratchDirs,
-        persona: currentName || undefined,
-      });
-      if (decision.block) {
-        return {block: true, additionalContext: decision.reason};
+      try {
+        const currentName = resolveActiveProfile();
+        const mode = getActiveMode();
+        const scratchDirs = process.env.COMMANDCODE_SCRATCHPAD
+          ? [process.env.COMMANDCODE_SCRATCHPAD]
+          : [];
+        const decision = evaluateToolGuard(mode, {
+          toolName,
+          input,
+          cwd: cmd.cwd,
+          scratchDirs,
+          persona: currentName || undefined,
+        });
+        if (decision.block) {
+          return {block: true, additionalContext: decision.reason};
+        }
+        return undefined;
+      } catch {
+        return {block: true, additionalContext: 'Blocked: the readonly guard failed to evaluate this call.'};
       }
-      return undefined;
     },
     appendSystemPrompt: () => {
       const currentName = resolveActiveProfile();
