@@ -32,7 +32,7 @@ check('model absent: no -m at all', () => {
 
 check('model absent (null resolution): no -m', () => {
   const args = launch.buildLaunchArgs('backend', null);
-  if (args.includes('-m')) throw new Error('unexpected -m');
+  if (JSON.stringify(args) !== JSON.stringify(['-t', '--yolo', '--mod-option', 'default=backend'])) throw new Error(JSON.stringify(args));
 });
 
 check('persona with spaces stays single --mod-option arg', () => {

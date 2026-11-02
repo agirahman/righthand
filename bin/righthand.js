@@ -317,7 +317,7 @@ function cmdLaunch(personaName, opts) {
   }
 
   const args = buildLaunchArgs(personaName, resolution);
-  const bin = IS_WIN ? 'cmdc' : 'cmd';
+  const bin = IS_WIN ? 'cmdc.cmd' : 'cmdc';
 
   if (opts.print) {
     console.log(formatCommand(bin, args));
@@ -325,7 +325,13 @@ function cmdLaunch(personaName, opts) {
   }
 
   const { spawn } = require('child_process');
-  const child = spawn(bin, args, { cwd: targetCwd, stdio: 'inherit', shell: IS_WIN });
+  let child;
+  try {
+    child = spawn(bin, args, { cwd: targetCwd, stdio: 'inherit' });
+  } catch (e) {
+    console.error(`Error: unable to spawn ${bin}: ${e.message}`);
+    process.exit(1);
+  }
   child.on('error', (err) => {
     console.error(`Error: unable to spawn ${bin}: ${err.message}`);
     process.exit(1);
@@ -604,11 +610,25 @@ if (!cmd || cmd === 'list') {
 } else if (cmd === 'config') {
   cmdConfig(arg);
 } else if (cmd === 'launch') {
-  const print = argv.includes('--print');
+  const rest = argv.slice(1);
+  let personaName = null;
   let cwdOpt = null;
-  const ci = argv.indexOf('--cwd');
-  if (ci !== -1 && ci + 1 < argv.length) cwdOpt = argv[ci + 1];
-  cmdLaunch(positional[1], { cwd: cwdOpt, print });
+  let print = false;
+  for (let i = 0; i < rest.length; i++) {
+    const a = rest[i];
+    if (a === '--print') {
+      print = true;
+    } else if (a === '--cwd') {
+      if (i + 1 >= rest.length) {
+        console.error('Error: missing argument for --cwd');
+        process.exit(1);
+      }
+      cwdOpt = rest[++i];
+    } else if (!a.startsWith('--') && !personaName) {
+      personaName = a;
+    }
+  }
+  cmdLaunch(personaName, { cwd: cwdOpt, print });
 } else if (cmd === '-v' || cmd === '--version' || cmd === 'version') {
   cmdVersion();
 } else if (cmd === '-h' || cmd === '--help' || cmd === 'help') {
