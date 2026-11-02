@@ -216,6 +216,8 @@ npm run typecheck
 npm run build
 ```
 
+Validators are discovered from `test/validate-*.cjs` and run by `test/run.cjs`.
+
 ---
 
 ## Contributing
