@@ -317,7 +317,7 @@ function cmdLaunch(personaName, opts) {
   }
 
   const args = buildLaunchArgs(personaName, resolution);
-  const bin = IS_WIN ? 'cmdc.cmd' : 'cmdc';
+  const bin = IS_WIN ? 'cmdc' : 'cmd';
 
   if (opts.print) {
     console.log(formatCommand(bin, args));
@@ -327,7 +327,7 @@ function cmdLaunch(personaName, opts) {
   const { spawn } = require('child_process');
   let child;
   try {
-    child = spawn(bin, args, { cwd: targetCwd, stdio: 'inherit' });
+    child = spawn(bin, args, { cwd: targetCwd, stdio: 'inherit', shell: IS_WIN });
   } catch (e) {
     console.error(`Error: unable to spawn ${bin}: ${e.message}`);
     process.exit(1);
