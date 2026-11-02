@@ -59,6 +59,16 @@ On Windows use `Copy-Item -Recurse`.
 
 Dispatch harness and model are resolved per persona from `<main checkout>/.righthand/persona.json` (optional, local only). Use `righthand config [persona]` to inspect the resolved values. Only `commandcode` is supported as a harness today. The model value is passed through untouched, so it must be an id the target harness accepts; discover available ids with `cmdc --list-models`.
 
+### Launching a persona
+
+Preview the command without running it:
+
+    righthand launch worker --print
+
+Then run it for real in a lane:
+
+    righthand launch worker --cwd <lane>
+
 ## Verification
 
 After install, list available skills (harness UI or CLI). You should see the capability modules under `skills/`.

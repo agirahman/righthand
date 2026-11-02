@@ -6,8 +6,8 @@ const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const { readState, writeState } = require('./state');
-const { readConfig, resolvePersona, formatResolution, ConfigError } = require('./persona-config');
-
+const { readConfig, resolvePersona, formatResolution, ConfigError, SUPPORTED_DISPATCH_HARNESSES } = require('./persona-config');
+const { buildLaunchArgs, formatCommand } = require('./launch');
 const pkg = require('../package.json');
 const root = path.resolve(__dirname, '..');
 const profilesDir = path.join(root, 'profiles');
@@ -121,6 +121,7 @@ Setup Commands:
 
 Dispatch Commands:
   config [persona]         Resolve dispatch harness and model for a persona
+  launch <persona>         Launch an agent for a persona [--cwd <dir>] [--print]
 
 Harnesses: cmdc (commandcode), pi, omp, opencode
 
@@ -251,6 +252,93 @@ function cmdConfig(personaArg) {
       throw e;
     }
   }
+}
+
+function cmdLaunch(personaName, opts) {
+  opts = opts || {};
+  if (!personaName) {
+    console.error('Usage: righthand launch <persona> [--cwd <dir>] [--print]');
+    process.exit(1);
+  }
+
+  // --cwd validation
+  let targetCwd = process.cwd();
+  if (opts.cwd) {
+    let st = null;
+    try { st = fs.statSync(opts.cwd); } catch (e) { st = null; }
+    if (!st || !st.isDirectory()) {
+      console.error(`Error: --cwd does not exist or is not a directory: ${opts.cwd}`);
+      process.exit(1);
+    }
+    targetCwd = opts.cwd;
+  }
+
+  const names = listProfiles();
+  if (!names.includes(personaName)) {
+    console.error(`Unknown persona: ${personaName}`);
+    console.error(`Available: ${names.join(', ')}`);
+    process.exit(1);
+  }
+
+  const cwd = process.cwd();
+  let config;
+  try {
+    config = readConfig(cwd);
+  } catch (e) {
+    if (e instanceof ConfigError) {
+      console.error(`Error: ${e.message}`);
+      process.exit(2);
+    }
+    throw e;
+  }
+
+  const om = (function () {
+    try {
+      return require('./persona-config').orchestratorModel();
+    } catch (e) {
+      return null;
+    }
+  })();
+
+  let resolution;
+  try {
+    resolution = resolvePersona(cwd, personaName, { orchestratorModel: om, config: config });
+  } catch (e) {
+    if (e instanceof ConfigError) {
+      console.error(`Error: ${e.message}`);
+      process.exit(2);
+    }
+    throw e;
+  }
+
+  if (!SUPPORTED_DISPATCH_HARNESSES.includes(resolution.harness)) {
+    console.error(`Error: persona "${personaName}" uses harness "${resolution.harness}", not supported for dispatch; supported: ${SUPPORTED_DISPATCH_HARNESSES.join(', ')}`);
+    process.exit(2);
+  }
+
+  const args = buildLaunchArgs(personaName, resolution);
+  const bin = IS_WIN ? 'cmdc' : 'cmd';
+
+  if (opts.print) {
+    console.log(formatCommand(bin, args));
+    process.exit(0);
+  }
+
+  const { spawn } = require('child_process');
+  let child;
+  try {
+    child = spawn(bin, args, { cwd: targetCwd, stdio: 'inherit', shell: IS_WIN });
+  } catch (e) {
+    console.error(`Error: unable to spawn ${bin}: ${e.message}`);
+    process.exit(1);
+  }
+  child.on('error', (err) => {
+    console.error(`Error: unable to spawn ${bin}: ${err.message}`);
+    process.exit(1);
+  });
+  child.on('exit', (code) => {
+    process.exit(code == null ? 1 : code);
+  });
 }
 
 function cmdSetup(target, opts) {
@@ -521,6 +609,26 @@ if (!cmd || cmd === 'list') {
   cmdDoctor();
 } else if (cmd === 'config') {
   cmdConfig(arg);
+} else if (cmd === 'launch') {
+  const rest = argv.slice(1);
+  let personaName = null;
+  let cwdOpt = null;
+  let print = false;
+  for (let i = 0; i < rest.length; i++) {
+    const a = rest[i];
+    if (a === '--print') {
+      print = true;
+    } else if (a === '--cwd') {
+      if (i + 1 >= rest.length) {
+        console.error('Error: missing argument for --cwd');
+        process.exit(1);
+      }
+      cwdOpt = rest[++i];
+    } else if (!a.startsWith('--') && !personaName) {
+      personaName = a;
+    }
+  }
+  cmdLaunch(personaName, { cwd: cwdOpt, print });
 } else if (cmd === '-v' || cmd === '--version' || cmd === 'version') {
   cmdVersion();
 } else if (cmd === '-h' || cmd === '--help' || cmd === 'help') {

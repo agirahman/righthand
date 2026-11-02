@@ -85,7 +85,7 @@ righthand inject                 # Print active persona prompt to stdout
 righthand init                   # Provision .righthand/ in the current project
 righthand status                 # One-liner: active persona + setup harnesses
 righthand config [persona]       # Resolve dispatch harness and model for a persona
-
+righthand launch <persona>       # Launch an agent for a persona (--print to dry-run)
 # --- Setup & Maintenance ---
 righthand setup <harness|all>    # Install RightHand into a harness
 righthand update [harness]       # Re-sync files for omp/opencode after npm update

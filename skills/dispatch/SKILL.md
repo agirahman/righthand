@@ -17,7 +17,7 @@ Harness id, launch command, persona injection, model selection, prompt submissio
 
 | Harness id | Launch command | Persona injection | Model selection | Prompt submission | Caveat |
 |---|---|---|---|---|---|
-| commandcode | `cmdc -t --yolo -m <model> --mod-option default=<persona>` | `--mod-option default=<persona>` | `-m <model>` (value from `righthand config <persona>`; omitted when `model=` is empty) | `herdr pane send-text <pane> "<prompt>"` then `herdr pane send-keys <pane> enter` | See verified mechanics below. |
+| commandcode | `righthand launch <persona> --cwd <lane>` | `--mod-option default=<persona>` | `-m <model>` (value from `righthand config <persona>`; omitted when `model=` is empty) | `herdr pane send-text <pane> "<prompt>"` then `herdr pane send-keys <pane> enter` | See verified mechanics below. |
 | pi | unverified | unverified | unverified | unverified | unverified |
 | omp | unverified | unverified | unverified | unverified | unverified |
 | opencode | unverified | unverified | unverified | unverified | unverified |
@@ -30,7 +30,7 @@ Harness id, launch command, persona injection, model selection, prompt submissio
 
 - Worktree lanes are created with `herdr worktree create --cwd <main checkout> --branch <ticket-slug> --base <base-branch> --label <role>-<ticket> --no-focus`. `--cwd` is mandatory once a linked worktree exists, otherwise the command fails with `linked_worktree_source`.
 - Herdr manages worktree lanes under its own root outside the repository (one directory per branch). Never create a `wt/` directory in the repository.
-- The launch command is `cmdc -t --yolo -m <model> --mod-option default=<persona>`. Without `-t` the project trust prompt blocks startup; without `--yolo` tool permissions block the run.
+- The launch command is `righthand launch <persona> --cwd <lane>`. Without `-t` the project trust prompt blocks startup; without `--yolo` tool permissions block the run. When no user config exists the model is inherited from the orchestrator and may be omitted.
 - `cmd` is **not** a valid `herdr agent start --kind` value. Command Code reports its own state to the Herdr socket, so the agent appears in `herdr agent list` on its own after launch.
 - `herdr agent prompt <target>` rejects self-registering agents with `agent_not_ready`, even when the pane id or the agent name is valid. Submit prompts through the pane surface instead: `herdr pane send-text <pane> "<prompt>"` followed by `herdr pane send-keys <pane> enter`.
 - An agent created this way has no name until `herdr agent rename <pane> <name>` is called. Rename before any name-based command.
