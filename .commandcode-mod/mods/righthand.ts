@@ -1,5 +1,6 @@
 ﻿/**
  * Mod `righthand`: switch agent persona via `/righthand <name>`.
+ * The launch flag --mod-option default= outranks the persisted state file.
  * Multi-agent orchestration engine for Herdr workspaces, adapted from Addy Osmani agent-skills architecture.
  *
  * Profiles are discovered and loaded from:
@@ -20,7 +21,6 @@
 
 import type {ModApi} from '@commandcode/harness';
 import {readFileSync, readdirSync, writeFileSync, mkdirSync, existsSync} from 'node:fs';
-import * as nodeFs from 'node:fs';
 import {homedir} from 'node:os';
 import {join} from 'node:path';
 
@@ -201,7 +201,8 @@ function writeStateFilePersona(cwd: string, active: string | null): void {
     const tmp = join(dir, `.active-persona.${process.pid}.tmp`);
     const state: PersistedPersonaState = {active, updatedAt: new Date().toISOString()};
     writeFileSync(tmp, JSON.stringify(state, null, 2) + '\n');
-    (nodeFs as any).renameSync(tmp, target);
+    const fsMod = eval('require')('node:fs');
+    fsMod.renameSync(tmp, target);
   } catch {
     // ignore write failures (read-only lane checkout)
   }
@@ -253,22 +254,22 @@ export default function (cmd: ModApi): void {
       return activeProfile;
     }
 
-    // 3. State file written by the CLI (righthand switch / off)
+    // 3. --mod-option default= is an explicit per-launch instruction from the dispatcher
+    const def = cmd.getFlag('default');
+    if (typeof def === 'string' && def.trim()) {
+      const defProfile = def.trim().toLowerCase();
+      activeProfile = defProfile;
+      cmd.state?.set('activeProfile', defProfile);
+      return activeProfile;
+    }
+
+    // 4. State file written by the CLI (righthand switch / off)
     const stateFilePath = join(cmd.cwd, '.righthand', 'state', 'active-persona.json');
     const legacyStatePath = join(cmd.cwd, '.righthand', 'active-persona.json');
     if (existsSync(stateFilePath) || existsSync(legacyStatePath)) {
       const filePersona = readStateFilePersona(cmd.cwd);
       activeProfile = filePersona;
       cmd.state?.set('activeProfile', filePersona);
-      return activeProfile;
-    }
-
-    // 4. Fallback to CLI startup flag --mod-option default=<name>
-    const def = cmd.getFlag('default');
-    if (typeof def === 'string' && def.trim()) {
-      const defProfile = def.trim().toLowerCase();
-      activeProfile = defProfile;
-      cmd.state?.set('activeProfile', defProfile);
       return activeProfile;
     }
 
