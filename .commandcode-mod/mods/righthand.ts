@@ -22,7 +22,7 @@
 import type {ModApi} from '@commandcode/harness';
 import {readFileSync, readdirSync, writeFileSync, mkdirSync, existsSync, renameSync} from 'node:fs';
 import {homedir} from 'node:os';
-import {join} from 'node:path';
+import {join, resolve} from 'node:path';
 
 export type ProfileMode = 'writer' | 'readonly';
 
@@ -164,6 +164,159 @@ export function loadAllProfiles(cwd: string): Map<string, ProfileMetadata> {
   }
 
   return map;
+}
+
+export interface GuardContext {
+  toolName: string;
+  input: unknown;
+  cwd: string;
+  scratchDirs?: string[];
+  persona?: string;
+}
+
+export interface GuardDecision {
+  block: boolean;
+  reason?: string;
+}
+
+function isInsideRoot(target: string, root: string): boolean {
+  const resolvedRoot = resolve(root);
+  const resolvedTarget = resolve(target);
+  if (resolvedTarget === resolvedRoot) return false;
+  const prefix = resolvedRoot.endsWith('/') || resolvedRoot.endsWith('\\') ? resolvedRoot : resolvedRoot + '\\';
+  // handle both separators
+  const normalizedTarget = resolvedTarget.replace(/\//g, '\\');
+  const normalizedRoot = resolvedRoot.replace(/\//g, '\\');
+  const rootWithSep = normalizedRoot.endsWith('\\') ? normalizedRoot : normalizedRoot + '\\';
+  return normalizedTarget.startsWith(rootWithSep);
+}
+
+function isAllowedWritePath(target: string, scratchDirs?: string[]): boolean {
+  // Inside any .righthand directory
+  const segments = target.split(/[/\\\\]/);
+  const idx = segments.lastIndexOf('.righthand');
+  if (idx !== -1 && idx < segments.length - 1) {
+    return true;
+  }
+  // Inside scratch dirs
+  if (scratchDirs) {
+    for (const dir of scratchDirs) {
+      if (isInsideRoot(target, dir)) return true;
+    }
+  }
+  return false;
+}
+
+function shellBlocked(command: string, cwd: string, scratchDirs?: string[]): boolean {
+  const blockedPatterns: RegExp[] = [
+    />/,
+    /\bSet-Content\b/i,
+    /\bAdd-Content\b/i,
+    /\bOut-File\b/i,
+    /\bNew-Item\b/i,
+    /\bRemove-Item\b/i,
+    /\brm\b/i,
+    /\bdel\b/i,
+    /\brmdir\b/i,
+    /\bMove-Item\b/i,
+    /\bmv\b/i,
+    /\bCopy-Item\b/i,
+    /\bcp\b/i,
+    /\btouch\b/i,
+    /\bmkdir\b/i,
+    /\bsed\s+-i\b/i,
+    /\btee\b/i,
+    /\bgit\s+commit\b/i,
+    /\bgit\s+push\b/i,
+    /\bgit\s+reset\b/i,
+    /\bgit\s+checkout\s+--/i,
+    /\bgit\s+clean\b/i,
+    /\bgit\s+tag\b/i,
+    /\bnpm\s+publish\b/i,
+    /\bgh\s+pr\s+merge\b/i,
+    /\bgh\s+pr\s+close\b/i,
+    /\bgh\s+release\s+create\b/i,
+  ];
+  for (const p of blockedPatterns) {
+    if (p.test(command)) return true;
+  }
+
+  const trimmed = command.trim();
+
+  // node <path>
+  let m = /^\s*node(?:\.exe)?\s+(.+)$/i.exec(trimmed);
+  if (m) {
+    const arg = m[1].trim().split(/\s+/)[0].replace(/^["']|["']$/g, '');
+    if (arg.split(/[/\\\\]/).includes('..')) return true;
+    const target = resolve(cwd, arg);
+    if (!isAllowedWritePath(target, scratchDirs)) return true;
+  }
+
+  // powershell -File <path>
+  m = /^\s*powershell(?:\.exe)?\s+.*-File\s+(.+)$/i.exec(trimmed);
+  if (m) {
+    const arg = m[1].trim().split(/\s+/)[0].replace(/^["']|["']$/g, '');
+    if (arg.split(/[/\\\\]/).includes('..')) return true;
+    const target = resolve(cwd, arg);
+    if (!isAllowedWritePath(target, scratchDirs)) return true;
+  }
+
+  // bash <path>
+  m = /^\s*bash\s+(.+)$/i.exec(trimmed);
+  if (m) {
+    const arg = m[1].trim().split(/\s+/)[0].replace(/^["']|["']$/g, '');
+    if (arg.split(/[/\\\\]/).includes('..')) return true;
+    const target = resolve(cwd, arg);
+    if (!isAllowedWritePath(target, scratchDirs)) return true;
+  }
+
+  // python <path>
+  m = /^\s*python(?:3)?(?:\.exe)?\s+(.+)$/i.exec(trimmed);
+  if (m) {
+    const arg = m[1].trim().split(/\s+/)[0].replace(/^["']|["']$/g, '');
+    if (arg.split(/[/\\\\]/).includes('..')) return true;
+    const target = resolve(cwd, arg);
+    if (!isAllowedWritePath(target, scratchDirs)) return true;
+  }
+
+  return false;
+}
+
+export function evaluateToolGuard(mode: ProfileMode | null, ctx: GuardContext): GuardDecision {
+  if (mode !== 'readonly') {
+    return { block: false };
+  }
+
+  const toolName = ctx.toolName;
+  const allowReason = (ctx.persona || 'readonly persona') + ' is readonly: writes are limited to .righthand/ and the scratchpad. Put reports under .righthand/tickets/<ID>/reports/.';
+
+  if (toolName === 'write_file' || toolName === 'edit_file') {
+    const input = (ctx.input && typeof ctx.input === 'object') ? (ctx.input as Record<string, unknown>) : {};
+    const rawPath = typeof input.file_path === 'string' ? input.file_path : (typeof input.path === 'string' ? input.path : '');
+    if (!rawPath) {
+      return { block: true, reason: allowReason };
+    }
+    if (rawPath.split(/[/\\\\]/).includes('..')) {
+      return { block: true, reason: allowReason };
+    }
+    const target = resolve(ctx.cwd, rawPath);
+    if (!isAllowedWritePath(target, ctx.scratchDirs)) {
+      return { block: true, reason: allowReason };
+    }
+    return { block: false };
+  }
+
+  if (toolName === 'shell_command') {
+    const input = (ctx.input && typeof ctx.input === 'object') ? (ctx.input as Record<string, unknown>) : {};
+    const command = typeof input.command === 'string' ? input.command : '';
+    if (shellBlocked(command, ctx.cwd, ctx.scratchDirs)) {
+      return { block: true, reason: allowReason };
+    }
+    return { block: false };
+  }
+
+  // read-only tools untouched
+  return { block: false };
 }
 
 const SESSION_ENTRY_TYPE = 'righthand/persona';
@@ -320,6 +473,29 @@ export default function (cmd: ModApi): void {
   cmd.hooks({
     onSessionStart: () => {
       syncState();
+    },
+    beforeToolCall: ({toolName, input}) => {
+      const currentName = resolveActiveProfile();
+      let mode: ProfileMode | null = null;
+      if (currentName) {
+        const profiles = loadAllProfiles(cmd.cwd);
+        const p = profiles.get(currentName);
+        if (p) mode = p.mode;
+      }
+      const scratchDirs = process.env.COMMANDCODE_SCRATCHPAD
+        ? [process.env.COMMANDCODE_SCRATCHPAD]
+        : [];
+      const decision = evaluateToolGuard(mode, {
+        toolName,
+        input,
+        cwd: cmd.cwd,
+        scratchDirs,
+        persona: currentName || undefined,
+      });
+      if (decision.block) {
+        return {block: true, additionalContext: decision.reason};
+      }
+      return undefined;
     },
     appendSystemPrompt: () => {
       const currentName = resolveActiveProfile();
