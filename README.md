@@ -84,6 +84,7 @@ righthand off                    # Deactivate persona (restore default)
 righthand inject                 # Print active persona prompt to stdout
 righthand init                   # Provision .righthand/ in the current project
 righthand status                 # One-liner: active persona + setup harnesses
+righthand config [persona]       # Resolve dispatch harness and model for a persona
 
 # --- Setup & Maintenance ---
 righthand setup <harness|all>    # Install RightHand into a harness
@@ -193,6 +194,10 @@ Helper scripts automate creating Herdr workspace tabs and provisioning ticket wo
 ```bash
 ./scripts/herdr-spawn.sh w1 backend T1 auth-api
 ```
+
+### Per-persona dispatch model and harness
+
+Dispatch harness and model are resolved per persona from `<main checkout>/.righthand/persona.json` (optional, local only). Inspect with `righthand config [persona]`. Only `commandcode` is supported as a harness today.
 
 ---
 

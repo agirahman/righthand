@@ -6,6 +6,7 @@ const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const { readState, writeState } = require('./state');
+const { readConfig, resolvePersona, formatResolution, ConfigError } = require('./persona-config');
 
 const pkg = require('../package.json');
 const root = path.resolve(__dirname, '..');
@@ -190,6 +191,9 @@ Setup Commands:
   update [harness]         Re-sync harness files (omp/opencode) after npm update
   doctor                   Check harness availability and setup health
 
+Dispatch Commands:
+  config [persona]         Resolve dispatch harness and model for a persona
+
 Harnesses: cmdc (commandcode), pi, omp, opencode
 
 Flags:
@@ -203,6 +207,7 @@ Examples:
   righthand setup pi
   righthand setup all
   righthand doctor
+  righthand config code-reviewer
 `.trim());
 }
 
@@ -256,6 +261,67 @@ function cmdStatus() {
   } else {
     console.log('Active persona : none');
     console.log('Run: righthand switch <persona>');
+  }
+}
+
+function cmdConfig(personaArg) {
+  const cwd = process.cwd();
+  const names = listProfiles();
+  let config;
+  try {
+    config = readConfig(cwd);
+  } catch (e) {
+    if (e instanceof ConfigError) {
+      console.error(`Error: ${e.message}`);
+      process.exit(2);
+    }
+    throw e;
+  }
+
+  const configPersonas = (config && config.personas) || {};
+  for (const key of Object.keys(configPersonas)) {
+    if (!names.includes(key)) {
+      console.error(`Warning: .righthand/persona.json configures unknown persona "${key}"`);
+    }
+  }
+
+  const om = (function () {
+    try {
+      const pc = require('./persona-config');
+      return pc.orchestratorModel();
+    } catch (e) {
+      return null;
+    }
+  })();
+
+  if (personaArg) {
+    if (!names.includes(personaArg)) {
+      console.error(`Unknown persona: ${personaArg}`);
+      console.error(`Available: ${names.join(', ')}`);
+      process.exit(1);
+    }
+    try {
+      console.log(formatResolution(cwd, personaArg, { orchestratorModel: om }));
+    } catch (e) {
+      if (e instanceof ConfigError) {
+        console.error(`Error: ${e.message}`);
+        process.exit(2);
+      }
+      throw e;
+    }
+    return;
+  }
+
+  for (const n of names) {
+    try {
+      console.log(formatResolution(cwd, n, { orchestratorModel: om }));
+    } catch (e) {
+      if (e instanceof ConfigError) {
+        console.error(`Error: ${e.message}`);
+        process.exit(2);
+      }
+      throw e;
+    }
   }
 }
 
@@ -474,8 +540,10 @@ if (!cmd || cmd === 'list') {
 } else if (cmd === 'update') {
   cmdUpdate(arg);
 } else if (cmd === 'doctor') {
-  cmdDoctor();
-} else if (cmd === '-v' || cmd === '--version' || cmd === 'version') {
+    cmdDoctor();
+  } else if (cmd === 'config') {
+    cmdConfig(arg);
+  } else if (cmd === '-v' || cmd === '--version' || cmd === 'version') {
   cmdVersion();
 } else if (cmd === '-h' || cmd === '--help' || cmd === 'help') {
   cmdHelp();
