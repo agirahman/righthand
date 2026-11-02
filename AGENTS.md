@@ -90,3 +90,10 @@ Work in this repository stops once a pull request is open. The developer loop is
 Review, security scanning, approval, merging, version bumps, tagging, npm publishing and GitHub releases belong to the maintainer. An agent must not run `gh pr merge`, `gh pr review`, `git tag`, `npm publish` or `gh release create`, and must not close or merge an open pull request.
 
 Local verification before committing (`npm test`, `npm run typecheck`, `npm run build`) is still required. That is developer work, not review.
+
+---
+
+## Lessons
+
+<!-- Newest on top. Delete what no longer applies. -->
+- When integrating a branch, rebase onto `origin/main` and push with `--force-with-lease`, never a merge commit.

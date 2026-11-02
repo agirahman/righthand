@@ -96,6 +96,10 @@ The brief must carry these fields:
 - A timeout does not prove the prompt was not delivered.
 - Report `not run` honestly when a verification step could not execute.
 
+## Integration
+
+The worker rebases onto `origin/main` before pushing and uses `--force-with-lease`, and never merges main into its branch.
+
 ## Checklist
 
 - [ ] `.righthand/` exists or `righthand init` ran.

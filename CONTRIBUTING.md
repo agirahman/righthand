@@ -98,4 +98,17 @@ Before creating a new issue, please search existing issues to avoid duplicates.
    - Open a pull request targeting the `main` branch on `agirahman/righthand`.
    - Complete all sections in `.github/PULL_REQUEST_TEMPLATE.md`.
 5. **Main Branch Protection & Merge Requirements**:
-   - All PRs require at least 1 review approval and 3 passing CI checks (`Validate Profiles & Skills`, `Typecheck TypeScript`, `Build Distribution`) before merging.
+    - All PRs require at least 1 review approval and 3 passing CI checks (`Validate Profiles & Skills`, `Typecheck TypeScript`, `Build Distribution`) before merging.
+
+---
+
+## Integration Flow (Rebase-Based)
+
+1. `git fetch origin` then branch from the freshest `main`. Never branch from a stale local main.
+2. Small commits, conventional messages.
+3. Before pushing, `git fetch origin` and `git rebase origin/main`. Resolve, `git add`, `git rebase --continue`.
+4. Push with `git push --force-with-lease`, never a plain force push.
+5. Never merge `main` into a feature branch. A merge commit on a PR branch is the thing that produced this week's conflict.
+6. One pull request, one concern. Two tickets that edit the same file run one after the other, not in parallel.
+7. When `main` moves and the PR goes stale: rebase again, `--force-with-lease`, the PR updates itself.
+8. A PR body answers What and Why, then Verification (commands and results), then Risk.
