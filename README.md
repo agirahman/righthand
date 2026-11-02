@@ -116,6 +116,7 @@ RightHand was originally built as a first-class Command Code mod.
   - `/righthand <persona>` — switch persona on-the-fly.
   - `/righthand off` — restore default prompt.
 - **Details**: See [`.commandcode-mod/README.md`](./.commandcode-mod/README.md).
+- Readonly personas are guarded by the mod: project writes are blocked, reports go under `.righthand/`.
 
 ### 2. Pi Coding Agent (`.pi-plugin/`)
 Pi supports native extensions that hook agent lifecycle events.

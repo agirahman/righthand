@@ -69,6 +69,10 @@ Then run it for real in a lane:
 
     righthand launch worker --cwd <lane>
 
+## Readonly enforcement
+
+Readonly personas (code-reviewer, security-auditor, etc.) cannot modify the project. The Command Code mod blocks file writes and edits outside `.righthand/` and the session scratchpad, and blocks mutating shell commands. Reports and reviews go under `.righthand/tickets/<ID>/reports/` or `.righthand/tickets/<ID>/reviews/`. The guard stops accidents and ordinary violations; it is not a sandbox, and a deliberately evasive shell command can still write.
+
 ## Verification
 
 After install, list available skills (harness UI or CLI). You should see the capability modules under `skills/`.

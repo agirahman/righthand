@@ -61,10 +61,21 @@ declare module '@commandcode/harness' {
     sessionId?: string;
   }
 
+  export interface ModContext {
+    emit?: (event: string, payload?: unknown) => void;
+    signal?: AbortSignal;
+    cwd: string;
+    session?: ModSession;
+  }
+
   export interface ModHooks {
     appendSystemPrompt?: () => string | undefined;
     onSessionStart?: (event?: ModSessionStartEvent) => void;
     onSessionEnd?: (event?: {reason?: string}) => void;
+    beforeToolCall?: (
+      params: {toolCallId: string; toolName: string; input: unknown; state: unknown},
+      ctx?: ModContext
+    ) => {block?: boolean; additionalContext?: string; input?: unknown; terminate?: boolean; result?: unknown} | undefined | Promise<{block?: boolean; additionalContext?: string; input?: unknown; terminate?: boolean; result?: unknown} | undefined>;
   }
 
   export interface ModApi {
