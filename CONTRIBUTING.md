@@ -68,6 +68,8 @@ npm run typecheck
 npm run build
 ```
 
+Adding a validator means dropping `test/validate-<name>.cjs` in place; no `package.json` edit required.
+
 ---
 
 ## Reporting Issues

@@ -34,7 +34,7 @@
                     "build":  "tsc",
                     "build:agents":  "node scripts/build-agents.js",
                     "typecheck":  "tsc --noEmit",
-                    "test":  "node test/validate-profiles.cjs \u0026\u0026 node test/validate-skills.cjs \u0026\u0026 node test/validate-artifacts.cjs \u0026\u0026 node test/validate-board.cjs \u0026\u0026 node test/validate-persona-config.cjs \u0026\u0026 node test/validate-skill-sync.cjs \u0026\u0026 node test/validate-launch.cjs \u0026\u0026 node test/validate-doctor.cjs \u0026\u0026 node test/validate-readonly.cjs",
+                    "test": "node test/run.cjs",
                     "pretest":  "tsc"
                 },
     "keywords":  [
