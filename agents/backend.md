@@ -95,10 +95,8 @@ completed | partial | blocked
 
 ## Evidence
 
-- The commands and what their output proves, in the same style as `skills/verification`.
-- `git fetch origin --prune` output confirms the remote refs are fresh.
-- `git rebase origin/main` with no conflicts confirms the branch sits on the latest main.
-- `git push ... --force-with-lease` output confirms the push succeeded without clobbering others.
+- The command list with exit codes for fetch, rebase, and push.
+- The push output showing --force-with-lease succeeded.
 
 ## Rules
 
