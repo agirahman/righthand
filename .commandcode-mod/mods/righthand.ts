@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Mod `righthand`: switch agent persona via `/righthand <name>`.
  * The launch flag --mod-option default= outranks the persisted state file.
  * Multi-agent orchestration engine for Herdr workspaces, adapted from Addy Osmani agent-skills architecture.
