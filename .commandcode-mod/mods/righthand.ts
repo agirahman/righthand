@@ -271,8 +271,7 @@ function isInsideRoot(target: string, root: string): boolean {
 function hasUnsafeTraversal(rawPath: string): boolean {
   const segments = rawPath.split(/[/\\\\]/);
   for (const seg of segments) {
-    const cleaned = seg.trim();
-    if (cleaned === '..' || cleaned === '.') return true;
+    if (seg.trim() === '..') return true;
   }
   return false;
 }
@@ -315,143 +314,473 @@ function isAllowedWritePath(target: string, scratchDirs?: string[], rawPath?: st
   return false;
 }
 
+const SHELL_INTERPRETERS = new Set([
+  'node', 'nodejs', 'deno', 'bun', 'python', 'python3', 'py',
+  'pwsh', 'powershell', 'bash', 'sh', 'zsh', 'fish',
+]);
+
+const POWERSHELL_FILE_CMDLETS = new Set([
+  'set-content', 'add-content', 'clear-content', 'set-item', 'new-item', 'remove-item',
+  'move-item', 'copy-item', 'rename-item', 'set-itemproperty', 'new-itemproperty',
+  'remove-itemproperty', 'export-csv', 'export-clixml', 'set-acl', 'out-file',
+  'tee-object', 'start-transcript', 'stop-transcript', 'compress-archive',
+  'expand-archive', 'clear-recyclebin',
+]);
+
+const POWERSHELL_PATH_FLAGS = new Set([
+  '-path', '-filepath', '-literalpath', '-destination', '-outfile', '-target', '-name',
+]);
+
+const POWERSHELL_VALUE_FLAGS = new Set([
+  '-value', '-encoding', '-itemtype', '-type', '-inputobject', '-filter', '-include',
+  '-exclude', '-stream', '-separator', '-width', '-credential', '-delimiter', '-replace',
+  '-namespace', '-property', '-propertytype',
+]);
+
+const POSIX_FILE_MUTATORS = new Set([
+  'rm', 'rmdir', 'rd', 'del', 'erase', 'mv', 'move', 'cp', 'copy', 'touch', 'mkdir',
+  'md', 'tee', 'truncate', 'ln', 'chmod', 'chown', 'sed', 'patch',
+]);
+
+const GIT_READ_SUBCOMMANDS = new Set([
+  'status', 'log', 'diff', 'show', 'describe', 'rev-parse', 'rev-list', 'ls-files',
+  'ls-tree', 'ls-remote', 'cat-file', 'shortlog', 'blame', 'grep', 'for-each-ref',
+  'merge-base', 'name-rev', 'var', 'help', 'whatchanged', 'count-objects', 'fsck',
+  'show-ref', 'show-branch', 'cherry', 'check-ignore', 'check-attr', 'check-ref-format',
+  'verify-commit', 'difftool', 'mergetool', 'range-diff', 'version', 'annotate',
+  'diff-tree', 'diff-index', 'diff-files',
+]);
+
+const GH_MUTATING_PATTERNS: RegExp[] = [
+  /^pr\s+(create|merge|close|reopen|edit|review|comment|ready|lock|unlock|checkout)\b/,
+  /^issue\s+(create|close|reopen|edit|delete|comment|lock|unlock|transfer|develop)\b/,
+  /^release\s+(create|delete|edit|upload)\b/,
+  /^repo\s+(create|delete|edit|rename|archive|unarchive|fork|clone|sync|set-default)\b/,
+  /^workflow\s+(run|enable|disable)\b/,
+  /^run\s+(cancel|rerun|delete)\b/,
+  /^label\s+(create|edit|delete|clone)\b/,
+  /^(secret|variable)\s+(set|delete)\b/,
+  /^gist\s+(create|delete|edit)\b/,
+  /^auth\s+(login|logout|setup-git|refresh|token)\b/,
+  /^extension\s+(install|remove|upgrade)\b/,
+  /^config\s+set\b/,
+];
+
+const PACKAGE_MUTATING_SUBCOMMANDS = new Set([
+  'install', 'i', 'add', 'uninstall', 'un', 'remove', 'rm', 'r', 'update', 'up',
+  'upgrade', 'publish', 'unpublish', 'version', 'link', 'ci', 'dedupe', 'prune',
+  'rebuild', 'pack', 'init',
+]);
+
+interface ShellRedirectScan {
+  targets: string[];
+  body: string;
+}
+
+function expandShellToken(token: string): string {
+  let value = token;
+  value = value.replace(/\$env:([A-Za-z_][A-Za-z0-9_]*)/gi, (match, name: string) => process.env[name] ?? match);
+  value = value.replace(/%([A-Za-z_][A-Za-z0-9_]*)%/g, (match, name: string) => process.env[name] ?? match);
+  value = value.replace(/\$\{([A-Za-z_][A-Za-z0-9_]*)\}|\$([A-Za-z_][A-Za-z0-9_]*)/g, (match, braced: string | undefined, plain: string | undefined) => {
+    const name = braced ?? plain;
+    return name && process.env[name] !== undefined ? process.env[name]! : match;
+  });
+  if (value === '~' || value.startsWith('~/') || value.startsWith('~\\')) {
+    value = join(homedir(), value.slice(1));
+  }
+  return value;
+}
+
+function looksLikePathToken(token: string): boolean {
+  if (!token || token.startsWith('-')) return false;
+  if (token.startsWith('$') || token.startsWith('%')) return false;
+  if (/^[A-Za-z]:[\\/]/.test(token)) return true;
+  if (token.startsWith('/') || token.startsWith('\\')) return true;
+  if (token.startsWith('./') || token.startsWith('../') || token.startsWith('.\\') || token.startsWith('..\\')) return true;
+  if (/[\\/]/.test(token)) return true;
+  return /\.(?:js|mjs|cjs|ts|mts|cts|jsx|tsx|json|py|ps1|sh|bat|cmd|rb|pl)$/i.test(token);
+}
+
+function splitShellSegments(command: string): string[] {
+  const segments: string[] = [];
+  let current = '';
+  let quote: string | null = null;
+  for (let i = 0; i < command.length; i++) {
+    const ch = command[i];
+    if (quote) {
+      current += ch;
+      if (ch === quote) quote = null;
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      quote = ch;
+      current += ch;
+      continue;
+    }
+    if (ch === ';' || ch === '\n' || ch === '\r') {
+      segments.push(current);
+      current = '';
+      continue;
+    }
+    if (ch === '|') {
+      segments.push(current);
+      current = '';
+      if (command[i + 1] === '|') i++;
+      continue;
+    }
+    if (ch === '&' && command[i + 1] === '&') {
+      segments.push(current);
+      current = '';
+      i++;
+      continue;
+    }
+    current += ch;
+  }
+  segments.push(current);
+  return segments.filter((segment) => segment.trim() !== '');
+}
+
+function tokenizeShellSegment(segment: string): string[] {
+  const tokens: string[] = [];
+  let current = '';
+  let quote: string | null = null;
+  for (let i = 0; i < segment.length; i++) {
+    const ch = segment[i];
+    if (quote) {
+      if (ch === quote) quote = null;
+      else current += ch;
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      quote = ch;
+      continue;
+    }
+    if (/\s/.test(ch)) {
+      if (current) {
+        tokens.push(current);
+        current = '';
+      }
+      continue;
+    }
+    current += ch;
+  }
+  if (current) tokens.push(current);
+  return tokens;
+}
+
+function scanShellRedirects(segment: string): ShellRedirectScan {
+  const chars = segment.split('');
+  const targets: string[] = [];
+  let quote: string | null = null;
+  for (let i = 0; i < segment.length; i++) {
+    const ch = segment[i];
+    if (quote) {
+      if (ch === quote) quote = null;
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      quote = ch;
+      continue;
+    }
+    if (ch !== '>') continue;
+    const next = segment[i + 1];
+    if (next === '&' || next === '=') continue;
+    const start = i;
+    let cursor = i + 1;
+    if (next === '>') cursor += 1;
+    while (cursor < segment.length && /\s/.test(segment[cursor])) cursor++;
+    if (cursor >= segment.length) {
+      for (let k = start; k < cursor; k++) chars[k] = ' ';
+      continue;
+    }
+    let target = '';
+    if (segment[cursor] === '"' || segment[cursor] === "'") {
+      const quoteChar = segment[cursor];
+      cursor += 1;
+      while (cursor < segment.length && segment[cursor] !== quoteChar) {
+        target += segment[cursor];
+        cursor++;
+      }
+      cursor += 1;
+    } else {
+      while (cursor < segment.length && !/[\s;|&]/.test(segment[cursor])) {
+        target += segment[cursor];
+        cursor++;
+      }
+    }
+    targets.push(target);
+    for (let k = start; k < cursor; k++) chars[k] = ' ';
+    i = cursor - 1;
+  }
+  return {targets, body: chars.join('')};
+}
+
+function targetAllowed(rawTarget: string, cwd: string, scratchDirs?: string[]): boolean {
+  const expanded = expandShellToken(rawTarget.trim()).replace(/^["']|["']$/g, '');
+  if (!expanded) return false;
+  const lower = expanded.toLowerCase();
+  if (lower === 'nul' || lower === '/dev/null' || lower === '$null') return true;
+  if (hasUnsafeTraversal(expanded)) return false;
+  return isAllowedWritePath(resolve(cwd, expanded), scratchDirs, expanded);
+}
+
+function posixTargets(tokens: string[], command: string): string[] {
+  const targets: string[] = [];
+  let skipNextPositional = command === 'chmod' || command === 'chown' || command === 'sed';
+  for (let i = 1; i < tokens.length; i++) {
+    const token = tokens[i];
+    if (token.startsWith('-')) continue;
+    if (skipNextPositional) {
+      skipNextPositional = false;
+      continue;
+    }
+    targets.push(token);
+  }
+  return targets;
+}
+
+function powershellTargets(tokens: string[]): string[] {
+  const targets: string[] = [];
+  for (let i = 1; i < tokens.length; i++) {
+    const token = tokens[i];
+    const isSlashFlag = /^\/[A-Za-z][A-Za-z0-9-]*$/.test(token);
+    if (!token.startsWith('-') && !isSlashFlag) {
+      targets.push(token);
+      continue;
+    }
+    const lower = token.toLowerCase();
+    if (POWERSHELL_PATH_FLAGS.has(lower)) {
+      const next = tokens[i + 1];
+      if (next && !next.startsWith('-')) {
+        targets.push(next);
+        i++;
+      }
+      continue;
+    }
+    if (POWERSHELL_VALUE_FLAGS.has(lower)) {
+      i++;
+    }
+  }
+  return targets;
+}
+
+function mutationTargetsBlocked(targets: string[], cwd: string, scratchDirs?: string[]): boolean {
+  if (targets.length === 0) return true;
+  for (const target of targets) {
+    if (!targetAllowed(target, cwd, scratchDirs)) return true;
+  }
+  return false;
+}
+
+function interpreterBlocked(command: string, args: string[], cwd: string, scratchDirs?: string[]): boolean {
+  const lower = args.map((arg) => arg.toLowerCase());
+
+  if (command === 'node' || command === 'nodejs' || command === 'deno' || command === 'bun') {
+    if (lower.some((arg) => arg === '-e' || arg === '--eval' || arg.startsWith('--eval='))) return true;
+    if (command === 'deno' && lower[0] === 'eval') return true;
+    const script = args.find((arg) => looksLikePathToken(arg));
+    if (!script) return false;
+    return !targetAllowed(script, cwd, scratchDirs);
+  }
+
+  if (command === 'python' || command === 'python3' || command === 'py') {
+    if (lower.some((arg) => arg === '-c' || arg === '-m' || arg === '-')) return true;
+    const script = args.find((arg) => looksLikePathToken(arg));
+    if (!script) return false;
+    return !targetAllowed(script, cwd, scratchDirs);
+  }
+
+  if (command === 'pwsh' || command === 'powershell') {
+    if (lower.some((arg) => /^(-command|-c|-encodedcommand|-ec)$/.test(arg))) return true;
+    const fileIndex = lower.findIndex((arg) => arg === '-file' || arg === '-f');
+    if (fileIndex >= 0) {
+      const target = args[fileIndex + 1];
+      if (!target) return true;
+      return !targetAllowed(target, cwd, scratchDirs);
+    }
+    const script = args.find((arg) => looksLikePathToken(arg));
+    if (script) return !targetAllowed(script, cwd, scratchDirs);
+    return true;
+  }
+
+  if (command === 'bash' || command === 'sh' || command === 'zsh' || command === 'fish') {
+    if (lower.some((arg) => arg === '-c' || arg === '--command')) return true;
+    const script = args.find((arg) => looksLikePathToken(arg));
+    if (!script) return false;
+    return !targetAllowed(script, cwd, scratchDirs);
+  }
+
+  return true;
+}
+
+function gitSubcommandBlocked(subcommand: string, args: string[]): boolean {
+  const flags = args.filter((arg) => arg.startsWith('-'));
+  const positionals = args.filter((arg) => !arg.startsWith('-'));
+  const flagMatches = (pattern: RegExp): boolean => flags.some((flag) => pattern.test(flag));
+
+  switch (subcommand) {
+    case 'branch':
+      if (flagMatches(/^(-d|-D|-m|-M|-c|-C|-u|-f|--delete|--move|--copy|--force|--set-upstream-to|--unset-upstream|--edit-description|--create-reflog)/)) return true;
+      if (positionals.length > 0 && !flagMatches(/^(-l|--list|--contains|--no-contains|--merged|--no-merged|--points-at)/)) return true;
+      return false;
+    case 'tag':
+      if (flagMatches(/^(-a|--annotate|-d|--delete|-m|--message|-F|--file|-s|--sign|-f|--force|-u|--local-user|-e|--edit|--cleanup)/)) return true;
+      if (positionals.length > 0 && !flagMatches(/^(-l|--list)/)) return true;
+      return false;
+    case 'worktree':
+      return !(positionals.length === 0 || positionals[0].toLowerCase() === 'list');
+    case 'remote':
+      if (positionals.length === 0) return false;
+      return !['show', 'get-url'].includes(positionals[0].toLowerCase());
+    case 'stash':
+      return !(positionals.length > 0 && ['list', 'show'].includes(positionals[0].toLowerCase()));
+    case 'reflog':
+      return !(positionals.length === 0 || ['show', 'list'].includes(positionals[0].toLowerCase()));
+    case 'config':
+      if (flagMatches(/^(--unset|--unset-all|--add|--replace-all|--rename-section|--remove-section)/)) return true;
+      return positionals.length > 1;
+    case 'submodule':
+      return !(positionals.length === 0 || ['status', 'summary'].includes(positionals[0].toLowerCase()));
+    case 'notes':
+      return !(positionals.length === 0 || ['list', 'show'].includes(positionals[0].toLowerCase()));
+    default:
+      return !GIT_READ_SUBCOMMANDS.has(subcommand);
+  }
+}
+
+function gitBlocked(args: string[]): boolean {
+  let index = 0;
+  while (index < args.length) {
+    const token = args[index];
+    if (token === '-C' || token === '-c' || token === '--git-dir' || token === '--work-tree') {
+      index += 2;
+      continue;
+    }
+    if (token.startsWith('-')) {
+      index += 1;
+      continue;
+    }
+    break;
+  }
+  const subcommand = (args[index] || '').toLowerCase();
+  if (!subcommand) return false;
+  return gitSubcommandBlocked(subcommand, args.slice(index + 1));
+}
+
+function ghBlocked(args: string[]): boolean {
+  const positional = args.filter((arg) => !arg.startsWith('-')).map((arg) => arg.toLowerCase()).join(' ');
+  if (GH_MUTATING_PATTERNS.some((pattern) => pattern.test(positional))) return true;
+
+  if ((args[0] || '').toLowerCase() === 'api') {
+    const methodIndex = args.findIndex((arg) => /^(-X|--method)$/i.test(arg));
+    if (methodIndex >= 0) {
+      const method = (args[methodIndex + 1] || '').toUpperCase();
+      if (method !== 'GET') return true;
+    }
+    if (args.some((arg) => /^--method=(?!GET$)/i.test(arg))) return true;
+    if (args.some((arg) => /^(-f|--field|--raw-field|--input)$/i.test(arg))) return true;
+  }
+
+  return false;
+}
+
+function packageManagerBlocked(args: string[]): boolean {
+  let index = 0;
+  while (index < args.length && args[index].startsWith('-')) {
+    if (['--prefix', '--dir', '-C', '-w', '--workspace'].includes(args[index])) index += 2;
+    else index += 1;
+  }
+  const subcommand = (args[index] || '').toLowerCase();
+  if (!subcommand) return false;
+  return PACKAGE_MUTATING_SUBCOMMANDS.has(subcommand);
+}
+
+const SHELL_WRAPPERS = new Set([
+  'sudo', 'doas', 'env', 'command', 'exec', 'nohup', 'nice', 'ionice', 'time',
+  'timeout', 'xargs', 'start', 'cmd',
+]);
+
+function stripShellWrapper(command: string, args: string[]): string[] | null {
+  if (!SHELL_WRAPPERS.has(command)) return null;
+
+  let index = 0;
+  if (command === 'cmd') {
+    while (index < args.length && /^[/-][a-z]$/i.test(args[index])) index++;
+    return args.slice(index);
+  }
+  if (command === 'timeout') {
+    while (index < args.length && args[index].startsWith('-')) index++;
+    if (index < args.length) index++;
+    return args.slice(index);
+  }
+  while (index < args.length) {
+    const token = args[index];
+    if (/^[A-Za-z_][A-Za-z0-9_]*=/.test(token)) {
+      index++;
+      continue;
+    }
+    if (token.startsWith('-') || token.startsWith('/')) {
+      const takesValue = ['-u', '-g', '-p', '-C', '-n', '-t', '-U', '-r', '-a', '--user', '--group'].includes(token);
+      index += takesValue ? 2 : 1;
+      continue;
+    }
+    break;
+  }
+  return args.slice(index);
+}
+
+function commandBlocked(command: string, rawCommand: string, args: string[], cwd: string, scratchDirs?: string[]): boolean {
+  if (SHELL_INTERPRETERS.has(command)) return interpreterBlocked(command, args, cwd, scratchDirs);
+  if (command === 'git') return gitBlocked(args);
+  if (command === 'gh') return ghBlocked(args);
+  if (command === 'npm' || command === 'pnpm' || command === 'yarn') return packageManagerBlocked(args);
+
+  if (command === 'sed' && !args.some((arg) => /^-i/.test(arg) || /^--in-place/.test(arg))) return false;
+
+  if (POWERSHELL_FILE_CMDLETS.has(command)) {
+    return mutationTargetsBlocked(powershellTargets([rawCommand, ...args]), cwd, scratchDirs);
+  }
+
+  if (POSIX_FILE_MUTATORS.has(command)) {
+    if (command === 'patch') return true;
+    return mutationTargetsBlocked(posixTargets([rawCommand, ...args], command), cwd, scratchDirs);
+  }
+
+  return false;
+}
+
+function shellSegmentBlocked(segment: string, cwd: string, scratchDirs?: string[]): boolean {
+  const redirects = scanShellRedirects(segment);
+  for (const target of redirects.targets) {
+    if (!targetAllowed(target, cwd, scratchDirs)) return true;
+  }
+
+  const tokens = tokenizeShellSegment(redirects.body);
+  let start = 0;
+  while (start < tokens.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(tokens[start])) start++;
+
+  let commandTokens = tokens.slice(start);
+  for (let depth = 0; commandTokens.length > 0 && depth < 8; depth++) {
+    const rawCommand = commandTokens[0];
+    const command = (rawCommand.split(/[\\/]/).pop() ?? rawCommand).replace(/\.exe$/i, '').toLowerCase();
+    const args = commandTokens.slice(1);
+    const stripped = stripShellWrapper(command, args);
+    if (stripped) {
+      commandTokens = stripped;
+      continue;
+    }
+    return commandBlocked(command, rawCommand, args, cwd, scratchDirs);
+  }
+
+  return false;
+}
+
 function shellBlocked(command: string, cwd: string, scratchDirs?: string[]): boolean {
   const trimmed = command.trim();
   if (!trimmed) return true;
-
-  const blockedPatterns: RegExp[] = [
-    /(^|[\s"'])>{1,2}(?!=)(?!&)/,
-    /\bSet-Content\b/i,
-    /\bAdd-Content\b/i,
-    /\bOut-File\b/i,
-    /\bNew-Item\b/i,
-    /\bRemove-Item\b/i,
-    /\brm\b/i,
-    /\bdel\b/i,
-    /\brmdir\b/i,
-    /\bMove-Item\b/i,
-    /\bmv\b/i,
-    /\bCopy-Item\b/i,
-    /\bcp\b/i,
-    /\btouch\b/i,
-    /\bmkdir\b/i,
-    /\bsed\s+-i\b/i,
-    /\btee\b/i,
-    /\bgit\s+commit\b/i,
-    /\bgit\s+push\b/i,
-    /\bgit\s+reset\b/i,
-    /\bgit\s+checkout\s+--/i,
-    /\bgit\s+clean\b/i,
-    /\bgit\s+tag\b/i,
-    /\bgit\s+worktree\b/i,
-    /\bgit\s+apply\b/i,
-    /\bgit\s+restore\b/i,
-    /\bgit\s+stash\b/i,
-    /\bpatch\b/i,
-    /\bnpm\s+install\b/i,
-    /\bnpm\s+publish\b/i,
-    /\bgh\s+pr\s+merge\b/i,
-    /\bgh\s+pr\s+close\b/i,
-    /\bgh\s+release\s+create\b/i,
-  ];
-  for (const p of blockedPatterns) {
-    if (p.test(command)) return true;
+  for (const segment of splitShellSegments(trimmed)) {
+    if (shellSegmentBlocked(segment, cwd, scratchDirs)) return true;
   }
-
-  // inline execution flags are never allowed
-  const inlineFlagPattern = /(?:^|\s)(-e|--eval|-c|-Command|-EncodedCommand)(?:\s|$)/i;
-  if (inlineFlagPattern.test(trimmed)) {
-    // only block if an interpreter is involved
-    if (/^\s*(node|python3?|pwsh|powershell|bash|sh|zsh)(?:\.exe)?\b/i.test(trimmed)) {
-      return true;
-    }
-  }
-
-  // powershell/pwsh: only -File <path> allowed
-  const psMatch = /^\s*(powershell|pwsh)(?:\.exe)?\s+(.+)$/i.exec(trimmed);
-  if (psMatch) {
-    const rest = psMatch[2].trim();
-    const fileMatch = /^-File\s+(.+)$/i.exec(rest);
-    if (!fileMatch) {
-      return true; // any other invocation blocked
-    }
-    const arg = fileMatch[1].trim().split(/\s+/)[0].replace(/^["']|["']$/g, '');
-    if (arg.split(/[/\\\\]/).includes('..')) return true;
-    if (hasUnsafeTraversal(arg)) return true;
-    const target = resolve(cwd, arg);
-    if (!isAllowedWritePath(target, scratchDirs, arg)) return true;
-    return false;
-  }
-
-  // node with flags before path: node --enable-source-maps <path>
-  const nodeMatch = /^\s*node(?:\.exe)?\s+(.+)$/i.exec(trimmed);
-  if (nodeMatch) {
-    const tokens = nodeMatch[1].trim().split(/\s+/);
-    // find last token that doesn't start with -
-    let scriptToken: string | undefined;
-    for (let i = tokens.length - 1; i >= 0; i--) {
-      if (!tokens[i].startsWith('-')) {
-        scriptToken = tokens[i];
-        break;
-      }
-    }
-    if (scriptToken) {
-      const arg = scriptToken.replace(/^["']|["']$/g, '');
-      if (arg.startsWith('-')) {
-        // all flags, no script (e.g. node -e already handled)
-      } else {
-        if (hasUnsafeTraversal(arg)) return true;
-        const target = resolve(cwd, arg);
-        if (!isAllowedWritePath(target, scratchDirs, arg)) return true;
-      }
-    }
-    return false;
-  }
-
-  // python with flags before path
-  const pyMatch = /^\s*python(?:3)?(?:\.exe)?\s+(.+)$/i.exec(trimmed);
-  if (pyMatch) {
-    const tokens = pyMatch[1].trim().split(/\s+/);
-    let scriptToken: string | undefined;
-    for (let i = tokens.length - 1; i >= 0; i--) {
-      if (!tokens[i].startsWith('-')) {
-        scriptToken = tokens[i];
-        break;
-      }
-    }
-    if (scriptToken) {
-      const arg = scriptToken.replace(/^["']|["']$/g, '');
-      if (!arg.startsWith('-')) {
-        if (hasUnsafeTraversal(arg)) return true;
-        const target = resolve(cwd, arg);
-        if (!isAllowedWritePath(target, scratchDirs, arg)) return true;
-      }
-    }
-    return false;
-  }
-
-  // bash/sh/zsh with script path
-  const bashMatch = /^\s*(bash|sh|zsh)\s+(.+)$/i.exec(trimmed);
-  if (bashMatch) {
-    const tokens = bashMatch[2].trim().split(/\s+/);
-    let scriptToken: string | undefined;
-    for (let i = tokens.length - 1; i >= 0; i--) {
-      if (!tokens[i].startsWith('-')) {
-        scriptToken = tokens[i];
-        break;
-      }
-    }
-    if (scriptToken) {
-      const arg = scriptToken.replace(/^["']|["']$/g, '');
-      if (!arg.startsWith('-')) {
-        if (hasUnsafeTraversal(arg)) return true;
-        const target = resolve(cwd, arg);
-        if (!isAllowedWritePath(target, scratchDirs, arg)) return true;
-      }
-    }
-    return false;
-  }
-
   return false;
 }
 
