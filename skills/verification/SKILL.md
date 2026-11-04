@@ -1,6 +1,6 @@
 ---
 name: verification
-description: Prove a change works with reproducible evidence: command, exit code, and trimmed output for every claim.
+description: "Prove a change works with reproducible evidence: command, exit code, and trimmed output for every claim."
 ---
 
 # Verification
