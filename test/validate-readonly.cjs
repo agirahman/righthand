@@ -93,6 +93,56 @@ try {
   check('null write_file allowed', evaluateToolGuard(null, ctx('write_file', path.join(rootDir, 'src', 'x.js'))).block === false);
   check('relative path resolution blocked', evaluateToolGuard('readonly', { toolName: 'write_file', input: { file_path: 'src/x.js' }, cwd: rootDir, scratchDirs: [scratchDir] }).block === true);
 
+  // Issue #38: the guard must decide from parsed commands and target paths, not from blocked words.
+  check('readonly shell node -p allowed', evaluateToolGuard('readonly', ctx('shell_command', 'node -p "1+1"')).block === false);
+  check('readonly shell node --print allowed', evaluateToolGuard('readonly', ctx('shell_command', 'node --print "Date.now()"')).block === false);
+  check('readonly shell semicolon git reads allowed', evaluateToolGuard('readonly', ctx('shell_command', 'git status --porcelain; git log --oneline -2; git branch')).block === false);
+  check('readonly shell git tag list allowed', evaluateToolGuard('readonly', ctx('shell_command', 'git status; git log; git tag --list "v1.3*"')).block === false);
+  check('readonly shell git tag -l allowed', evaluateToolGuard('readonly', ctx('shell_command', 'git tag -l')).block === false);
+  check('readonly shell git worktree list allowed', evaluateToolGuard('readonly', ctx('shell_command', 'git worktree list')).block === false);
+  check('readonly shell git worktree list porcelain allowed', evaluateToolGuard('readonly', ctx('shell_command', 'git worktree list --porcelain')).block === false);
+  check('readonly shell git branch list allowed', evaluateToolGuard('readonly', ctx('shell_command', 'git branch --list "fix/*"')).block === false);
+  check('readonly shell git remote -v allowed', evaluateToolGuard('readonly', ctx('shell_command', 'git remote -v')).block === false);
+  check('readonly shell git stash list allowed', evaluateToolGuard('readonly', ctx('shell_command', 'git stash list')).block === false);
+  check('readonly shell git config read allowed', evaluateToolGuard('readonly', ctx('shell_command', 'git config user.name')).block === false);
+  check('readonly shell git log path segment named rm allowed', evaluateToolGuard('readonly', ctx('shell_command', 'git log -- src/rm/mv/cp.ts')).block === false);
+  check('readonly shell grep word rm allowed', evaluateToolGuard('readonly', ctx('shell_command', 'grep -rn "rm" docs')).block === false);
+  check('readonly shell npm ls allowed', evaluateToolGuard('readonly', ctx('shell_command', 'npm ls --depth=0')).block === false);
+  check('readonly shell gh pr view allowed', evaluateToolGuard('readonly', ctx('shell_command', 'gh pr view 38 --json title')).block === false);
+  check('readonly shell Remove-Item scratch allowed', evaluateToolGuard('readonly', ctx('shell_command', `Remove-Item "${path.join(scratchDir, 'tmp.txt')}"`)).block === false);
+  check('readonly shell Remove-Item recurse force scratch allowed', evaluateToolGuard('readonly', ctx('shell_command', `Remove-Item -Recurse -Force "${path.join(scratchDir, 'tmp')}"`)).block === false);
+  check('readonly shell Out-File scratch allowed', evaluateToolGuard('readonly', ctx('shell_command', `Out-File "${path.join(scratchDir, 'out.txt')}"`)).block === false);
+  check('readonly shell Set-Content scratch allowed', evaluateToolGuard('readonly', ctx('shell_command', `Set-Content -Path "${path.join(scratchDir, 'out.txt')}" -Value hi`)).block === false);
+  check('readonly shell redirect scratch allowed', evaluateToolGuard('readonly', ctx('shell_command', `echo hi > "${path.join(scratchDir, 'out.txt')}"`)).block === false);
+  check('readonly shell rm scratch allowed', evaluateToolGuard('readonly', ctx('shell_command', `rm -rf "${path.join(scratchDir, 'tmp')}"`)).block === false);
+  check('readonly shell sed -i scratch allowed', evaluateToolGuard('readonly', ctx('shell_command', `sed -i "s/a/b/" "${path.join(scratchDir, 'x.txt')}"`)).block === false);
+  check('readonly shell pwsh -File scratch allowed', evaluateToolGuard('readonly', ctx('shell_command', `pwsh -File "${path.join(scratchDir, 'x.ps1')}"`)).block === false);
+
+  check('readonly shell git tag create blocked', evaluateToolGuard('readonly', ctx('shell_command', 'git tag v9.9.9')).block === true);
+  check('readonly shell git tag annotate blocked', evaluateToolGuard('readonly', ctx('shell_command', 'git tag -a v9.9.9 -m x')).block === true);
+  check('readonly shell git branch delete blocked', evaluateToolGuard('readonly', ctx('shell_command', 'git branch -d feature')).block === true);
+  check('readonly shell git branch create blocked', evaluateToolGuard('readonly', ctx('shell_command', 'git branch feature')).block === true);
+  check('readonly shell git stash blocked', evaluateToolGuard('readonly', ctx('shell_command', 'git stash')).block === true);
+  check('readonly shell git config write blocked', evaluateToolGuard('readonly', ctx('shell_command', 'git config user.name Agi')).block === true);
+  check('readonly shell git pull blocked', evaluateToolGuard('readonly', ctx('shell_command', 'git pull')).block === true);
+  check('readonly shell git commit blocked', evaluateToolGuard('readonly', ctx('shell_command', 'git commit -m x')).block === true);
+  check('readonly shell Remove-Item src blocked', evaluateToolGuard('readonly', ctx('shell_command', 'Remove-Item -Recurse src')).block === true);
+  check('readonly shell Out-File src blocked', evaluateToolGuard('readonly', ctx('shell_command', 'Out-File src/x.txt')).block === true);
+  check('readonly shell cp from scratch to src blocked', evaluateToolGuard('readonly', ctx('shell_command', `cp "${path.join(scratchDir, 'a')}" src/a`)).block === true);
+  check('readonly shell sed -i outside blocked', evaluateToolGuard('readonly', ctx('shell_command', 'sed -i "s/a/b/" src/x.js')).block === true);
+  check('readonly shell python -m blocked', evaluateToolGuard('readonly', ctx('shell_command', 'python -m http.server')).block === true);
+  check('readonly shell npm ci blocked', evaluateToolGuard('readonly', ctx('shell_command', 'npm ci')).block === true);
+  check('readonly shell gh pr merge blocked', evaluateToolGuard('readonly', ctx('shell_command', 'gh pr merge 38')).block === true);
+  check('readonly shell gh api post blocked', evaluateToolGuard('readonly', ctx('shell_command', 'gh api -X POST repos/x/issues')).block === true);
+  check('readonly shell chained mutation blocked', evaluateToolGuard('readonly', ctx('shell_command', 'npm test; rm -rf src')).block === true);
+  check('readonly shell piped redirect outside blocked', evaluateToolGuard('readonly', ctx('shell_command', 'git log | Out-File src/log.txt')).block === true);
+  check('readonly shell sudo rm blocked', evaluateToolGuard('readonly', ctx('shell_command', 'sudo rm -rf src')).block === true);
+  check('readonly shell cmd /c rm blocked', evaluateToolGuard('readonly', ctx('shell_command', 'cmd /c rm -rf src')).block === true);
+  check('readonly shell timeout rm blocked', evaluateToolGuard('readonly', ctx('shell_command', 'timeout 5 rm -rf src')).block === true);
+  check('readonly shell env mutation blocked', evaluateToolGuard('readonly', ctx('shell_command', 'env FOO=1 rm -rf src')).block === true);
+  check('readonly shell sudo git status allowed', evaluateToolGuard('readonly', ctx('shell_command', 'sudo git status')).block === false);
+  check('readonly shell env npm test allowed', evaluateToolGuard('readonly', ctx('shell_command', 'env CI=1 npm test')).block === false);
+
   if (failed > 0) {
     console.error(`\nValidation FAILED with ${failed} errors.`);
     process.exit(1);

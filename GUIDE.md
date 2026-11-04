@@ -71,7 +71,7 @@ Then run it for real in a lane:
 
 ## Readonly enforcement
 
-Readonly personas (code-reviewer, security-auditor, etc.) cannot modify the project. The Command Code mod blocks file writes and edits outside `.righthand/` and the session scratchpad, and blocks mutating shell commands. Reports and reviews go under `.righthand/tickets/<ID>/reports/` or `.righthand/tickets/<ID>/reviews/`. The guard stops accidents and ordinary violations; it is not a sandbox, and a deliberately evasive shell command can still write.
+Readonly personas (code-reviewer, security-auditor, etc.) cannot modify the project. The Command Code mod blocks file writes and edits outside `.righthand/` and the session scratchpad, and blocks shell commands that mutate files outside those paths. Read-only commands are allowed: inspection (`git status`, `git log`, `git diff`, `git tag --list`, `git worktree list`, `git branch --list`, `git remote -v`, `git stash list`), evaluation that only prints (`node -p`, `node --print`), and test runners such as `npm test`. Shell commands are parsed into segments, so a write aimed at `.righthand/` or the scratchpad is allowed while the same verb aimed at the project is refused. Reports and reviews go under `.righthand/tickets/<ID>/reports/` or `.righthand/tickets/<ID>/reviews/`. The guard stops accidents and ordinary violations; it is not a sandbox, and a deliberately evasive shell command can still write.
 
 ## Verification
 
