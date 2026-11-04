@@ -46,6 +46,9 @@ When modifying or adding a persona in `profiles/`:
 2. Update capability references in `skills/` only when a new capability is added; profiles reference capabilities by name.
 3. Update autocomplete lists in `.commandcode-mod/mods/righthand.ts`, `.pi-plugin/extensions/righthand.ts`, and `bin/state.js` if a new persona is added.
 
+### Skill conventions
+A description containing a colon must be quoted, otherwise cmdc cannot parse the frontmatter.
+
 ---
 
 ## Local Development & Testing
