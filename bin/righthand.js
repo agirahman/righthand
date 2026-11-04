@@ -26,6 +26,8 @@ const checkSkills = harness.checkSkills;
 
 const IS_WIN = process.platform === 'win32';
 
+const RETIRED_PERSONAS = ['editor'];
+
 // ---------------------------------------------------------------------------
 // Persona helpers
 // ---------------------------------------------------------------------------
@@ -386,6 +388,20 @@ function cmdSetup(target, opts) {
           }
         }
         console.log(`  ✓ skills: ${res.written} written, ${res.unchanged} unchanged`);
+        const userProfilesDir = path.join(os.homedir(), '.commandcode', 'profiles');
+        if (fs.existsSync(userProfilesDir)) {
+          for (const retired of RETIRED_PERSONAS) {
+            const retiredPath = path.join(userProfilesDir, retired + '.md');
+            if (fs.existsSync(retiredPath)) {
+              if (dryRun) {
+                console.log(`  → (dry run) remove retired persona ${retired}`);
+              } else {
+                fs.unlinkSync(retiredPath);
+                console.log(`  removed retired persona: ${retired}`);
+              }
+            }
+          }
+        }
       }
     } else if (h.type === 'copy') {
       for (const { src, dest } of h.files) {
@@ -494,6 +510,20 @@ function cmdUpdate(target, opts) {
           }
         }
         console.log(`  ✓ skills: ${res.written} written, ${res.unchanged} unchanged`);
+        const userProfilesDir = path.join(os.homedir(), '.commandcode', 'profiles');
+        if (fs.existsSync(userProfilesDir)) {
+          for (const retired of RETIRED_PERSONAS) {
+            const retiredPath = path.join(userProfilesDir, retired + '.md');
+            if (fs.existsSync(retiredPath)) {
+              if (dryRun) {
+                console.log(`  → (dry run) remove retired persona ${retired}`);
+              } else {
+                fs.unlinkSync(retiredPath);
+                console.log(`  removed retired persona: ${retired}`);
+              }
+            }
+          }
+        }
       }
     }
   }
@@ -641,6 +671,24 @@ function cmdDoctor() {
   // Active persona
   const state = readState(cwd);
   console.log(`\nActive Persona: ${state.active ? `${state.active}` : 'none'}`);
+
+  // Legacy user profiles (informational only)
+  const legacyUserDir = path.join(os.homedir(), '.commandcode', 'profiles');
+  if (fs.existsSync(legacyUserDir)) {
+    let legacyFiles = [];
+    try {
+      legacyFiles = fs.readdirSync(legacyUserDir).filter((f) => f.endsWith('.md') && !f.startsWith('.'));
+    } catch (e) {
+      legacyFiles = [];
+    }
+    const legacyNames = legacyFiles.map((f) => f.slice(0, -3));
+    const retiredFound = legacyNames.filter((n) => RETIRED_PERSONAS.indexOf(n) !== -1);
+    const shippedSet = new Set(listProfiles());
+    const shadowing = legacyNames.filter((n) => shippedSet.has(n));
+    console.log(`\nLegacy user profiles (${legacyUserDir}): ${legacyFiles.length} files`);
+    if (retiredFound.length > 0) console.log(`  retired: ${retiredFound.join(', ')}`);
+    if (shadowing.length > 0) console.log(`  shadow shipped: ${shadowing.join(', ')}`);
+  }
 
   const strictFailures = dc.collectStrictFailures({
     personaConfig: pcResult,

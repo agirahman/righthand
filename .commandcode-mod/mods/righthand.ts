@@ -127,32 +127,100 @@ export function parseProfileFile(filePath: string, fallbackName: string): Profil
   };
 }
 
-export function loadAllProfiles(cwd: string): Map<string, ProfileMetadata> {
+export const RETIRED_PERSONAS: string[] = ['editor'];
+
+export interface ProfileLoadDirs {
+  packageDir?: string;
+  userDir?: string;
+  projectDirs?: string[];
+}
+
+export function loadAllProfiles(cwd: string, dirs?: ProfileLoadDirs): Map<string, ProfileMetadata> {
   const map = new Map<string, ProfileMetadata>();
-  let packageProfilesDir: string | undefined;
-  try {
-    if (typeof __dirname !== 'undefined') {
-      packageProfilesDir = join(__dirname, '..', 'profiles');
+
+  // Resolve directories, defaulting to today's paths so existing single-arg
+  // call sites keep working unchanged.
+  let packageProfilesDir: string | undefined = dirs && 'packageDir' in dirs
+    ? dirs.packageDir
+    : undefined;
+  if (packageProfilesDir === undefined) {
+    try {
+      if (typeof __dirname !== 'undefined') {
+        packageProfilesDir = join(__dirname, '..', 'profiles');
+      }
+    } catch {
+      // fallback if __dirname is unavailable
     }
-  } catch {
-    // fallback if __dirname is unavailable
   }
 
-  const searchDirs = [
-    ...(packageProfilesDir ? [packageProfilesDir] : []),
-    join(homedir(), '.commandcode', 'profiles'),
-    join(cwd, 'profiles'),
-    join(cwd, '.commandcode', 'profiles'),
-  ];
+  const userDir: string = (dirs && 'userDir' in dirs && dirs.userDir !== undefined)
+    ? dirs.userDir
+    : join(homedir(), '.commandcode', 'profiles');
 
-  for (const dir of searchDirs) {
-    let files: string[];
+  const projectDirs: string[] = (dirs && Array.isArray(dirs.projectDirs))
+    ? dirs.projectDirs
+    : [join(cwd, 'profiles'), join(cwd, '.commandcode', 'profiles')];
+
+  const retired = new Set(RETIRED_PERSONAS.map((n) => n.toLowerCase()));
+
+  // Determine shipped names from the package dir first, so a legacy
+  // user-level copy of a shipped name can never shadow it.
+  const shippedNames = new Set<string>();
+  if (packageProfilesDir) {
+    try {
+      for (const file of readdirSync(packageProfilesDir)) {
+        if (!file.endsWith('.md') || file.startsWith('.')) continue;
+        shippedNames.add(file.slice(0, -3).toLowerCase());
+      }
+    } catch {
+      // package dir missing
+    }
+  }
+
+  // 1. Package profiles are authoritative.
+  if (packageProfilesDir) {
+    let files: string[] = [];
+    try {
+      files = readdirSync(packageProfilesDir);
+    } catch {
+      files = [];
+    }
+    for (const file of files) {
+      if (!file.endsWith('.md') || file.startsWith('.')) continue;
+      const fallbackName = file.slice(0, -3).toLowerCase();
+      const profile = parseProfileFile(join(packageProfilesDir, file), fallbackName);
+      if (profile) {
+        map.set(profile.name, profile);
+      }
+    }
+  }
+
+  // 2. Legacy user dir: custom personas only. Retired and shipped names skip.
+  try {
+    for (const file of readdirSync(userDir)) {
+      if (!file.endsWith('.md') || file.startsWith('.')) continue;
+      const fallbackName = file.slice(0, -3).toLowerCase();
+      if (retired.has(fallbackName)) continue;
+      if (shippedNames.has(fallbackName)) continue;
+      const profile = parseProfileFile(join(userDir, file), fallbackName);
+      if (profile) {
+        // shipped name guard by resolved name too
+        if (retired.has(profile.name) || shippedNames.has(profile.name)) continue;
+        map.set(profile.name, profile);
+      }
+    }
+  } catch {
+    // user dir missing
+  }
+
+  // 3. Project-level dirs override everything, later wins.
+  for (const dir of projectDirs) {
+    let files: string[] = [];
     try {
       files = readdirSync(dir);
     } catch {
       continue;
     }
-
     for (const file of files) {
       if (!file.endsWith('.md') || file.startsWith('.')) continue;
       const fallbackName = file.slice(0, -3).toLowerCase();
