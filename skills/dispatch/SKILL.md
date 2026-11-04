@@ -1,6 +1,6 @@
 ---
 name: dispatch
-description: Launch a ticket-scoped agent in another harness: provision the lane, start the agent with the right persona and model, submit the brief, observe, collect, gate, and clean up.
+description: "Launch a ticket-scoped agent in another harness: provision the lane, start the agent with the right persona and model, submit the brief, observe, collect, gate, and clean up."
 ---
 
 # Dispatch

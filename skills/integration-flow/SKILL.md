@@ -1,6 +1,6 @@
 ---
 name: integration-flow
-description: Integrate a finished branch without conflicts: branch from a fresh main, rebase instead of merge, push with force-with-lease, and keep one pull request to one concern.
+description: "Integrate a finished branch without conflicts: branch from a fresh main, rebase instead of merge, push with force-with-lease, and keep one pull request to one concern."
 ---
 
 # Integration Flow
