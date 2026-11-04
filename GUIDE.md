@@ -85,7 +85,7 @@ Branch from a fresh `origin/main`, commit in small units, rebase before pushing,
 
 ## Troubleshooting
 
-`righthand doctor` checks harness availability, package health, the project persona config at `.righthand/persona.json`, the installed Command Code mod and its version, and the eight capability skills in `~/.commandcode/skills`. With `--strict`, the command exits 1 only for real health failures: an unparseable persona config, an unsupported harness in the config, missing or stale capability skills, or mod version drift. Informational lines such as a harness not set up here or a missing persona config do not fail strict. Config validation is intentionally not part of `npm test`, because `npm test` must never read or require user-owned data.
+`righthand doctor` checks harness availability, package health, the project persona config at `.righthand/persona.json`, the installed Command Code mod and its version, and the nine capability skills in `~/.commandcode/skills`. With `--strict`, the command exits 1 only for real health failures: an unparseable persona config, an unsupported harness in the config, missing or stale capability skills, or mod version drift. Informational lines such as a harness not set up here or a missing persona config do not fail strict. Config validation is intentionally not part of `npm test`, because `npm test` must never read or require user-owned data.
 
 ## Known limitations
 
