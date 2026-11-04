@@ -123,6 +123,29 @@ if (fs.existsSync(skillsRoot)) {
       console.error(`FAIL: [skill] Directory '${dir}' under skills/ is not referenced by any profile`);
       failed++;
     }
+    // Guard: unquoted frontmatter values containing a colon-space are invalid YAML for cmdc.
+    const skillPath = path.join(dirPath, 'SKILL.md');
+    if (fs.existsSync(skillPath)) {
+      const raw = fs.readFileSync(skillPath, 'utf8');
+      const lines = raw.split(/\r?\n/);
+      let inFm = false;
+      for (let i = 0; i < lines.length; i++) {
+        if (lines[i].trim() === '---') {
+          if (!inFm) { inFm = true; continue; }
+          break;
+        }
+        if (!inFm) continue;
+        const kv = /^([a-zA-Z0-9_-]+)\s*:\s*(.*)$/.exec(lines[i]);
+        if (!kv) continue;
+        const value = kv[2].trim();
+        if (value.length === 0) continue;
+        const unquoted = value[0] !== '"' && value[0] !== "'";
+        if (unquoted && value.includes(': ')) {
+          console.error(`FAIL: [skill] ${path.relative(root, skillPath)}:${i + 1}: value needs quoting`);
+          failed++;
+        }
+      }
+    }
   }
 }
 
