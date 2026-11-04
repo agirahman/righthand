@@ -117,6 +117,7 @@ RightHand was originally built as a first-class Command Code mod.
   - `/righthand` — open fuzzy picker or show active persona.
   - `/righthand <persona>` — switch persona on-the-fly.
   - `/righthand off` — restore default prompt.
+- **Update after npm upgrade**: `righthand update cmdc` (re-syncs the nine capability skills to `~/.commandcode/skills` and removes profiles of retired personas)
 - **Details**: See [`.commandcode-mod/README.md`](./.commandcode-mod/README.md).
 - Readonly personas are guarded by the mod: project writes are blocked, reports go under `.righthand/`.
 
