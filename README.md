@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="assets/righthand-banner.png" alt="RightHand banner" width="720" />
+
 # RightHand
 
 **Specialist agent personas and multi-agent orchestration engine for Herdr workspaces across coding harnesses.**  
