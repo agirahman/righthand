@@ -165,6 +165,9 @@ export function loadAllProfiles(cwd: string, dirs?: ProfileLoadDirs): Map<string
 
   // Determine shipped names from the package dir first, so a legacy
   // user-level copy of a shipped name can never shadow it.
+  // If the package directory is missing or unreadable, shippedNames stays
+  // empty: no persona silently becomes a shipped name, and a legacy file
+  // may then load as a custom persona (documented fallback).
   const shippedNames = new Set<string>();
   if (packageProfilesDir) {
     try {
@@ -173,7 +176,7 @@ export function loadAllProfiles(cwd: string, dirs?: ProfileLoadDirs): Map<string
         shippedNames.add(file.slice(0, -3).toLowerCase());
       }
     } catch {
-      // package dir missing
+      // package dir missing or unreadable: no shipped names
     }
   }
 
@@ -190,6 +193,7 @@ export function loadAllProfiles(cwd: string, dirs?: ProfileLoadDirs): Map<string
       const fallbackName = file.slice(0, -3).toLowerCase();
       const profile = parseProfileFile(join(packageProfilesDir, file), fallbackName);
       if (profile) {
+        shippedNames.add(profile.name);
         map.set(profile.name, profile);
       }
     }
@@ -206,6 +210,7 @@ export function loadAllProfiles(cwd: string, dirs?: ProfileLoadDirs): Map<string
       if (profile) {
         // shipped name guard by resolved name too
         if (retired.has(profile.name) || shippedNames.has(profile.name)) continue;
+        if (map.has(profile.name)) continue;
         map.set(profile.name, profile);
       }
     }

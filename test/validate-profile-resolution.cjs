@@ -34,9 +34,14 @@ try {
   fs.mkdirSync(path.join(projDir, '.commandcode', 'profiles'), { recursive: true });
 
   fs.writeFileSync(path.join(pkgDir, 'profiles', 'architect.md'), 'PKG BODY');
+  const pkgDivDir = path.join(base, 'pkgdiv', 'profiles');
+  fs.mkdirSync(pkgDivDir, { recursive: true });
+  fs.writeFileSync(path.join(pkgDivDir, 'renamed.md'), '---\nname: architect\nrole: Renamed\nmode: readonly\n---\nPKG RENAMED BODY');
   fs.writeFileSync(path.join(userDir, 'architect.md'), 'OLD USER BODY');
   fs.writeFileSync(path.join(userDir, 'editor.md'), 'RETIRED BODY');
   fs.writeFileSync(path.join(userDir, 'my-custom.md'), 'CUSTOM BODY');
+  fs.mkdirSync(path.join(projDir, 'profiles'), { recursive: true });
+  fs.writeFileSync(path.join(projDir, 'profiles', 'architect.md'), 'PROJECT PROFILES BODY');
   fs.writeFileSync(path.join(projDir, '.commandcode', 'profiles', 'architect.md'), 'PROJECT BODY');
 
   const profiles = loadAllProfiles(projDir, {
@@ -46,6 +51,13 @@ try {
   });
 
   check('shipped name resolves to package body', profiles.get('architect') && profiles.get('architect').body === 'PKG BODY');
+
+  const divProfiles = loadAllProfiles(projDir, {
+    packageDir: pkgDivDir,
+    userDir,
+    projectDirs: [],
+  });
+  check('frontmatter name divergence blocks legacy', divProfiles.get('architect') && divProfiles.get('architect').body === 'PKG RENAMED BODY');
   check('retired name absent', !profiles.has('editor'));
   check('custom user persona loads', profiles.get('my-custom') && profiles.get('my-custom').body === 'CUSTOM BODY');
 
@@ -54,7 +66,25 @@ try {
     userDir,
     projectDirs: [path.join(projDir, 'profiles'), path.join(projDir, '.commandcode', 'profiles')],
   });
-  check('project-level overrides both', overridden.get('architect') && overridden.get('architect').body === 'PROJECT BODY');
+  check('project profiles loses to project .commandcode', overridden.get('architect') && overridden.get('architect').body === 'PROJECT BODY');
+
+  // missing package dir: legacy loads as custom
+  const missingPkg = loadAllProfiles(projDir, {
+    packageDir: path.join(base, 'no-such-pkg'),
+    userDir,
+    projectDirs: [],
+  });
+  check('missing package dir loads legacy as custom', missingPkg.get('architect') && missingPkg.get('architect').body === 'OLD USER BODY');
+
+  // zero-config call does not throw
+  let zeroOk = false;
+  try {
+    loadAllProfiles(projDir);
+    zeroOk = true;
+  } catch (e) {
+    zeroOk = false;
+  }
+  check('zero-config call does not throw', zeroOk);
 
   if (failed > 0) {
     console.error(`\nValidation FAILED with ${failed} errors.`);

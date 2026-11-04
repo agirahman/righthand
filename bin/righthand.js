@@ -396,8 +396,12 @@ function cmdSetup(target, opts) {
               if (dryRun) {
                 console.log(`  → (dry run) remove retired persona ${retired}`);
               } else {
-                fs.unlinkSync(retiredPath);
-                console.log(`  removed retired persona: ${retired}`);
+                try {
+                  fs.unlinkSync(retiredPath);
+                  console.log(`  removed retired persona: ${retired}`);
+                } catch (e) {
+                  console.log(`  warning: could not remove ${retiredPath}: ${e && e.message ? e.message : e}`);
+                }
               }
             }
           }
@@ -518,8 +522,12 @@ function cmdUpdate(target, opts) {
               if (dryRun) {
                 console.log(`  → (dry run) remove retired persona ${retired}`);
               } else {
-                fs.unlinkSync(retiredPath);
-                console.log(`  removed retired persona: ${retired}`);
+                try {
+                  fs.unlinkSync(retiredPath);
+                  console.log(`  removed retired persona: ${retired}`);
+                } catch (e) {
+                  console.log(`  warning: could not remove ${retiredPath}: ${e && e.message ? e.message : e}`);
+                }
               }
             }
           }
