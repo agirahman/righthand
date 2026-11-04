@@ -112,6 +112,7 @@ try {
   check('readonly shell Remove-Item scratch allowed', evaluateToolGuard('readonly', ctx('shell_command', `Remove-Item "${path.join(scratchDir, 'tmp.txt')}"`)).block === false);
   check('readonly shell Remove-Item recurse force scratch allowed', evaluateToolGuard('readonly', ctx('shell_command', `Remove-Item -Recurse -Force "${path.join(scratchDir, 'tmp')}"`)).block === false);
   check('readonly shell Out-File scratch allowed', evaluateToolGuard('readonly', ctx('shell_command', `Out-File "${path.join(scratchDir, 'out.txt')}"`)).block === false);
+  check('readonly shell Out-File scratch forward slashes allowed', evaluateToolGuard('readonly', ctx('shell_command', `Out-File "${scratchDir.split(path.sep).join('/')}/out.txt"`)).block === false);
   check('readonly shell Set-Content scratch allowed', evaluateToolGuard('readonly', ctx('shell_command', `Set-Content -Path "${path.join(scratchDir, 'out.txt')}" -Value hi`)).block === false);
   check('readonly shell redirect scratch allowed', evaluateToolGuard('readonly', ctx('shell_command', `echo hi > "${path.join(scratchDir, 'out.txt')}"`)).block === false);
   check('readonly shell rm scratch allowed', evaluateToolGuard('readonly', ctx('shell_command', `rm -rf "${path.join(scratchDir, 'tmp')}"`)).block === false);

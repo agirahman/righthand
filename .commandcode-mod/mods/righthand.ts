@@ -543,7 +543,8 @@ function powershellTargets(tokens: string[]): string[] {
   const targets: string[] = [];
   for (let i = 1; i < tokens.length; i++) {
     const token = tokens[i];
-    if (!token.startsWith('-') && !token.startsWith('/')) {
+    const isSlashFlag = /^\/[A-Za-z][A-Za-z0-9-]*$/.test(token);
+    if (!token.startsWith('-') && !isSlashFlag) {
       targets.push(token);
       continue;
     }
