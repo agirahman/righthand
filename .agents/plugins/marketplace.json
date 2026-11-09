@@ -1,15 +1,15 @@
 {
-    "name":  "righthand",
-    "description":  "Shared agents/plugins manifest for OpenCode/Amp/Antigravity discovery",
-    "owner":  {
-                  "name":  "agi"
-              },
-    "plugins":  [
-                    {
-                        "name":  "righthand",
-                        "source":  "./",
-                        "version":  "1.0.3",
-                        "description":  "RightHand personas bundled as transferable skills across all Herdr-supported harnesses."
-                    }
-                ]
+  "name": "righthand",
+  "description": "Shared agents/plugins manifest for OpenCode/Amp/Antigravity discovery",
+  "owner": {
+    "name": "agi"
+  },
+  "plugins": [
+    {
+      "name": "righthand",
+      "source": "./",
+      "version": "1.0.3",
+      "description": "RightHand personas bundled as transferable skills across all Herdr-supported harnesses."
+    }
+  ]
 }
