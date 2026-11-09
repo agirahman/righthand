@@ -203,10 +203,14 @@ try {
   check('readonly bash substitution unquoted blocked', evaluateToolGuard('readonly', ctx('bash', 'git log --format=%h $(rm -rf src)')).block === true);
   check('readonly bash backtick blocked', evaluateToolGuard('readonly', ctx('bash', 'echo `rm -rf src`')).block === true);
   check('readonly bash backtick in double quotes blocked', evaluateToolGuard('readonly', ctx('bash', 'echo "`rm -rf src`"')).block === true);
-  check('readonly bash nested substitution blocked', evaluateToolGuard('readonly', ctx('bash', 'node -p "$(node -p 1)"')).block === true);
+  check('readonly bash nested substitution blocked', evaluateToolGuard('readonly', ctx('bash', 'node -p "$(rm -rf src)"')).block === true);
+  check('readonly bash nested inner substitution blocked', evaluateToolGuard('readonly', ctx('bash', 'echo $(echo $(rm -rf src))')).block === true);
   check('readonly bash gh substitution blocked', evaluateToolGuard('readonly', ctx('bash', 'gh pr create --title "$(rm -rf src)" --body y')).block === true);
   check('readonly bash process substitution blocked', evaluateToolGuard('readonly', ctx('bash', 'git diff <(rm -rf src)')).block === true);
   check('readonly bash output process substitution blocked', evaluateToolGuard('readonly', ctx('bash', 'tee >(rm -rf src)')).block === true);
+  check('readonly bash substitution writes outside blocked', evaluateToolGuard('readonly', ctx('bash', 'echo hi > "$(rm -rf src)"')).block === true);
+  check('readonly bash unbalanced substitution blocked', evaluateToolGuard('readonly', ctx('bash', 'echo "$(rm -rf src"')).block === true);
+  check('readonly bash substitution git commit blocked', evaluateToolGuard('readonly', ctx('bash', 'git log $(git commit -m x)')).block === true);
   check('readonly powershell substitution blocked', evaluateToolGuard('readonly', ctx('powershell', 'git log --format="$(rm -rf src)"')).block === true);
   check('readonly powershell substitution unquoted blocked', evaluateToolGuard('readonly', ctx('powershell', 'Write-Output $(rm -rf src)')).block === true);
   check('readonly powershell substitution in single quotes allowed', evaluateToolGuard('readonly', ctx('powershell', "git log --grep='$(foo)'")).block === false);
@@ -216,7 +220,17 @@ try {
   check('readonly bash grep parens allowed', evaluateToolGuard('readonly', ctx('bash', 'git log --grep="fix(guard)"')).block === false);
   check('readonly bash single quoted substitution allowed', evaluateToolGuard('readonly', ctx('bash', "git log --grep='$(foo)'")).block === false);
   check('readonly bash escaped substitution allowed', evaluateToolGuard('readonly', ctx('bash', 'git log --grep="\\$("')).block === false);
-  check('readonly bash arithmetic blocked', evaluateToolGuard('readonly', ctx('bash', 'echo $((1+2))')).block === true);
+  check('readonly bash arithmetic allowed', evaluateToolGuard('readonly', ctx('bash', 'echo $((1+2))')).block === false);
+  check('readonly bash arithmetic with nested mutation blocked', evaluateToolGuard('readonly', ctx('bash', 'echo $(( $(rm -rf src) ))')).block === true);
+
+  // a substitution whose own command is read-only must not disturb real work
+  check('readonly bash substitution rev-parse allowed', evaluateToolGuard('readonly', ctx('bash', 'git log --oneline $(git rev-parse --abbrev-ref HEAD)..HEAD')).block === false);
+  check('readonly bash substitution merge-base allowed', evaluateToolGuard('readonly', ctx('bash', 'git diff $(git merge-base main HEAD)')).block === false);
+  check('readonly bash substitution cat-file allowed', evaluateToolGuard('readonly', ctx('bash', 'git show $(git rev-parse HEAD):package.json')).block === false);
+  check('readonly bash substitution gh view allowed', evaluateToolGuard('readonly', ctx('bash', 'gh issue comment 38 --body "$(gh issue view 38 --json title -q .title)"')).block === false);
+  check('readonly bash backtick rev-parse allowed', evaluateToolGuard('readonly', ctx('bash', 'git log --oneline `git rev-parse HEAD`')).block === false);
+  check('readonly powershell substitution Get-Date allowed', evaluateToolGuard('readonly', ctx('powershell', 'Write-Output "$(Get-Date)"')).block === false);
+  check('readonly powershell substitution rev-parse allowed', evaluateToolGuard('readonly', ctx('powershell', 'git log --oneline $(git rev-parse --abbrev-ref HEAD)')).block === false);
   check('readonly powershell backtick escape allowed', evaluateToolGuard('readonly', ctx('powershell', 'Write-Output "line1`nline2"')).block === false);
   check('readonly powershell escaped substitution allowed', evaluateToolGuard('readonly', ctx('powershell', 'Write-Output "`$(literal)"')).block === false);
 

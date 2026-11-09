@@ -840,49 +840,110 @@ function shellSegmentBlocked(segment: string, cwd: string, scratchDirs?: string[
 
 type ShellKind = 'powershell' | 'posix';
 
+interface SubstitutionScan {
+  inner: string[];
+  masked: string;
+}
+
 /**
- * Command substitution runs a second command inside the text of the first one.
- * The guard judges the literal tokens, so anything hidden in `$(...)` or in a
- * backtick pair would execute unexamined. Refuse it instead of trying to parse
- * it, the same way `-e`, `-c` and `--eval` are refused.
- *
- * Quoting rules differ per shell and both matter:
- * - single quotes make both forms literal everywhere
- * - POSIX escapes with a backslash, and substitutes inside double quotes
- * - PowerShell escapes with a backtick, so `` `$( `` is literal text
+ * Index of the character that closes a substitution opened at `openIndex`,
+ * or -1 when it never closes.
  */
-function hasCommandSubstitution(command: string, kind: ShellKind): boolean {
+function findSubstitutionEnd(command: string, openIndex: number, kind: ShellKind): number {
+  if (command[openIndex] === '`') {
+    for (let i = openIndex + 1; i < command.length; i++) {
+      if (kind === 'posix' && command[i] === '\\') { i += 1; continue; }
+      if (command[i] === '`') return i;
+    }
+    return -1;
+  }
+  let depth = 1;
   let quote: string | null = null;
-  for (let i = 0; i < command.length; i++) {
+  for (let i = openIndex + 2; i < command.length; i++) {
     const ch = command[i];
     if (quote === "'") {
       if (ch === "'") quote = null;
       continue;
     }
-    if (kind === 'powershell' ? ch === '`' : ch === '\\') {
-      i += 1;
-      continue;
-    }
+    if (kind === 'powershell' ? ch === '`' : ch === '\\') { i += 1; continue; }
     if (quote === '"') {
       if (ch === '"') { quote = null; continue; }
     } else {
       if (ch === "'") { quote = "'"; continue; }
       if (ch === '"') { quote = '"'; continue; }
     }
-    if (ch === '`') return true;
-    if (ch === '$' && command[i + 1] === '(') return true;
-    // POSIX process substitution, <(cmd) / >(cmd), also runs a command
-    if (kind === 'posix' && (ch === '<' || ch === '>') && command[i + 1] === '(') return true;
+    if (ch === '(') depth += 1;
+    if (ch === ')') {
+      depth -= 1;
+      if (depth === 0) return i;
+    }
   }
-  return false;
+  return -1;
 }
 
-function shellBlocked(command: string, cwd: string, scratchDirs?: string[], kind: ShellKind = 'posix'): boolean {
+/**
+ * Split a command into the commands hidden in its substitutions and a masked
+ * version of the outer text. Returns null when a substitution never closes.
+ *
+ * Forms handled: `$(...)`, a backtick pair and, on POSIX, `<(cmd)` / `>(cmd)`.
+ *
+ * Quoting differs per shell and both matter:
+ * - single quotes make every form literal
+ * - POSIX escapes with a backslash and still substitutes inside double quotes
+ * - PowerShell escapes with a backtick, so `` `$( `` is literal text
+ */
+function scanCommandSubstitutions(command: string, kind: ShellKind): SubstitutionScan | null {
+  const inner: string[] = [];
+  let masked = '';
+  let quote: string | null = null;
+  for (let i = 0; i < command.length; i++) {
+    const ch = command[i];
+    if (quote === "'") {
+      masked += ch;
+      if (ch === "'") quote = null;
+      continue;
+    }
+    if (kind === 'powershell' ? ch === '`' : ch === '\\') {
+      masked += ch;
+      if (i + 1 < command.length) { masked += command[i + 1]; i += 1; }
+      continue;
+    }
+    if (quote === '"') {
+      if (ch === '"') { quote = null; masked += ch; continue; }
+    } else {
+      if (ch === "'") { quote = "'"; masked += ch; continue; }
+      if (ch === '"') { quote = '"'; masked += ch; continue; }
+    }
+    const opensValue = ch === '$' && command[i + 1] === '(';
+    const opensBacktick = ch === '`';
+    const opensProcess = kind === 'posix' && (ch === '<' || ch === '>') && command[i + 1] === '(';
+    if (!opensValue && !opensBacktick && !opensProcess) { masked += ch; continue; }
+    const end = findSubstitutionEnd(command, i, kind);
+    if (end < 0) return null;
+    inner.push(command.slice(i + (opensBacktick ? 1 : 2), end));
+    // the substitution's own text is not part of the outer command; a target
+    // built from it stays unresolved and therefore blocked
+    masked += ' __rh_subst__ ';
+    i = end;
+  }
+  return { inner, masked };
+}
+
+function shellBlocked(command: string, cwd: string, scratchDirs?: string[], kind: ShellKind = 'posix', depth = 0): boolean {
   const trimmed = command.trim();
   if (!trimmed) return true;
-  if (hasCommandSubstitution(trimmed, kind)) return true;
+  if (depth > 8) return true;
+  const scan = scanCommandSubstitutions(trimmed, kind);
+  if (!scan) return true;
+  // A substitution runs its own command, so judge that command too instead of
+  // refusing every use of one.
+  for (const innerCommand of scan.inner) {
+    if (shellBlocked(innerCommand, cwd, scratchDirs, kind, depth + 1)) return true;
+  }
+  const outer = scan.masked.trim();
+  if (!outer) return true;
   const vars: ShellVars = new Map();
-  for (const segment of splitShellSegments(trimmed)) {
+  for (const segment of splitShellSegments(outer)) {
     if (shellSegmentBlocked(segment, cwd, scratchDirs, vars)) return true;
     collectShellVars(segment, vars);
   }
