@@ -351,9 +351,21 @@ const GIT_READ_SUBCOMMANDS = new Set([
   'diff-tree', 'diff-index', 'diff-files',
 ]);
 
+/**
+ * gh commands that change shared state other work depends on: merging, closing,
+ * reviewing, retargeting a PR, deleting, publishing releases or gists,
+ * credentials, secrets and repo configuration. These stay blocked for readonly
+ * personas.
+ *
+ * Content-append verbs are deliberately absent: `issue create/comment/edit` and
+ * `pr create/comment` publish text to the remote but change nothing on disk and
+ * nothing another lane builds on. `pr edit` is NOT in that set because it can
+ * retarget the base branch, and `gist create` is NOT either because it publishes
+ * local file contents.
+ */
 const GH_MUTATING_PATTERNS: RegExp[] = [
-  /^pr\s+(create|merge|close|reopen|edit|review|comment|ready|lock|unlock|checkout)\b/,
-  /^issue\s+(create|close|reopen|edit|delete|comment|lock|unlock|transfer|develop)\b/,
+  /^pr\s+(merge|close|reopen|ready|lock|unlock|checkout|review|edit)\b/,
+  /^issue\s+(close|reopen|delete|lock|unlock|transfer|develop)\b/,
   /^release\s+(create|delete|edit|upload)\b/,
   /^repo\s+(create|delete|edit|rename|archive|unarchive|fork|clone|sync|set-default)\b/,
   /^workflow\s+(run|enable|disable)\b/,
@@ -377,18 +389,66 @@ interface ShellRedirectScan {
   body: string;
 }
 
-function expandShellToken(token: string): string {
+type ShellVars = Map<string, string>;
+
+function lookupShellVar(name: string, vars?: ShellVars): string | undefined {
+  if (!vars) return undefined;
+  if (vars.has(name)) return vars.get(name);
+  const lower = name.toLowerCase();
+  if (vars.has(lower)) return vars.get(lower);
+  return undefined;
+}
+
+function expandShellToken(token: string, vars?: ShellVars): string {
   let value = token;
   value = value.replace(/\$env:([A-Za-z_][A-Za-z0-9_]*)/gi, (match, name: string) => process.env[name] ?? match);
   value = value.replace(/%([A-Za-z_][A-Za-z0-9_]*)%/g, (match, name: string) => process.env[name] ?? match);
-  value = value.replace(/\$\{([A-Za-z_][A-Za-z0-9_]*)\}|\$([A-Za-z_][A-Za-z0-9_]*)/g, (match, braced: string | undefined, plain: string | undefined) => {
+  const substitute = (input: string): string => input.replace(/\$\{([A-Za-z_][A-Za-z0-9_]*)\}|\$([A-Za-z_][A-Za-z0-9_]*)/g, (match, braced: string | undefined, plain: string | undefined) => {
     const name = braced ?? plain;
-    return name && process.env[name] !== undefined ? process.env[name]! : match;
+    if (!name) return match;
+    const fromVars = lookupShellVar(name, vars);
+    if (fromVars !== undefined) return fromVars;
+    return process.env[name] ?? match;
   });
+  value = substitute(value);
+  // a variable whose value contains another variable or an $env: reference
+  const second = substitute(value.replace(/\$env:([A-Za-z_][A-Za-z0-9_]*)/gi, (match, name: string) => process.env[name] ?? match));
+  if (second !== value) value = second;
   if (value === '~' || value.startsWith('~/') || value.startsWith('~\\')) {
     value = join(homedir(), value.slice(1));
   }
   return value;
+}
+
+/**
+ * Record simple variable assignments so a path built from a variable can still be
+ * resolved when the assignment happens earlier in the same command.
+ * Supports `NAME=value` (bash) and `$NAME = value` / `$NAME=value` (PowerShell).
+ * Only literal values are recorded; anything unresolved stays unresolvable, which
+ * keeps the guard fail-closed.
+ */
+function collectShellVars(segment: string, vars: ShellVars): void {
+  const body = scanShellRedirects(segment).body;
+  const tokens = tokenizeShellSegment(body);
+  for (let i = 0; i < tokens.length; i++) {
+    const token = tokens[i];
+    const posix = /^([A-Za-z_][A-Za-z0-9_]*)=(.+)$/.exec(token);
+    if (posix) {
+      vars.set(posix[1], expandShellToken(posix[2].replace(/^["']|["']$/g, ''), vars));
+      continue;
+    }
+    const psInline = /^\$([A-Za-z_][A-Za-z0-9_]*)=(.+)$/.exec(token);
+    if (psInline) {
+      vars.set(psInline[1], expandShellToken(psInline[2].replace(/^["']|["']$/g, ''), vars));
+      continue;
+    }
+    const psSpaced = /^\$([A-Za-z_][A-Za-z0-9_]*)$/.exec(token);
+    if (psSpaced && tokens[i + 1] === '=') {
+      const rawValue = (tokens[i + 2] ?? '').replace(/^["']|["']$/g, '');
+      if (rawValue) vars.set(psSpaced[1], expandShellToken(rawValue, vars));
+      i += 2;
+    }
+  }
 }
 
 function looksLikePathToken(token: string): boolean {
@@ -515,8 +575,8 @@ function scanShellRedirects(segment: string): ShellRedirectScan {
   return {targets, body: chars.join('')};
 }
 
-function targetAllowed(rawTarget: string, cwd: string, scratchDirs?: string[]): boolean {
-  const expanded = expandShellToken(rawTarget.trim()).replace(/^["']|["']$/g, '');
+function targetAllowed(rawTarget: string, cwd: string, scratchDirs?: string[], vars?: ShellVars): boolean {
+  const expanded = expandShellToken(rawTarget.trim(), vars).replace(/^["']|["']$/g, '');
   if (!expanded) return false;
   const lower = expanded.toLowerCase();
   if (lower === 'nul' || lower === '/dev/null' || lower === '$null') return true;
@@ -564,15 +624,15 @@ function powershellTargets(tokens: string[]): string[] {
   return targets;
 }
 
-function mutationTargetsBlocked(targets: string[], cwd: string, scratchDirs?: string[]): boolean {
+function mutationTargetsBlocked(targets: string[], cwd: string, scratchDirs?: string[], vars?: ShellVars): boolean {
   if (targets.length === 0) return true;
   for (const target of targets) {
-    if (!targetAllowed(target, cwd, scratchDirs)) return true;
+    if (!targetAllowed(target, cwd, scratchDirs, vars)) return true;
   }
   return false;
 }
 
-function interpreterBlocked(command: string, args: string[], cwd: string, scratchDirs?: string[]): boolean {
+function interpreterBlocked(command: string, args: string[], cwd: string, scratchDirs?: string[], vars?: ShellVars): boolean {
   const lower = args.map((arg) => arg.toLowerCase());
 
   if (command === 'node' || command === 'nodejs' || command === 'deno' || command === 'bun') {
@@ -580,14 +640,14 @@ function interpreterBlocked(command: string, args: string[], cwd: string, scratc
     if (command === 'deno' && lower[0] === 'eval') return true;
     const script = args.find((arg) => looksLikePathToken(arg));
     if (!script) return false;
-    return !targetAllowed(script, cwd, scratchDirs);
+    return !targetAllowed(script, cwd, scratchDirs, vars);
   }
 
   if (command === 'python' || command === 'python3' || command === 'py') {
     if (lower.some((arg) => arg === '-c' || arg === '-m' || arg === '-')) return true;
     const script = args.find((arg) => looksLikePathToken(arg));
     if (!script) return false;
-    return !targetAllowed(script, cwd, scratchDirs);
+    return !targetAllowed(script, cwd, scratchDirs, vars);
   }
 
   if (command === 'pwsh' || command === 'powershell') {
@@ -596,10 +656,10 @@ function interpreterBlocked(command: string, args: string[], cwd: string, scratc
     if (fileIndex >= 0) {
       const target = args[fileIndex + 1];
       if (!target) return true;
-      return !targetAllowed(target, cwd, scratchDirs);
+      return !targetAllowed(target, cwd, scratchDirs, vars);
     }
     const script = args.find((arg) => looksLikePathToken(arg));
-    if (script) return !targetAllowed(script, cwd, scratchDirs);
+    if (script) return !targetAllowed(script, cwd, scratchDirs, vars);
     return true;
   }
 
@@ -607,7 +667,7 @@ function interpreterBlocked(command: string, args: string[], cwd: string, scratc
     if (lower.some((arg) => arg === '-c' || arg === '--command')) return true;
     const script = args.find((arg) => looksLikePathToken(arg));
     if (!script) return false;
-    return !targetAllowed(script, cwd, scratchDirs);
+    return !targetAllowed(script, cwd, scratchDirs, vars);
   }
 
   return true;
@@ -681,6 +741,9 @@ function ghBlocked(args: string[]): boolean {
     if (args.some((arg) => /^(-f|--field|--raw-field|--input)$/i.test(arg))) return true;
   }
 
+  // Everything not listed above is either read-only (`gh pr view`, `gh issue
+  // list`) or content-append (`gh issue create`, `gh pr comment`). Neither can
+  // mutate the working tree, so a readonly persona may run it.
   return false;
 }
 
@@ -729,8 +792,8 @@ function stripShellWrapper(command: string, args: string[]): string[] | null {
   return args.slice(index);
 }
 
-function commandBlocked(command: string, rawCommand: string, args: string[], cwd: string, scratchDirs?: string[]): boolean {
-  if (SHELL_INTERPRETERS.has(command)) return interpreterBlocked(command, args, cwd, scratchDirs);
+function commandBlocked(command: string, rawCommand: string, args: string[], cwd: string, scratchDirs?: string[], vars?: ShellVars): boolean {
+  if (SHELL_INTERPRETERS.has(command)) return interpreterBlocked(command, args, cwd, scratchDirs, vars);
   if (command === 'git') return gitBlocked(args);
   if (command === 'gh') return ghBlocked(args);
   if (command === 'npm' || command === 'pnpm' || command === 'yarn') return packageManagerBlocked(args);
@@ -738,21 +801,21 @@ function commandBlocked(command: string, rawCommand: string, args: string[], cwd
   if (command === 'sed' && !args.some((arg) => /^-i/.test(arg) || /^--in-place/.test(arg))) return false;
 
   if (POWERSHELL_FILE_CMDLETS.has(command)) {
-    return mutationTargetsBlocked(powershellTargets([rawCommand, ...args]), cwd, scratchDirs);
+    return mutationTargetsBlocked(powershellTargets([rawCommand, ...args]), cwd, scratchDirs, vars);
   }
 
   if (POSIX_FILE_MUTATORS.has(command)) {
     if (command === 'patch') return true;
-    return mutationTargetsBlocked(posixTargets([rawCommand, ...args], command), cwd, scratchDirs);
+    return mutationTargetsBlocked(posixTargets([rawCommand, ...args], command), cwd, scratchDirs, vars);
   }
 
   return false;
 }
 
-function shellSegmentBlocked(segment: string, cwd: string, scratchDirs?: string[]): boolean {
+function shellSegmentBlocked(segment: string, cwd: string, scratchDirs?: string[], vars?: ShellVars): boolean {
   const redirects = scanShellRedirects(segment);
   for (const target of redirects.targets) {
-    if (!targetAllowed(target, cwd, scratchDirs)) return true;
+    if (!targetAllowed(target, cwd, scratchDirs, vars)) return true;
   }
 
   const tokens = tokenizeShellSegment(redirects.body);
@@ -769,7 +832,7 @@ function shellSegmentBlocked(segment: string, cwd: string, scratchDirs?: string[
       commandTokens = stripped;
       continue;
     }
-    return commandBlocked(command, rawCommand, args, cwd, scratchDirs);
+    return commandBlocked(command, rawCommand, args, cwd, scratchDirs, vars);
   }
 
   return false;
@@ -778,8 +841,10 @@ function shellSegmentBlocked(segment: string, cwd: string, scratchDirs?: string[
 function shellBlocked(command: string, cwd: string, scratchDirs?: string[]): boolean {
   const trimmed = command.trim();
   if (!trimmed) return true;
+  const vars: ShellVars = new Map();
   for (const segment of splitShellSegments(trimmed)) {
-    if (shellSegmentBlocked(segment, cwd, scratchDirs)) return true;
+    if (shellSegmentBlocked(segment, cwd, scratchDirs, vars)) return true;
+    collectShellVars(segment, vars);
   }
   return false;
 }

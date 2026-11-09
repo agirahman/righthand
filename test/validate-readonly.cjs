@@ -144,6 +144,59 @@ try {
   check('readonly shell sudo git status allowed', evaluateToolGuard('readonly', ctx('shell_command', 'sudo git status')).block === false);
   check('readonly shell env npm test allowed', evaluateToolGuard('readonly', ctx('shell_command', 'env CI=1 npm test')).block === false);
 
+  // gh content-append: filing tickets, commenting, opening a PR (issue #42)
+  check('readonly shell gh issue create allowed', evaluateToolGuard('readonly', ctx('shell_command', 'gh issue create --title "x" --body "y"')).block === false);
+  check('readonly shell gh issue create body-file allowed', evaluateToolGuard('readonly', ctx('shell_command', 'gh issue create --title "x" --body-file body.md')).block === false);
+  check('readonly shell gh issue comment allowed', evaluateToolGuard('readonly', ctx('shell_command', 'gh issue comment 38 --body "x"')).block === false);
+  check('readonly shell gh issue comment body-file allowed', evaluateToolGuard('readonly', ctx('shell_command', 'gh issue comment 38 --body-file f.md')).block === false);
+  check('readonly shell gh issue edit body allowed', evaluateToolGuard('readonly', ctx('shell_command', 'gh issue edit 38 --body "x"')).block === false);
+  check('readonly shell gh pr comment allowed', evaluateToolGuard('readonly', ctx('shell_command', 'gh pr comment 39 --body "x"')).block === false);
+  check('readonly shell gh pr create allowed', evaluateToolGuard('readonly', ctx('shell_command', 'gh pr create --title x --body y --base main')).block === false);
+  check('readonly shell gh issue list allowed', evaluateToolGuard('readonly', ctx('shell_command', 'gh issue list --state open')).block === false);
+  check('readonly shell gh release view allowed', evaluateToolGuard('readonly', ctx('shell_command', 'gh release view v1.3.2')).block === false);
+  check('readonly shell gh run view log allowed', evaluateToolGuard('readonly', ctx('shell_command', 'gh run view 123 --log')).block === false);
+  check('readonly shell gh api get allowed', evaluateToolGuard('readonly', ctx('shell_command', 'gh api repos/x/issues/38')).block === false);
+
+  // gh destructive verbs stay blocked (issue #42)
+  check('readonly shell gh pr edit base blocked', evaluateToolGuard('readonly', ctx('shell_command', 'gh pr edit 39 --base main')).block === true);
+  check('readonly shell gh gist create blocked', evaluateToolGuard('readonly', ctx('shell_command', 'gh gist create secrets.env')).block === true);
+  check('readonly shell gh pr close blocked', evaluateToolGuard('readonly', ctx('shell_command', 'gh pr close 39')).block === true);
+  check('readonly shell gh pr review blocked', evaluateToolGuard('readonly', ctx('shell_command', 'gh pr review 39 --approve')).block === true);
+  check('readonly shell gh issue close blocked', evaluateToolGuard('readonly', ctx('shell_command', 'gh issue close 38')).block === true);
+  check('readonly shell gh issue delete blocked', evaluateToolGuard('readonly', ctx('shell_command', 'gh issue delete 38')).block === true);
+  check('readonly shell gh release create blocked', evaluateToolGuard('readonly', ctx('shell_command', 'gh release create v1.0.0')).block === true);
+  check('readonly shell gh repo delete blocked', evaluateToolGuard('readonly', ctx('shell_command', 'gh repo delete x/y')).block === true);
+  check('readonly shell gh secret set blocked', evaluateToolGuard('readonly', ctx('shell_command', 'gh secret set FOO')).block === true);
+  check('readonly shell gh auth login blocked', evaluateToolGuard('readonly', ctx('shell_command', 'gh auth login')).block === true);
+  check('readonly shell gh api delete blocked', evaluateToolGuard('readonly', ctx('shell_command', 'gh api -X DELETE repos/x')).block === true);
+  check('readonly shell gh api field blocked', evaluateToolGuard('readonly', ctx('shell_command', 'gh api repos/x/issues -f title=y')).block === true);
+
+  // paths built from variables: allowed only inside scratchpad / .righthand (issue #42)
+  check('readonly shell ps var scratch Set-Content allowed', evaluateToolGuard('readonly', ctx('shell_command', `$d = "${scratchDir}"; Set-Content -Path "$d/x.txt" -Value hi`)).block === false);
+  check('readonly shell ps var scratch redirect allowed', evaluateToolGuard('readonly', ctx('shell_command', `$d = "${scratchDir}"; echo hi > "$d/y.txt"`)).block === false);
+  check('readonly shell ps var reports allowed', evaluateToolGuard('readonly', ctx('shell_command', `$r = "${rootDir}"; Set-Content -Path "$r/.righthand/tickets/T18/reports/x.md" -Value hi`)).block === false);
+  check('readonly shell ps inline var scratch allowed', evaluateToolGuard('readonly', ctx('shell_command', `$d="${scratchDir}"; Set-Content -Path "$d/z.txt" -Value hi`)).block === false);
+  check('readonly shell bash var scratch allowed', evaluateToolGuard('readonly', ctx('shell_command', `D="${scratchDir}"; echo hi > "$D/f.txt"`)).block === false);
+  check('readonly shell ps var nested allowed', evaluateToolGuard('readonly', ctx('shell_command', `$base = "${rootDir}"; $rep = "$base/.righthand/tickets/T18/reports"; Set-Content -Path "$rep/n.md" -Value hi`)).block === false);
+  // a variable assigned from the environment must still resolve (found by e2e)
+  const prevScratch = process.env.COMMANDCODE_SCRATCHPAD;
+  process.env.COMMANDCODE_SCRATCHPAD = scratchDir;
+  check('readonly shell var from env allowed', evaluateToolGuard('readonly', ctx('shell_command', '$d = $env:COMMANDCODE_SCRATCHPAD; Set-Content -Path "$d/v.txt" -Value hi')).block === false);
+  check('readonly shell var from env quoted allowed', evaluateToolGuard('readonly', ctx('shell_command', '$d = "$env:COMMANDCODE_SCRATCHPAD"; Set-Content -Path "$d/v.txt" -Value hi')).block === false);
+  process.env.COMMANDCODE_SCRATCHPAD = path.join(scratchDir, '..', 'outside');
+  check('readonly shell var from env outside blocked', evaluateToolGuard('readonly', ctx('shell_command', '$d = $env:COMMANDCODE_SCRATCHPAD; Set-Content -Path "$d/v.txt" -Value hi')).block === true);
+  if (prevScratch === undefined) delete process.env.COMMANDCODE_SCRATCHPAD;
+  else process.env.COMMANDCODE_SCRATCHPAD = prevScratch;
+
+  // variable resolution must not become an escape hatch
+  check('readonly shell ps var to src blocked', evaluateToolGuard('readonly', ctx('shell_command', `$d = "${rootDir}"; Set-Content -Path "$d/src.js" -Value hi`)).block === true);
+  check('readonly shell ps var redirect src blocked', evaluateToolGuard('readonly', ctx('shell_command', `$d = "${rootDir}"; echo hi > "$d/src.js"`)).block === true);
+  check('readonly shell bash var to src blocked', evaluateToolGuard('readonly', ctx('shell_command', `D="${rootDir}"; echo hi > "$D/src.js"`)).block === true);
+  check('readonly shell unresolved var blocked', evaluateToolGuard('readonly', ctx('shell_command', 'Set-Content -Path "$unknown/x.txt" -Value hi')).block === true);
+  check('readonly shell var traversal blocked', evaluateToolGuard('readonly', ctx('shell_command', `$d = "${scratchDir}"; echo hi > "$d/../../src.js"`)).block === true);
+  check('readonly shell rm with var to src blocked', evaluateToolGuard('readonly', ctx('shell_command', `$d = "${rootDir}"; rm -rf "$d/src"`)).block === true);
+  check('readonly shell var from env userprofile blocked', evaluateToolGuard('readonly', ctx('shell_command', 'Set-Content -Path "$env:USERPROFILE/x.txt" -Value hi')).block === true);
+
   if (failed > 0) {
     console.error(`\nValidation FAILED with ${failed} errors.`);
     process.exit(1);
