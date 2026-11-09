@@ -838,9 +838,49 @@ function shellSegmentBlocked(segment: string, cwd: string, scratchDirs?: string[
   return false;
 }
 
-function shellBlocked(command: string, cwd: string, scratchDirs?: string[]): boolean {
+type ShellKind = 'powershell' | 'posix';
+
+/**
+ * Command substitution runs a second command inside the text of the first one.
+ * The guard judges the literal tokens, so anything hidden in `$(...)` or in a
+ * backtick pair would execute unexamined. Refuse it instead of trying to parse
+ * it, the same way `-e`, `-c` and `--eval` are refused.
+ *
+ * Quoting rules differ per shell and both matter:
+ * - single quotes make both forms literal everywhere
+ * - POSIX escapes with a backslash, and substitutes inside double quotes
+ * - PowerShell escapes with a backtick, so `` `$( `` is literal text
+ */
+function hasCommandSubstitution(command: string, kind: ShellKind): boolean {
+  let quote: string | null = null;
+  for (let i = 0; i < command.length; i++) {
+    const ch = command[i];
+    if (quote === "'") {
+      if (ch === "'") quote = null;
+      continue;
+    }
+    if (kind === 'powershell' ? ch === '`' : ch === '\\') {
+      i += 1;
+      continue;
+    }
+    if (quote === '"') {
+      if (ch === '"') { quote = null; continue; }
+    } else {
+      if (ch === "'") { quote = "'"; continue; }
+      if (ch === '"') { quote = '"'; continue; }
+    }
+    if (ch === '`') return true;
+    if (ch === '$' && command[i + 1] === '(') return true;
+    // POSIX process substitution, <(cmd) / >(cmd), also runs a command
+    if (kind === 'posix' && (ch === '<' || ch === '>') && command[i + 1] === '(') return true;
+  }
+  return false;
+}
+
+function shellBlocked(command: string, cwd: string, scratchDirs?: string[], kind: ShellKind = 'posix'): boolean {
   const trimmed = command.trim();
   if (!trimmed) return true;
+  if (hasCommandSubstitution(trimmed, kind)) return true;
   const vars: ShellVars = new Map();
   for (const segment of splitShellSegments(trimmed)) {
     if (shellSegmentBlocked(segment, cwd, scratchDirs, vars)) return true;
@@ -886,7 +926,12 @@ export function evaluateToolGuard(mode: ProfileMode | null, ctx: GuardContext): 
       return { block: true, reason: allowReason };
     }
     const command = rawCmd;
-    if (shellBlocked(command, ctx.cwd, ctx.scratchDirs)) {
+    // `powershell` and the default Windows shell escape with a backtick, so a
+    // backtick there is not substitution. `bash`/`sh` always substitute.
+    const shellKind: ShellKind = toolName === 'powershell' || (process.platform === 'win32' && toolName !== 'bash')
+      ? 'powershell'
+      : 'posix';
+    if (shellBlocked(command, ctx.cwd, ctx.scratchDirs, shellKind)) {
       return { block: true, reason: allowReason };
     }
     return { block: false };

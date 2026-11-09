@@ -197,6 +197,29 @@ try {
   check('readonly shell rm with var to src blocked', evaluateToolGuard('readonly', ctx('shell_command', `$d = "${rootDir}"; rm -rf "$d/src"`)).block === true);
   check('readonly shell var from env userprofile blocked', evaluateToolGuard('readonly', ctx('shell_command', 'Set-Content -Path "$env:USERPROFILE/x.txt" -Value hi')).block === true);
 
+  // command substitution hides a second command from the tokenizer (issue #44)
+  check('readonly bash substitution format blocked', evaluateToolGuard('readonly', ctx('bash', 'git log --oneline --format="$(rm -rf src)"')).block === true);
+  check('readonly bash substitution arg blocked', evaluateToolGuard('readonly', ctx('bash', 'git status --short "$(touch src/x)"')).block === true);
+  check('readonly bash substitution unquoted blocked', evaluateToolGuard('readonly', ctx('bash', 'git log --format=%h $(rm -rf src)')).block === true);
+  check('readonly bash backtick blocked', evaluateToolGuard('readonly', ctx('bash', 'echo `rm -rf src`')).block === true);
+  check('readonly bash backtick in double quotes blocked', evaluateToolGuard('readonly', ctx('bash', 'echo "`rm -rf src`"')).block === true);
+  check('readonly bash nested substitution blocked', evaluateToolGuard('readonly', ctx('bash', 'node -p "$(node -p 1)"')).block === true);
+  check('readonly bash gh substitution blocked', evaluateToolGuard('readonly', ctx('bash', 'gh pr create --title "$(rm -rf src)" --body y')).block === true);
+  check('readonly bash process substitution blocked', evaluateToolGuard('readonly', ctx('bash', 'git diff <(rm -rf src)')).block === true);
+  check('readonly bash output process substitution blocked', evaluateToolGuard('readonly', ctx('bash', 'tee >(rm -rf src)')).block === true);
+  check('readonly powershell substitution blocked', evaluateToolGuard('readonly', ctx('powershell', 'git log --format="$(rm -rf src)"')).block === true);
+  check('readonly powershell substitution unquoted blocked', evaluateToolGuard('readonly', ctx('powershell', 'Write-Output $(rm -rf src)')).block === true);
+  check('readonly powershell substitution in single quotes allowed', evaluateToolGuard('readonly', ctx('powershell', "git log --grep='$(foo)'")).block === false);
+
+  // literals that only look like substitution must stay allowed
+  check('readonly bash format percent allowed', evaluateToolGuard('readonly', ctx('bash', 'git log --format="%h %s"')).block === false);
+  check('readonly bash grep parens allowed', evaluateToolGuard('readonly', ctx('bash', 'git log --grep="fix(guard)"')).block === false);
+  check('readonly bash single quoted substitution allowed', evaluateToolGuard('readonly', ctx('bash', "git log --grep='$(foo)'")).block === false);
+  check('readonly bash escaped substitution allowed', evaluateToolGuard('readonly', ctx('bash', 'git log --grep="\\$("')).block === false);
+  check('readonly bash arithmetic blocked', evaluateToolGuard('readonly', ctx('bash', 'echo $((1+2))')).block === true);
+  check('readonly powershell backtick escape allowed', evaluateToolGuard('readonly', ctx('powershell', 'Write-Output "line1`nline2"')).block === false);
+  check('readonly powershell escaped substitution allowed', evaluateToolGuard('readonly', ctx('powershell', 'Write-Output "`$(literal)"')).block === false);
+
   if (failed > 0) {
     console.error(`\nValidation FAILED with ${failed} errors.`);
     process.exit(1);
