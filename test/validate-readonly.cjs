@@ -234,6 +234,59 @@ try {
   check('readonly powershell backtick escape allowed', evaluateToolGuard('readonly', ctx('powershell', 'Write-Output "line1`nline2"')).block === false);
   check('readonly powershell escaped substitution allowed', evaluateToolGuard('readonly', ctx('powershell', 'Write-Output "`$(literal)"')).block === false);
 
+  function personaCtx(persona, command) {
+    return {
+      toolName: 'powershell',
+      input: { command },
+      cwd: rootDir,
+      scratchDirs: [scratchDir],
+      persona,
+    };
+  }
+  function orchestratorBlocks(command) {
+    return evaluateToolGuard('readonly', personaCtx('orchestrator', command)).block === true;
+  }
+
+  check('orchestrator git fetch allowed', orchestratorBlocks('git fetch origin --prune') === false);
+  check('orchestrator git rebase origin/main allowed', orchestratorBlocks('git rebase origin/main') === false);
+  check('orchestrator git push branch allowed', orchestratorBlocks('git push -u origin chore/guard-shared-module') === false);
+  check('orchestrator git push force-with-lease allowed', orchestratorBlocks('git push origin HEAD --force-with-lease') === false);
+  check('orchestrator gh pr create allowed', orchestratorBlocks('gh pr create --title x --body y') === false);
+  check('orchestrator gh pr edit allowed', orchestratorBlocks('gh pr edit 55 --body z') === false);
+
+  check('orchestrator git commit blocked', orchestratorBlocks('git commit -m x') === true);
+  check('orchestrator git tag blocked', orchestratorBlocks('git tag v1.3.4') === true);
+  check('orchestrator git reset --hard blocked', orchestratorBlocks('git reset --hard origin/main') === true);
+  check('orchestrator git clean blocked', orchestratorBlocks('git clean -fd') === true);
+  check('orchestrator git push --force blocked', orchestratorBlocks('git push --force origin main') === true);
+  check('orchestrator git push -f blocked', orchestratorBlocks('git push -f origin main') === true);
+  check('orchestrator git push --delete blocked', orchestratorBlocks('git push --delete origin main') === true);
+  check('orchestrator git push --mirror blocked', orchestratorBlocks('git push --mirror origin') === true);
+  check('orchestrator git push --tags blocked', orchestratorBlocks('git push --tags origin') === true);
+  check('orchestrator git push --no-verify blocked', orchestratorBlocks('git push --no-verify origin main') === true);
+  check('orchestrator git push -o blocked', orchestratorBlocks('git push -o ci.skip origin main') === true);
+  check('orchestrator git push delete refspec blocked', orchestratorBlocks('git push origin :main') === true);
+  check('orchestrator git push force refspec blocked', orchestratorBlocks('git push origin +main') === true);
+  check('orchestrator git push to main blocked', orchestratorBlocks('git push origin main') === true);
+  check('orchestrator git push explicit main blocked', orchestratorBlocks('git push origin HEAD:main') === true);
+  check('orchestrator git rebase --exec blocked', orchestratorBlocks('git rebase --exec "rm -rf src" origin/main') === true);
+  check('orchestrator git rebase -x blocked', orchestratorBlocks('git rebase -x "rm -rf src" origin/main') === true);
+  check('orchestrator gh pr merge blocked', orchestratorBlocks('gh pr merge 55') === true);
+  check('orchestrator gh pr close blocked', orchestratorBlocks('gh pr close 55') === true);
+  check('orchestrator gh release create blocked', orchestratorBlocks('gh release create v1.3.4') === true);
+  check('orchestrator gh release edit blocked', orchestratorBlocks('gh release edit v1.3.3') === true);
+  check('orchestrator gh repo delete blocked', orchestratorBlocks('gh repo delete agirahman/righthand') === true);
+  check('orchestrator shell mutation blocked', orchestratorBlocks('rm -rf src') === true);
+  check('orchestrator chained mutation blocked', orchestratorBlocks('git push origin main && rm -rf src') === true);
+  check('orchestrator chained commit blocked', orchestratorBlocks('git push origin main; git commit -m x') === true);
+  check('orchestrator substitution mutation blocked', orchestratorBlocks('git push $(rm -rf src)') === true);
+
+  check('code-reviewer git push blocked', evaluateToolGuard('readonly', personaCtx('code-reviewer', 'git push -u origin x')).block === true);
+  check('code-reviewer git fetch blocked', evaluateToolGuard('readonly', personaCtx('code-reviewer', 'git fetch origin')).block === true);
+  check('code-reviewer gh pr edit blocked', evaluateToolGuard('readonly', personaCtx('code-reviewer', 'gh pr edit 55 --body z')).block === true);
+  check('architect git rebase blocked', evaluateToolGuard('readonly', personaCtx('architect', 'git rebase origin/main')).block === true);
+  check('no persona git push blocked', evaluateToolGuard('readonly', { toolName: 'powershell', input: { command: 'git push -u origin x' }, cwd: rootDir, scratchDirs: [scratchDir] }).block === true);
+
   if (failed > 0) {
     console.error(`\nValidation FAILED with ${failed} errors.`);
     process.exit(1);

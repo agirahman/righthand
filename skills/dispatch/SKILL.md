@@ -68,7 +68,8 @@ Missing file, missing `personas`, or a persona not present all mean full inherit
 4. Observe: wait for a settled state and confirm the transition happened.
 5. Collect: read `.righthand/tickets/<TICKET>/reports/<persona>.md` and the board event (see `report-and-board`).
 6. Gate: verify the acceptance criteria yourself; do not trust the report (see `verification`).
-7. Cleanup: close tabs you created; remove the lane only after the gate passes (see `worktree-lanes`).
+7. Integrate: once the gate passes, the orchestrator commits nothing but pushes the ticket branch and opens or updates the pull request itself, following `integration-flow`. A writer's job ends at the commit inside its lane.
+8. Cleanup: close tabs you created; remove the lane only after the gate passes and the branch is pushed (see `worktree-lanes`).
 
 ## Brief schema
 
@@ -98,7 +99,7 @@ The brief must carry these fields:
 
 ## Integration
 
-The worker follows `integration-flow`: rebase onto `origin/main` before pushing, use `--force-with-lease`, and never merge main into its branch.
+A writer ends at the commit inside its lane and reports the branch and SHA; it does not push and does not open a pull request. The orchestrator owns integration: after the gate passes it pushes the ticket branch and opens or updates the pull request, following `integration-flow` (rebase onto `origin/main`, `--force-with-lease`, never merge main into the branch). The guard enforces this split: writer personas may write and commit, and only the `orchestrator` persona among the readonly ones may run `git fetch`, `git rebase`, `git push` and `gh pr create/edit`.
 
 ## Checklist
 

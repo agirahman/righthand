@@ -119,7 +119,7 @@ RightHand was originally built as a first-class Command Code mod.
   - `/righthand off` — restore default prompt.
 - **Update after npm upgrade**: `righthand update cmdc` (re-syncs the nine capability skills to `~/.commandcode/skills` and removes profiles of retired personas)
 - **Details**: See [`.commandcode-mod/README.md`](./.commandcode-mod/README.md).
-- Readonly personas are guarded by the mod: project writes are blocked, reports go under `.righthand/`.
+- Readonly personas are guarded by the mod: project writes are blocked, reports go under `.righthand/`. `orchestrator` alone may also `git fetch`, `git rebase`, `git push` a ticket branch and `gh pr create/edit`, so it can integrate a finished ticket; `git commit`, `git tag`, force pushes, pushes to `main`, `gh pr merge` and `gh release` stay blocked for it.
 
 ### 2. Pi Coding Agent (`.pi-plugin/`)
 Pi supports native extensions that hook agent lifecycle events.

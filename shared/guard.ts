@@ -131,6 +131,39 @@ const GIT_READ_SUBCOMMANDS = new Set([
 ]);
 
 /**
+ * Readonly personas that integrate finished ticket branches: fetch, rebase,
+ * push and edit the pull request. Everyone else stays fully readonly.
+ */
+const INTEGRATION_PERSONAS = new Set(['orchestrator']);
+
+/**
+ * The only git subcommands the integration persona may run beyond the read set.
+ * Each one is still filtered so it cannot destroy work or run a command.
+ */
+const GIT_INTEGRATION_SUBCOMMANDS = new Set(['fetch', 'push', 'rebase']);
+
+const GIT_INTEGRATION_BLOCKED_FLAGS = new Set([
+  '-f', '--force', '-d', '--delete', '--mirror', '--all', '--tags',
+  '--follow-tags', '--no-verify', '--exec', '-x', '--upload-pack', '--receive-pack',
+  '-o', '--push-option',
+]);
+
+/**
+ * A refspec can delete (`:branch`) or force (`+branch`) a ref without any flag,
+ * and the orchestrator must never push to the default branch. `--force-with-lease`
+ * stays allowed because `integration-flow` requires it.
+ */
+function pushRefspecBlocked(positionals: string[]): boolean {
+  const refspecs = positionals.slice(1);
+  for (const refspec of refspecs) {
+    if (refspec.startsWith(':') || refspec.startsWith('+')) return true;
+    const destination = refspec.includes(':') ? refspec.slice(refspec.indexOf(':') + 1) : refspec;
+    if (destination === 'main' || destination === 'refs/heads/main') return true;
+  }
+  return false;
+}
+
+/**
  * gh commands that change shared state other work depends on: merging, closing,
  * reviewing, retargeting a PR, deleting, publishing releases or gists,
  * credentials, secrets and repo configuration. These stay blocked for readonly
@@ -445,10 +478,18 @@ function interpreterBlocked(command: string, args: string[], cwd: string, scratc
   return true;
 }
 
-function gitSubcommandBlocked(subcommand: string, args: string[]): boolean {
+function gitSubcommandBlocked(subcommand: string, args: string[], integration = false): boolean {
   const flags = args.filter((arg) => arg.startsWith('-'));
   const positionals = args.filter((arg) => !arg.startsWith('-'));
   const flagMatches = (pattern: RegExp): boolean => flags.some((flag) => pattern.test(flag));
+
+  if (integration && GIT_INTEGRATION_SUBCOMMANDS.has(subcommand)) {
+    if (flags.some((flag) => GIT_INTEGRATION_BLOCKED_FLAGS.has(flag))) return true;
+    if (flags.some((flag) => /^-o.+/.test(flag))) return true;
+    if (flags.some((flag) => /^--(exec|receive-pack|upload-pack|push-option)=/.test(flag))) return true;
+    if (subcommand === 'push' && pushRefspecBlocked(positionals)) return true;
+    return false;
+  }
 
   switch (subcommand) {
     case 'branch':
@@ -480,7 +521,7 @@ function gitSubcommandBlocked(subcommand: string, args: string[]): boolean {
   }
 }
 
-function gitBlocked(args: string[]): boolean {
+function gitBlocked(args: string[], integration = false): boolean {
   let index = 0;
   while (index < args.length) {
     const token = args[index];
@@ -496,12 +537,15 @@ function gitBlocked(args: string[]): boolean {
   }
   const subcommand = (args[index] || '').toLowerCase();
   if (!subcommand) return false;
-  return gitSubcommandBlocked(subcommand, args.slice(index + 1));
+  return gitSubcommandBlocked(subcommand, args.slice(index + 1), integration);
 }
 
-function ghBlocked(args: string[]): boolean {
+function ghBlocked(args: string[], integration = false): boolean {
   const positional = args.filter((arg) => !arg.startsWith('-')).map((arg) => arg.toLowerCase()).join(' ');
-  if (GH_MUTATING_PATTERNS.some((pattern) => pattern.test(positional))) return true;
+  // The integration persona maintains an open pull request: it may retarget or
+  // reword one, but merging, closing, releasing and repo surgery stay blocked.
+  const integrationAllowed = integration && /^pr\s+edit\b/.test(positional);
+  if (!integrationAllowed && GH_MUTATING_PATTERNS.some((pattern) => pattern.test(positional))) return true;
 
   if ((args[0] || '').toLowerCase() === 'api') {
     const methodIndex = args.findIndex((arg) => /^(-X|--method)$/i.test(arg));
@@ -564,10 +608,10 @@ function stripShellWrapper(command: string, args: string[]): string[] | null {
   return args.slice(index);
 }
 
-function commandBlocked(command: string, rawCommand: string, args: string[], cwd: string, scratchDirs?: string[], vars?: ShellVars): boolean {
+function commandBlocked(command: string, rawCommand: string, args: string[], cwd: string, scratchDirs?: string[], vars?: ShellVars, integration = false): boolean {
   if (SHELL_INTERPRETERS.has(command)) return interpreterBlocked(command, args, cwd, scratchDirs, vars);
-  if (command === 'git') return gitBlocked(args);
-  if (command === 'gh') return ghBlocked(args);
+  if (command === 'git') return gitBlocked(args, integration);
+  if (command === 'gh') return ghBlocked(args, integration);
   if (command === 'npm' || command === 'pnpm' || command === 'yarn') return packageManagerBlocked(args);
 
   if (command === 'sed' && !args.some((arg) => /^-i/.test(arg) || /^--in-place/.test(arg))) return false;
@@ -584,7 +628,7 @@ function commandBlocked(command: string, rawCommand: string, args: string[], cwd
   return false;
 }
 
-function shellSegmentBlocked(segment: string, cwd: string, scratchDirs?: string[], vars?: ShellVars): boolean {
+function shellSegmentBlocked(segment: string, cwd: string, scratchDirs?: string[], vars?: ShellVars, integration = false): boolean {
   const redirects = scanShellRedirects(segment);
   for (const target of redirects.targets) {
     if (!targetAllowed(target, cwd, scratchDirs, vars)) return true;
@@ -604,7 +648,7 @@ function shellSegmentBlocked(segment: string, cwd: string, scratchDirs?: string[
       commandTokens = stripped;
       continue;
     }
-    return commandBlocked(command, rawCommand, args, cwd, scratchDirs, vars);
+    return commandBlocked(command, rawCommand, args, cwd, scratchDirs, vars, integration);
   }
 
   return false;
@@ -694,7 +738,7 @@ function scanCommandSubstitutions(command: string, kind: ShellKind): Substitutio
   return { inner, masked };
 }
 
-function shellBlocked(command: string, cwd: string, scratchDirs?: string[], kind: ShellKind = 'posix', depth = 0): boolean {
+function shellBlocked(command: string, cwd: string, scratchDirs?: string[], kind: ShellKind = 'posix', depth = 0, integration = false): boolean {
   const trimmed = command.trim();
   if (!trimmed) return true;
   if (depth > 8) return true;
@@ -703,13 +747,13 @@ function shellBlocked(command: string, cwd: string, scratchDirs?: string[], kind
   // A substitution runs its own command, so judge that command too instead of
   // refusing every use of one.
   for (const innerCommand of scan.inner) {
-    if (shellBlocked(innerCommand, cwd, scratchDirs, kind, depth + 1)) return true;
+    if (shellBlocked(innerCommand, cwd, scratchDirs, kind, depth + 1, integration)) return true;
   }
   const outer = scan.masked.trim();
   if (!outer) return true;
   const vars: ShellVars = new Map();
   for (const segment of splitShellSegments(outer)) {
-    if (shellSegmentBlocked(segment, cwd, scratchDirs, vars)) return true;
+    if (shellSegmentBlocked(segment, cwd, scratchDirs, vars, integration)) return true;
     collectShellVars(segment, vars);
   }
   return false;
@@ -728,6 +772,10 @@ export function evaluateToolGuard(mode: ProfileMode | null, ctx: GuardContext): 
   };
   const toolName = toolAliases[ctx.toolName] ?? ctx.toolName;
   const allowReason = (ctx.persona || 'readonly persona') + ' is readonly: writes are limited to .righthand/ and the scratchpad. Put reports under .righthand/tickets/<ID>/reports/.';
+  // Only the integration persona gets the narrowed git/gh allowance. Every other
+  // readonly persona keeps the strict guard, and a missing persona means no
+  // allowance at all.
+  const integration = INTEGRATION_PERSONAS.has((ctx.persona || '').toLowerCase());
 
   if (toolName === 'write_file' || toolName === 'edit_file') {
     let rawPath = '';
@@ -763,7 +811,7 @@ export function evaluateToolGuard(mode: ProfileMode | null, ctx: GuardContext): 
     const shellKind: ShellKind = toolName === 'powershell' || (process.platform === 'win32' && toolName !== 'bash')
       ? 'powershell'
       : 'posix';
-    if (shellBlocked(command, ctx.cwd, ctx.scratchDirs, shellKind)) {
+    if (shellBlocked(command, ctx.cwd, ctx.scratchDirs, shellKind, 0, integration)) {
       return { block: true, reason: allowReason };
     }
     return { block: false };
