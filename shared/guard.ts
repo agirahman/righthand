@@ -1,0 +1,788 @@
+import {existsSync} from 'node:fs';
+import {homedir} from 'node:os';
+import {join, resolve, dirname} from 'node:path';
+
+export type ProfileMode = 'writer' | 'readonly';
+
+export interface GuardContext {
+  toolName: string;
+  input: unknown;
+  cwd: string;
+  scratchDirs?: string[];
+  persona?: string;
+}
+
+export interface GuardDecision {
+  block: boolean;
+  reason?: string;
+}
+
+export type ShellKind = 'powershell' | 'posix';
+
+export type ShellVars = Map<string, string>;
+
+export interface SubstitutionScan {
+  inner: string[];
+  masked: string;
+}
+
+export interface ShellRedirectScan {
+  targets: string[];
+  body: string;
+}
+
+function isInsideRoot(target: string, root: string): boolean {
+  const resolvedRoot = resolve(root);
+  const resolvedTarget = resolve(target);
+  if (resolvedTarget === resolvedRoot) return false;
+  const prefix = resolvedRoot.endsWith('/') || resolvedRoot.endsWith('\\') ? resolvedRoot : resolvedRoot + '\\';
+  // handle both separators
+  let normalizedTarget = resolvedTarget.replace(/\//g, '\\');
+  let normalizedRoot = resolvedRoot.replace(/\//g, '\\');
+  if (process.platform === 'win32') {
+    normalizedTarget = normalizedTarget.toLowerCase();
+    normalizedRoot = normalizedRoot.toLowerCase();
+  }
+  const rootWithSep = normalizedRoot.endsWith('\\') ? normalizedRoot : normalizedRoot + '\\';
+  return normalizedTarget.startsWith(rootWithSep);
+}
+
+function hasUnsafeTraversal(rawPath: string): boolean {
+  const segments = rawPath.split(/[/\\\\]/);
+  for (const seg of segments) {
+    if (seg.trim() === '..') return true;
+  }
+  return false;
+}
+
+function allowedRighthandRoot(target: string): string | null {
+  let dir = dirname(target);
+  while (true) {
+    if (dir.split(/[/\\]/).pop() === '.righthand') {
+      const root = dirname(dir);
+      if (existsSync(join(root, '.git')) || existsSync(join(root, 'package.json'))) {
+        return dir;
+      }
+      return null;
+    }
+    const parent = dirname(dir);
+    if (parent === dir) return null;
+    dir = parent;
+  }
+}
+
+function isAllowedWritePath(target: string, scratchDirs?: string[], rawPath?: string): boolean {
+  if (rawPath && hasUnsafeTraversal(rawPath)) {
+    return false;
+  }
+  const rhDir = allowedRighthandRoot(target);
+  if (rhDir) {
+    const normTarget = target.replace(/\//g, '\\').toLowerCase();
+    const normRh = rhDir.replace(/\//g, '\\').toLowerCase();
+    const sep = '\\';
+    const rootWithSep = normRh.endsWith(sep) ? normRh : normRh + sep;
+    if (normTarget.startsWith(rootWithSep)) {
+      return true;
+    }
+  }
+  if (scratchDirs) {
+    for (const dir of scratchDirs) {
+      if (isInsideRoot(target, dir)) return true;
+    }
+  }
+  return false;
+}
+
+const SHELL_INTERPRETERS = new Set([
+  'node', 'nodejs', 'deno', 'bun', 'python', 'python3', 'py',
+  'pwsh', 'powershell', 'bash', 'sh', 'zsh', 'fish',
+]);
+
+const POWERSHELL_FILE_CMDLETS = new Set([
+  'set-content', 'add-content', 'clear-content', 'set-item', 'new-item', 'remove-item',
+  'move-item', 'copy-item', 'rename-item', 'set-itemproperty', 'new-itemproperty',
+  'remove-itemproperty', 'export-csv', 'export-clixml', 'set-acl', 'out-file',
+  'tee-object', 'start-transcript', 'stop-transcript', 'compress-archive',
+  'expand-archive', 'clear-recyclebin',
+]);
+
+const POWERSHELL_PATH_FLAGS = new Set([
+  '-path', '-filepath', '-literalpath', '-destination', '-outfile', '-target', '-name',
+]);
+
+const POWERSHELL_VALUE_FLAGS = new Set([
+  '-value', '-encoding', '-itemtype', '-type', '-inputobject', '-filter', '-include',
+  '-exclude', '-stream', '-separator', '-width', '-credential', '-delimiter', '-replace',
+  '-namespace', '-property', '-propertytype',
+]);
+
+const POSIX_FILE_MUTATORS = new Set([
+  'rm', 'rmdir', 'rd', 'del', 'erase', 'mv', 'move', 'cp', 'copy', 'touch', 'mkdir',
+  'md', 'tee', 'truncate', 'ln', 'chmod', 'chown', 'sed', 'patch',
+]);
+
+const GIT_READ_SUBCOMMANDS = new Set([
+  'status', 'log', 'diff', 'show', 'describe', 'rev-parse', 'rev-list', 'ls-files',
+  'ls-tree', 'ls-remote', 'cat-file', 'shortlog', 'blame', 'grep', 'for-each-ref',
+  'merge-base', 'name-rev', 'var', 'help', 'whatchanged', 'count-objects', 'fsck',
+  'show-ref', 'show-branch', 'cherry', 'check-ignore', 'check-attr', 'check-ref-format',
+  'verify-commit', 'difftool', 'mergetool', 'range-diff', 'version', 'annotate',
+  'diff-tree', 'diff-index', 'diff-files',
+]);
+
+/**
+ * gh commands that change shared state other work depends on: merging, closing,
+ * reviewing, retargeting a PR, deleting, publishing releases or gists,
+ * credentials, secrets and repo configuration. These stay blocked for readonly
+ * personas.
+ *
+ * Content-append verbs are deliberately absent: `issue create/comment/edit` and
+ * `pr create/comment` publish text to the remote but change nothing on disk and
+ * nothing another lane builds on. `pr edit` is NOT in that set because it can
+ * retarget the base branch, and `gist create` is NOT either because it publishes
+ * local file contents.
+ */
+const GH_MUTATING_PATTERNS: RegExp[] = [
+  /^pr\s+(merge|close|reopen|ready|lock|unlock|checkout|review|edit)\b/,
+  /^issue\s+(close|reopen|delete|lock|unlock|transfer|develop)\b/,
+  /^release\s+(create|delete|edit|upload)\b/,
+  /^repo\s+(create|delete|edit|rename|archive|unarchive|fork|clone|sync|set-default)\b/,
+  /^workflow\s+(run|enable|disable)\b/,
+  /^run\s+(cancel|rerun|delete)\b/,
+  /^label\s+(create|edit|delete|clone)\b/,
+  /^(secret|variable)\s+(set|delete)\b/,
+  /^gist\s+(create|delete|edit)\b/,
+  /^auth\s+(login|logout|setup-git|refresh|token)\b/,
+  /^extension\s+(install|remove|upgrade)\b/,
+  /^config\s+set\b/,
+];
+
+const PACKAGE_MUTATING_SUBCOMMANDS = new Set([
+  'install', 'i', 'add', 'uninstall', 'un', 'remove', 'rm', 'r', 'update', 'up',
+  'upgrade', 'publish', 'unpublish', 'version', 'link', 'ci', 'dedupe', 'prune',
+  'rebuild', 'pack', 'init',
+]);
+
+function lookupShellVar(name: string, vars?: ShellVars): string | undefined {
+  if (!vars) return undefined;
+  if (vars.has(name)) return vars.get(name);
+  const lower = name.toLowerCase();
+  if (vars.has(lower)) return vars.get(lower);
+  return undefined;
+}
+
+function expandShellToken(token: string, vars?: ShellVars): string {
+  let value = token;
+  value = value.replace(/\$env:([A-Za-z_][A-Za-z0-9_]*)/gi, (match, name: string) => process.env[name] ?? match);
+  value = value.replace(/%([A-Za-z_][A-Za-z0-9_]*)%/g, (match, name: string) => process.env[name] ?? match);
+  const substitute = (input: string): string => input.replace(/\$\{([A-Za-z_][A-Za-z0-9_]*)\}|\$([A-Za-z_][A-Za-z0-9_]*)/g, (match, braced: string | undefined, plain: string | undefined) => {
+    const name = braced ?? plain;
+    if (!name) return match;
+    const fromVars = lookupShellVar(name, vars);
+    if (fromVars !== undefined) return fromVars;
+    return process.env[name] ?? match;
+  });
+  value = substitute(value);
+  // a variable whose value contains another variable or an $env: reference
+  const second = substitute(value.replace(/\$env:([A-Za-z_][A-Za-z0-9_]*)/gi, (match, name: string) => process.env[name] ?? match));
+  if (second !== value) value = second;
+  if (value === '~' || value.startsWith('~/') || value.startsWith('~\\')) {
+    value = join(homedir(), value.slice(1));
+  }
+  return value;
+}
+
+/**
+ * Record simple variable assignments so a path built from a variable can still be
+ * resolved when the assignment happens earlier in the same command.
+ * Supports `NAME=value` (bash) and `$NAME = value` / `$NAME=value` (PowerShell).
+ * Only literal values are recorded; anything unresolved stays unresolvable, which
+ * keeps the guard fail-closed.
+ */
+function collectShellVars(segment: string, vars: ShellVars): void {
+  const body = scanShellRedirects(segment).body;
+  const tokens = tokenizeShellSegment(body);
+  for (let i = 0; i < tokens.length; i++) {
+    const token = tokens[i];
+    const posix = /^([A-Za-z_][A-Za-z0-9_]*)=(.+)$/.exec(token);
+    if (posix) {
+      vars.set(posix[1], expandShellToken(posix[2].replace(/^["']|["']$/g, ''), vars));
+      continue;
+    }
+    const psInline = /^\$([A-Za-z_][A-Za-z0-9_]*)=(.+)$/.exec(token);
+    if (psInline) {
+      vars.set(psInline[1], expandShellToken(psInline[2].replace(/^["']|["']$/g, ''), vars));
+      continue;
+    }
+    const psSpaced = /^\$([A-Za-z_][A-Za-z0-9_]*)$/.exec(token);
+    if (psSpaced && tokens[i + 1] === '=') {
+      const rawValue = (tokens[i + 2] ?? '').replace(/^["']|["']$/g, '');
+      if (rawValue) vars.set(psSpaced[1], expandShellToken(rawValue, vars));
+      i += 2;
+    }
+  }
+}
+
+function looksLikePathToken(token: string): boolean {
+  if (!token || token.startsWith('-')) return false;
+  if (token.startsWith('$') || token.startsWith('%')) return false;
+  if (/^[A-Za-z]:[\\/]/.test(token)) return true;
+  if (token.startsWith('/') || token.startsWith('\\')) return true;
+  if (token.startsWith('./') || token.startsWith('../') || token.startsWith('.\\') || token.startsWith('..\\')) return true;
+  if (/[\\/]/.test(token)) return true;
+  return /\.(?:js|mjs|cjs|ts|mts|cts|jsx|tsx|json|py|ps1|sh|bat|cmd|rb|pl)$/i.test(token);
+}
+
+function splitShellSegments(command: string): string[] {
+  const segments: string[] = [];
+  let current = '';
+  let quote: string | null = null;
+  for (let i = 0; i < command.length; i++) {
+    const ch = command[i];
+    if (quote) {
+      current += ch;
+      if (ch === quote) quote = null;
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      quote = ch;
+      current += ch;
+      continue;
+    }
+    if (ch === ';' || ch === '\n' || ch === '\r') {
+      segments.push(current);
+      current = '';
+      continue;
+    }
+    if (ch === '|') {
+      segments.push(current);
+      current = '';
+      if (command[i + 1] === '|') i++;
+      continue;
+    }
+    if (ch === '&' && command[i + 1] === '&') {
+      segments.push(current);
+      current = '';
+      i++;
+      continue;
+    }
+    current += ch;
+  }
+  segments.push(current);
+  return segments.filter((segment) => segment.trim() !== '');
+}
+
+function tokenizeShellSegment(segment: string): string[] {
+  const tokens: string[] = [];
+  let current = '';
+  let quote: string | null = null;
+  for (let i = 0; i < segment.length; i++) {
+    const ch = segment[i];
+    if (quote) {
+      if (ch === quote) quote = null;
+      else current += ch;
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      quote = ch;
+      continue;
+    }
+    if (/\s/.test(ch)) {
+      if (current) {
+        tokens.push(current);
+        current = '';
+      }
+      continue;
+    }
+    current += ch;
+  }
+  if (current) tokens.push(current);
+  return tokens;
+}
+
+function scanShellRedirects(segment: string): ShellRedirectScan {
+  const chars = segment.split('');
+  const targets: string[] = [];
+  let quote: string | null = null;
+  for (let i = 0; i < segment.length; i++) {
+    const ch = segment[i];
+    if (quote) {
+      if (ch === quote) quote = null;
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      quote = ch;
+      continue;
+    }
+    if (ch !== '>') continue;
+    const next = segment[i + 1];
+    if (next === '&' || next === '=') continue;
+    const start = i;
+    let cursor = i + 1;
+    if (next === '>') cursor += 1;
+    while (cursor < segment.length && /\s/.test(segment[cursor])) cursor++;
+    if (cursor >= segment.length) {
+      for (let k = start; k < cursor; k++) chars[k] = ' ';
+      continue;
+    }
+    let target = '';
+    if (segment[cursor] === '"' || segment[cursor] === "'") {
+      const quoteChar = segment[cursor];
+      cursor += 1;
+      while (cursor < segment.length && segment[cursor] !== quoteChar) {
+        target += segment[cursor];
+        cursor++;
+      }
+      cursor += 1;
+    } else {
+      while (cursor < segment.length && !/[\s;|&]/.test(segment[cursor])) {
+        target += segment[cursor];
+        cursor++;
+      }
+    }
+    targets.push(target);
+    for (let k = start; k < cursor; k++) chars[k] = ' ';
+    i = cursor - 1;
+  }
+  return {targets, body: chars.join('')};
+}
+
+function targetAllowed(rawTarget: string, cwd: string, scratchDirs?: string[], vars?: ShellVars): boolean {
+  const expanded = expandShellToken(rawTarget.trim(), vars).replace(/^["']|["']$/g, '');
+  if (!expanded) return false;
+  const lower = expanded.toLowerCase();
+  if (lower === 'nul' || lower === '/dev/null' || lower === '$null') return true;
+  if (hasUnsafeTraversal(expanded)) return false;
+  return isAllowedWritePath(resolve(cwd, expanded), scratchDirs, expanded);
+}
+
+function posixTargets(tokens: string[], command: string): string[] {
+  const targets: string[] = [];
+  let skipNextPositional = command === 'chmod' || command === 'chown' || command === 'sed';
+  for (let i = 1; i < tokens.length; i++) {
+    const token = tokens[i];
+    if (token.startsWith('-')) continue;
+    if (skipNextPositional) {
+      skipNextPositional = false;
+      continue;
+    }
+    targets.push(token);
+  }
+  return targets;
+}
+
+function powershellTargets(tokens: string[]): string[] {
+  const targets: string[] = [];
+  for (let i = 1; i < tokens.length; i++) {
+    const token = tokens[i];
+    const isSlashFlag = /^\/[A-Za-z][A-Za-z0-9-]*$/.test(token);
+    if (!token.startsWith('-') && !isSlashFlag) {
+      targets.push(token);
+      continue;
+    }
+    const lower = token.toLowerCase();
+    if (POWERSHELL_PATH_FLAGS.has(lower)) {
+      const next = tokens[i + 1];
+      if (next && !next.startsWith('-')) {
+        targets.push(next);
+        i++;
+      }
+      continue;
+    }
+    if (POWERSHELL_VALUE_FLAGS.has(lower)) {
+      i++;
+    }
+  }
+  return targets;
+}
+
+function mutationTargetsBlocked(targets: string[], cwd: string, scratchDirs?: string[], vars?: ShellVars): boolean {
+  if (targets.length === 0) return true;
+  for (const target of targets) {
+    if (!targetAllowed(target, cwd, scratchDirs, vars)) return true;
+  }
+  return false;
+}
+
+function interpreterBlocked(command: string, args: string[], cwd: string, scratchDirs?: string[], vars?: ShellVars): boolean {
+  const lower = args.map((arg) => arg.toLowerCase());
+
+  if (command === 'node' || command === 'nodejs' || command === 'deno' || command === 'bun') {
+    if (lower.some((arg) => arg === '-e' || arg === '--eval' || arg.startsWith('--eval='))) return true;
+    if (command === 'deno' && lower[0] === 'eval') return true;
+    const script = args.find((arg) => looksLikePathToken(arg));
+    if (!script) return false;
+    return !targetAllowed(script, cwd, scratchDirs, vars);
+  }
+
+  if (command === 'python' || command === 'python3' || command === 'py') {
+    if (lower.some((arg) => arg === '-c' || arg === '-m' || arg === '-')) return true;
+    const script = args.find((arg) => looksLikePathToken(arg));
+    if (!script) return false;
+    return !targetAllowed(script, cwd, scratchDirs, vars);
+  }
+
+  if (command === 'pwsh' || command === 'powershell') {
+    if (lower.some((arg) => /^(-command|-c|-encodedcommand|-ec)$/.test(arg))) return true;
+    const fileIndex = lower.findIndex((arg) => arg === '-file' || arg === '-f');
+    if (fileIndex >= 0) {
+      const target = args[fileIndex + 1];
+      if (!target) return true;
+      return !targetAllowed(target, cwd, scratchDirs, vars);
+    }
+    const script = args.find((arg) => looksLikePathToken(arg));
+    if (script) return !targetAllowed(script, cwd, scratchDirs, vars);
+    return true;
+  }
+
+  if (command === 'bash' || command === 'sh' || command === 'zsh' || command === 'fish') {
+    if (lower.some((arg) => arg === '-c' || arg === '--command')) return true;
+    const script = args.find((arg) => looksLikePathToken(arg));
+    if (!script) return false;
+    return !targetAllowed(script, cwd, scratchDirs, vars);
+  }
+
+  return true;
+}
+
+function gitSubcommandBlocked(subcommand: string, args: string[]): boolean {
+  const flags = args.filter((arg) => arg.startsWith('-'));
+  const positionals = args.filter((arg) => !arg.startsWith('-'));
+  const flagMatches = (pattern: RegExp): boolean => flags.some((flag) => pattern.test(flag));
+
+  switch (subcommand) {
+    case 'branch':
+      if (flagMatches(/^(-d|-D|-m|-M|-c|-C|-u|-f|--delete|--move|--copy|--force|--set-upstream-to|--unset-upstream|--edit-description|--create-reflog)/)) return true;
+      if (positionals.length > 0 && !flagMatches(/^(-l|--list|--contains|--no-contains|--merged|--no-merged|--points-at)/)) return true;
+      return false;
+    case 'tag':
+      if (flagMatches(/^(-a|--annotate|-d|--delete|-m|--message|-F|--file|-s|--sign|-f|--force|-u|--local-user|-e|--edit|--cleanup)/)) return true;
+      if (positionals.length > 0 && !flagMatches(/^(-l|--list)/)) return true;
+      return false;
+    case 'worktree':
+      return !(positionals.length === 0 || positionals[0].toLowerCase() === 'list');
+    case 'remote':
+      if (positionals.length === 0) return false;
+      return !['show', 'get-url'].includes(positionals[0].toLowerCase());
+    case 'stash':
+      return !(positionals.length > 0 && ['list', 'show'].includes(positionals[0].toLowerCase()));
+    case 'reflog':
+      return !(positionals.length === 0 || ['show', 'list'].includes(positionals[0].toLowerCase()));
+    case 'config':
+      if (flagMatches(/^(--unset|--unset-all|--add|--replace-all|--rename-section|--remove-section)/)) return true;
+      return positionals.length > 1;
+    case 'submodule':
+      return !(positionals.length === 0 || ['status', 'summary'].includes(positionals[0].toLowerCase()));
+    case 'notes':
+      return !(positionals.length === 0 || ['list', 'show'].includes(positionals[0].toLowerCase()));
+    default:
+      return !GIT_READ_SUBCOMMANDS.has(subcommand);
+  }
+}
+
+function gitBlocked(args: string[]): boolean {
+  let index = 0;
+  while (index < args.length) {
+    const token = args[index];
+    if (token === '-C' || token === '-c' || token === '--git-dir' || token === '--work-tree') {
+      index += 2;
+      continue;
+    }
+    if (token.startsWith('-')) {
+      index += 1;
+      continue;
+    }
+    break;
+  }
+  const subcommand = (args[index] || '').toLowerCase();
+  if (!subcommand) return false;
+  return gitSubcommandBlocked(subcommand, args.slice(index + 1));
+}
+
+function ghBlocked(args: string[]): boolean {
+  const positional = args.filter((arg) => !arg.startsWith('-')).map((arg) => arg.toLowerCase()).join(' ');
+  if (GH_MUTATING_PATTERNS.some((pattern) => pattern.test(positional))) return true;
+
+  if ((args[0] || '').toLowerCase() === 'api') {
+    const methodIndex = args.findIndex((arg) => /^(-X|--method)$/i.test(arg));
+    if (methodIndex >= 0) {
+      const method = (args[methodIndex + 1] || '').toUpperCase();
+      if (method !== 'GET') return true;
+    }
+    if (args.some((arg) => /^--method=(?!GET$)/i.test(arg))) return true;
+    if (args.some((arg) => /^(-f|--field|--raw-field|--input)$/i.test(arg))) return true;
+  }
+
+  // Everything not listed above is either read-only (`gh pr view`, `gh issue
+  // list`) or content-append (`gh issue create`, `gh pr comment`). Neither can
+  // mutate the working tree, so a readonly persona may run it.
+  return false;
+}
+
+function packageManagerBlocked(args: string[]): boolean {
+  let index = 0;
+  while (index < args.length && args[index].startsWith('-')) {
+    if (['--prefix', '--dir', '-C', '-w', '--workspace'].includes(args[index])) index += 2;
+    else index += 1;
+  }
+  const subcommand = (args[index] || '').toLowerCase();
+  if (!subcommand) return false;
+  return PACKAGE_MUTATING_SUBCOMMANDS.has(subcommand);
+}
+
+const SHELL_WRAPPERS = new Set([
+  'sudo', 'doas', 'env', 'command', 'exec', 'nohup', 'nice', 'ionice', 'time',
+  'timeout', 'xargs', 'start', 'cmd',
+]);
+
+function stripShellWrapper(command: string, args: string[]): string[] | null {
+  if (!SHELL_WRAPPERS.has(command)) return null;
+
+  let index = 0;
+  if (command === 'cmd') {
+    while (index < args.length && /^[/-][a-z]$/i.test(args[index])) index++;
+    return args.slice(index);
+  }
+  if (command === 'timeout') {
+    while (index < args.length && args[index].startsWith('-')) index++;
+    if (index < args.length) index++;
+    return args.slice(index);
+  }
+  while (index < args.length) {
+    const token = args[index];
+    if (/^[A-Za-z_][A-Za-z0-9_]*=/.test(token)) {
+      index++;
+      continue;
+    }
+    if (token.startsWith('-') || token.startsWith('/')) {
+      const takesValue = ['-u', '-g', '-p', '-C', '-n', '-t', '-U', '-r', '-a', '--user', '--group'].includes(token);
+      index += takesValue ? 2 : 1;
+      continue;
+    }
+    break;
+  }
+  return args.slice(index);
+}
+
+function commandBlocked(command: string, rawCommand: string, args: string[], cwd: string, scratchDirs?: string[], vars?: ShellVars): boolean {
+  if (SHELL_INTERPRETERS.has(command)) return interpreterBlocked(command, args, cwd, scratchDirs, vars);
+  if (command === 'git') return gitBlocked(args);
+  if (command === 'gh') return ghBlocked(args);
+  if (command === 'npm' || command === 'pnpm' || command === 'yarn') return packageManagerBlocked(args);
+
+  if (command === 'sed' && !args.some((arg) => /^-i/.test(arg) || /^--in-place/.test(arg))) return false;
+
+  if (POWERSHELL_FILE_CMDLETS.has(command)) {
+    return mutationTargetsBlocked(powershellTargets([rawCommand, ...args]), cwd, scratchDirs, vars);
+  }
+
+  if (POSIX_FILE_MUTATORS.has(command)) {
+    if (command === 'patch') return true;
+    return mutationTargetsBlocked(posixTargets([rawCommand, ...args], command), cwd, scratchDirs, vars);
+  }
+
+  return false;
+}
+
+function shellSegmentBlocked(segment: string, cwd: string, scratchDirs?: string[], vars?: ShellVars): boolean {
+  const redirects = scanShellRedirects(segment);
+  for (const target of redirects.targets) {
+    if (!targetAllowed(target, cwd, scratchDirs, vars)) return true;
+  }
+
+  const tokens = tokenizeShellSegment(redirects.body);
+  let start = 0;
+  while (start < tokens.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(tokens[start])) start++;
+
+  let commandTokens = tokens.slice(start);
+  for (let depth = 0; commandTokens.length > 0 && depth < 8; depth++) {
+    const rawCommand = commandTokens[0];
+    const command = (rawCommand.split(/[\\/]/).pop() ?? rawCommand).replace(/\.exe$/i, '').toLowerCase();
+    const args = commandTokens.slice(1);
+    const stripped = stripShellWrapper(command, args);
+    if (stripped) {
+      commandTokens = stripped;
+      continue;
+    }
+    return commandBlocked(command, rawCommand, args, cwd, scratchDirs, vars);
+  }
+
+  return false;
+}
+
+/**
+ * Index of the character that closes a substitution opened at `openIndex`,
+ * or -1 when it never closes.
+ */
+function findSubstitutionEnd(command: string, openIndex: number, kind: ShellKind): number {
+  if (command[openIndex] === '`') {
+    for (let i = openIndex + 1; i < command.length; i++) {
+      if (kind === 'posix' && command[i] === '\\') { i += 1; continue; }
+      if (command[i] === '`') return i;
+    }
+    return -1;
+  }
+  let depth = 1;
+  let quote: string | null = null;
+  for (let i = openIndex + 2; i < command.length; i++) {
+    const ch = command[i];
+    if (quote === "'") {
+      if (ch === "'") quote = null;
+      continue;
+    }
+    if (kind === 'powershell' ? ch === '`' : ch === '\\') { i += 1; continue; }
+    if (quote === '"') {
+      if (ch === '"') { quote = null; continue; }
+    } else {
+      if (ch === "'") { quote = "'"; continue; }
+      if (ch === '"') { quote = '"'; continue; }
+    }
+    if (ch === '(') depth += 1;
+    if (ch === ')') {
+      depth -= 1;
+      if (depth === 0) return i;
+    }
+  }
+  return -1;
+}
+
+/**
+ * Split a command into the commands hidden in its substitutions and a masked
+ * version of the outer text. Returns null when a substitution never closes.
+ *
+ * Forms handled: `$(...)`, a backtick pair and, on POSIX, `<(cmd)` / `>(cmd)`.
+ *
+ * Quoting differs per shell and both matter:
+ * - single quotes make every form literal
+ * - POSIX escapes with a backslash and still substitutes inside double quotes
+ * - PowerShell escapes with a backtick, so `` `$( `` is literal text
+ */
+function scanCommandSubstitutions(command: string, kind: ShellKind): SubstitutionScan | null {
+  const inner: string[] = [];
+  let masked = '';
+  let quote: string | null = null;
+  for (let i = 0; i < command.length; i++) {
+    const ch = command[i];
+    if (quote === "'") {
+      masked += ch;
+      if (ch === "'") quote = null;
+      continue;
+    }
+    if (kind === 'powershell' ? ch === '`' : ch === '\\') {
+      masked += ch;
+      if (i + 1 < command.length) { masked += command[i + 1]; i += 1; }
+      continue;
+    }
+    if (quote === '"') {
+      if (ch === '"') { quote = null; masked += ch; continue; }
+    } else {
+      if (ch === "'") { quote = "'"; masked += ch; continue; }
+      if (ch === '"') { quote = '"'; masked += ch; continue; }
+    }
+    const opensValue = ch === '$' && command[i + 1] === '(';
+    const opensBacktick = ch === '`';
+    const opensProcess = kind === 'posix' && (ch === '<' || ch === '>') && command[i + 1] === '(';
+    if (!opensValue && !opensBacktick && !opensProcess) { masked += ch; continue; }
+    const end = findSubstitutionEnd(command, i, kind);
+    if (end < 0) return null;
+    inner.push(command.slice(i + (opensBacktick ? 1 : 2), end));
+    // the substitution's own text is not part of the outer command; a target
+    // built from it stays unresolved and therefore blocked
+    masked += ' __rh_subst__ ';
+    i = end;
+  }
+  return { inner, masked };
+}
+
+function shellBlocked(command: string, cwd: string, scratchDirs?: string[], kind: ShellKind = 'posix', depth = 0): boolean {
+  const trimmed = command.trim();
+  if (!trimmed) return true;
+  if (depth > 8) return true;
+  const scan = scanCommandSubstitutions(trimmed, kind);
+  if (!scan) return true;
+  // A substitution runs its own command, so judge that command too instead of
+  // refusing every use of one.
+  for (const innerCommand of scan.inner) {
+    if (shellBlocked(innerCommand, cwd, scratchDirs, kind, depth + 1)) return true;
+  }
+  const outer = scan.masked.trim();
+  if (!outer) return true;
+  const vars: ShellVars = new Map();
+  for (const segment of splitShellSegments(outer)) {
+    if (shellSegmentBlocked(segment, cwd, scratchDirs, vars)) return true;
+    collectShellVars(segment, vars);
+  }
+  return false;
+}
+
+export function evaluateToolGuard(mode: ProfileMode | null, ctx: GuardContext): GuardDecision {
+  if (mode !== 'readonly') {
+    return { block: false };
+  }
+
+  const toolAliases: Record<string, string> = {
+    write: 'write_file',
+    edit: 'edit_file',
+    read: 'read_file',
+    find: 'glob',
+  };
+  const toolName = toolAliases[ctx.toolName] ?? ctx.toolName;
+  const allowReason = (ctx.persona || 'readonly persona') + ' is readonly: writes are limited to .righthand/ and the scratchpad. Put reports under .righthand/tickets/<ID>/reports/.';
+
+  if (toolName === 'write_file' || toolName === 'edit_file') {
+    let rawPath = '';
+    try {
+      const input = (ctx.input && typeof ctx.input === 'object') ? (ctx.input as Record<string, unknown>) : {};
+      rawPath = typeof input.file_path === 'string' ? input.file_path : (typeof input.path === 'string' ? input.path : '');
+    } catch {
+      return { block: true, reason: allowReason };
+    }
+    if (!rawPath) {
+      return { block: true, reason: allowReason };
+    }
+    const target = resolve(ctx.cwd, rawPath);
+    if (!isAllowedWritePath(target, ctx.scratchDirs, rawPath)) {
+      return { block: true, reason: allowReason };
+    }
+    return { block: false };
+  }
+
+  const shellTools = new Set(['shell_command', 'powershell', 'bash', 'terminal']);
+  if (shellTools.has(toolName)) {
+    if (!ctx.input || typeof ctx.input !== 'object') {
+      return { block: true, reason: allowReason };
+    }
+    const input = ctx.input as Record<string, unknown>;
+    const rawCmd = input.command ?? input.script;
+    if (typeof rawCmd !== 'string' || rawCmd.trim() === '') {
+      return { block: true, reason: allowReason };
+    }
+    const command = rawCmd;
+    // `powershell` and the default Windows shell escape with a backtick, so a
+    // backtick there is not substitution. `bash`/`sh` always substitute.
+    const shellKind: ShellKind = toolName === 'powershell' || (process.platform === 'win32' && toolName !== 'bash')
+      ? 'powershell'
+      : 'posix';
+    if (shellBlocked(command, ctx.cwd, ctx.scratchDirs, shellKind)) {
+      return { block: true, reason: allowReason };
+    }
+    return { block: false };
+  }
+
+  const safeTools = new Set(['read_file', 'grep', 'glob', 'ls', 'cat']);
+  if (safeTools.has(toolName)) {
+    return { block: false };
+  }
+
+  // unknown tool: fail closed if mutating fields present
+  if (ctx.input && typeof ctx.input === 'object') {
+    const input = ctx.input as Record<string, unknown>;
+    const mutating = ['command', 'script', 'file_path', 'path', 'patch', 'content'];
+    if (mutating.some((k) => k in input)) {
+      return { block: true, reason: allowReason };
+    }
+  }
+
+  // read-only tools untouched
+  return { block: false };
+}

@@ -5,6 +5,7 @@ const root = path.join(__dirname, '..');
 const BOM = Buffer.from([0xef, 0xbb, 0xbf]);
 const TEXT_EXTENSIONS = new Set(['.json', '.ts', '.mts', '.js', '.mjs', '.cjs', '.md']);
 const SHIPPED_DIRS = [
+  'shared',
   '.commandcode-mod',
   '.pi-plugin',
   '.opencode-plugin',
