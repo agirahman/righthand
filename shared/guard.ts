@@ -1,4 +1,4 @@
-import {existsSync} from 'node:fs';
+import {existsSync, readFileSync} from 'node:fs';
 import {homedir} from 'node:os';
 import {join, resolve, dirname} from 'node:path';
 
@@ -71,6 +71,60 @@ function allowedRighthandRoot(target: string): string | null {
   }
 }
 
+/**
+ * A release edits the version in the manifests at the checkout root. A file with
+ * the same name deeper in the tree is ordinary source and stays blocked, and so
+ * does any path that walks out of the root.
+ */
+function isReleaseFile(target: string, cwd: string, rawPath: string): boolean {
+  if (hasUnsafeTraversal(rawPath)) return false;
+  const root = resolve(cwd);
+  const resolvedTarget = resolve(target);
+  if (dirname(resolvedTarget) !== root) return false;
+  return RELEASE_FILES.has(resolvedTarget.split(/[/\\]/).pop()?.toLowerCase() ?? '');
+}
+
+/**
+ * Writing `package.json` would otherwise be an execution primitive: add a
+ * `scripts` entry, then run it with the already-allowed `npm run`. A bump only
+ * needs the version fields, so every other field must survive untouched.
+ */
+function versionOnlyChange(previous: string, next: string): boolean {
+  let before: unknown;
+  let after: unknown;
+  try {
+    before = JSON.parse(previous);
+    after = JSON.parse(next);
+  } catch {
+    return false;
+  }
+  if (!before || !after || typeof before !== 'object' || typeof after !== 'object') return false;
+  const strip = (value: Record<string, unknown>): Record<string, unknown> => {
+    const copy: Record<string, unknown> = {...value};
+    delete copy.version;
+    return copy;
+  };
+  return JSON.stringify(strip(before as Record<string, unknown>)) === JSON.stringify(strip(after as Record<string, unknown>));
+}
+
+/**
+ * Reads the current manifest through the same path the write targets, and allows
+ * the write only when the change is a version bump.
+ */
+function releaseWriteAllowed(target: string, rawPath: string, input: Record<string, unknown>): boolean {
+  const next = typeof input.content === 'string' ? input.content : typeof input.new_string === 'string' ? input.new_string : null;
+  let previous: string;
+  try {
+    previous = readFileSync(target, 'utf8');
+  } catch {
+    return false;
+  }
+  if (next !== null) {
+    return versionOnlyChange(previous, next);
+  }
+  return false;
+}
+
 function isAllowedWritePath(target: string, scratchDirs?: string[], rawPath?: string): boolean {
   if (rawPath && hasUnsafeTraversal(rawPath)) {
     return false;
@@ -131,13 +185,20 @@ const GIT_READ_SUBCOMMANDS = new Set([
 ]);
 
 /**
- * Readonly personas that integrate finished ticket branches: fetch, rebase,
- * push and edit the pull request. Everyone else stays fully readonly.
+ * Readonly personas with release and integration duties: fetch, rebase, push,
+ * edit a pull request, and cut a version. Everyone else stays fully readonly,
+ * and a session with no persona gets nothing.
  */
-const INTEGRATION_PERSONAS = new Set(['orchestrator']);
+const PRIVILEGED_PERSONAS = new Set(['orchestrator']);
 
 /**
- * The only git subcommands the integration persona may run beyond the read set.
+ * The only repository files the release persona may write. Both live at the
+ * checkout root; a copy under a subdirectory is not a release file.
+ */
+const RELEASE_FILES = new Set(['package.json', 'package-lock.json']);
+
+/**
+ * The only git subcommands the privileged persona may run beyond the read set.
  * Each one is still filtered so it cannot destroy work or run a command.
  */
 const GIT_INTEGRATION_SUBCOMMANDS = new Set(['fetch', 'push', 'rebase']);
@@ -150,8 +211,9 @@ const GIT_INTEGRATION_BLOCKED_FLAGS = new Set([
 
 /**
  * A refspec can delete (`:branch`) or force (`+branch`) a ref without any flag,
- * and the orchestrator must never push to the default branch. `--force-with-lease`
- * stays allowed because `integration-flow` requires it.
+ * and the privileged persona must never push to the default branch. A tag
+ * refspec (`v1.2.3`, `refs/tags/v1.2.3`) stays allowed: releasing needs it.
+ * `--force-with-lease` stays allowed because `integration-flow` requires it.
  */
 function pushRefspecBlocked(positionals: string[]): boolean {
   const refspecs = positionals.slice(1);
@@ -162,6 +224,33 @@ function pushRefspecBlocked(positionals: string[]): boolean {
   }
   return false;
 }
+
+/**
+ * A release commit and an annotated tag both open an editor when no message is
+ * supplied, which would hang a dispatched agent instead of failing, so the
+ * message flag is required rather than merely recommended.
+ */
+function messageSupplied(flags: string[]): boolean {
+  return flags.some((flag) => /^(-m|-F|-C)$|^--(message|file|reuse-message|fixup|squash)=/.test(flag))
+    || flags.some((flag) => ['-m', '-F', '-C'].includes(flag));
+}
+
+function gitCommitBlocked(flags: string[]): boolean {
+  if (flags.some((flag) => ['--amend', '--no-verify', '-n'].includes(flag))) return true;
+  return !messageSupplied(flags);
+}
+
+function gitTagBlocked(flags: string[], positionals: string[]): boolean {
+  if (flags.some((flag) => ['-d', '--delete', '-f', '--force'].includes(flag))) return true;
+  // `-e`/`--edit` and an annotated tag without a message both wait on an editor.
+  if (flags.some((flag) => ['-e', '--edit'].includes(flag))) return true;
+  // Listing is read-only and needs no name or message.
+  if (flags.some((flag) => ['-l', '--list'].includes(flag))) return false;
+  if (positionals.length === 0) return true;
+  const annotated = flags.some((flag) => ['-a', '--annotate', '-s', '--sign'].includes(flag));
+  return annotated && !messageSupplied(flags);
+}
+
 
 /**
  * gh commands that change shared state other work depends on: merging, closing,
@@ -478,17 +567,31 @@ function interpreterBlocked(command: string, args: string[], cwd: string, scratc
   return true;
 }
 
-function gitSubcommandBlocked(subcommand: string, args: string[], integration = false): boolean {
+function gitSubcommandBlocked(subcommand: string, args: string[], privileged = false): boolean {
   const flags = args.filter((arg) => arg.startsWith('-'));
   const positionals = args.filter((arg) => !arg.startsWith('-'));
   const flagMatches = (pattern: RegExp): boolean => flags.some((flag) => pattern.test(flag));
 
-  if (integration && GIT_INTEGRATION_SUBCOMMANDS.has(subcommand)) {
+  if (privileged && subcommand === 'add') {
+    // Staging a bump only: no force, no interactive edit, no shell execution.
+    if (flags.some((flag) => ['-f', '--force', '-p', '--patch', '-i', '--interactive', '-e', '--edit', '-N', '--intent-to-add'].includes(flag))) return true;
+    return false;
+  }
+
+  if (privileged && GIT_INTEGRATION_SUBCOMMANDS.has(subcommand)) {
     if (flags.some((flag) => GIT_INTEGRATION_BLOCKED_FLAGS.has(flag))) return true;
     if (flags.some((flag) => /^-o.+/.test(flag))) return true;
     if (flags.some((flag) => /^--(exec|receive-pack|upload-pack|push-option)=/.test(flag))) return true;
     if (subcommand === 'push' && pushRefspecBlocked(positionals)) return true;
     return false;
+  }
+
+  if (privileged && subcommand === 'commit') {
+    return gitCommitBlocked(flags);
+  }
+
+  if (privileged && subcommand === 'tag') {
+    return gitTagBlocked(flags, positionals);
   }
 
   switch (subcommand) {
@@ -521,7 +624,7 @@ function gitSubcommandBlocked(subcommand: string, args: string[], integration = 
   }
 }
 
-function gitBlocked(args: string[], integration = false): boolean {
+function gitBlocked(args: string[], privileged = false): boolean {
   let index = 0;
   while (index < args.length) {
     const token = args[index];
@@ -537,15 +640,15 @@ function gitBlocked(args: string[], integration = false): boolean {
   }
   const subcommand = (args[index] || '').toLowerCase();
   if (!subcommand) return false;
-  return gitSubcommandBlocked(subcommand, args.slice(index + 1), integration);
+  return gitSubcommandBlocked(subcommand, args.slice(index + 1), privileged);
 }
 
-function ghBlocked(args: string[], integration = false): boolean {
+function ghBlocked(args: string[], privileged = false): boolean {
   const positional = args.filter((arg) => !arg.startsWith('-')).map((arg) => arg.toLowerCase()).join(' ');
-  // The integration persona maintains an open pull request: it may retarget or
-  // reword one, but merging, closing, releasing and repo surgery stay blocked.
-  const integrationAllowed = integration && /^pr\s+edit\b/.test(positional);
-  if (!integrationAllowed && GH_MUTATING_PATTERNS.some((pattern) => pattern.test(positional))) return true;
+  // The privileged persona maintains an open pull request and cuts the release
+  // that follows a merge. Merging, closing and repo surgery stay blocked.
+  const privilegedAllowed = privileged && (/^pr\s+edit\b/.test(positional) || /^release\s+(create|edit|delete|upload)\b/.test(positional));
+  if (!privilegedAllowed && GH_MUTATING_PATTERNS.some((pattern) => pattern.test(positional))) return true;
 
   if ((args[0] || '').toLowerCase() === 'api') {
     const methodIndex = args.findIndex((arg) => /^(-X|--method)$/i.test(arg));
@@ -608,10 +711,10 @@ function stripShellWrapper(command: string, args: string[]): string[] | null {
   return args.slice(index);
 }
 
-function commandBlocked(command: string, rawCommand: string, args: string[], cwd: string, scratchDirs?: string[], vars?: ShellVars, integration = false): boolean {
+function commandBlocked(command: string, rawCommand: string, args: string[], cwd: string, scratchDirs?: string[], vars?: ShellVars, privileged = false): boolean {
   if (SHELL_INTERPRETERS.has(command)) return interpreterBlocked(command, args, cwd, scratchDirs, vars);
-  if (command === 'git') return gitBlocked(args, integration);
-  if (command === 'gh') return ghBlocked(args, integration);
+  if (command === 'git') return gitBlocked(args, privileged);
+  if (command === 'gh') return ghBlocked(args, privileged);
   if (command === 'npm' || command === 'pnpm' || command === 'yarn') return packageManagerBlocked(args);
 
   if (command === 'sed' && !args.some((arg) => /^-i/.test(arg) || /^--in-place/.test(arg))) return false;
@@ -628,7 +731,7 @@ function commandBlocked(command: string, rawCommand: string, args: string[], cwd
   return false;
 }
 
-function shellSegmentBlocked(segment: string, cwd: string, scratchDirs?: string[], vars?: ShellVars, integration = false): boolean {
+function shellSegmentBlocked(segment: string, cwd: string, scratchDirs?: string[], vars?: ShellVars, privileged = false): boolean {
   const redirects = scanShellRedirects(segment);
   for (const target of redirects.targets) {
     if (!targetAllowed(target, cwd, scratchDirs, vars)) return true;
@@ -648,7 +751,7 @@ function shellSegmentBlocked(segment: string, cwd: string, scratchDirs?: string[
       commandTokens = stripped;
       continue;
     }
-    return commandBlocked(command, rawCommand, args, cwd, scratchDirs, vars, integration);
+    return commandBlocked(command, rawCommand, args, cwd, scratchDirs, vars, privileged);
   }
 
   return false;
@@ -738,7 +841,7 @@ function scanCommandSubstitutions(command: string, kind: ShellKind): Substitutio
   return { inner, masked };
 }
 
-function shellBlocked(command: string, cwd: string, scratchDirs?: string[], kind: ShellKind = 'posix', depth = 0, integration = false): boolean {
+function shellBlocked(command: string, cwd: string, scratchDirs?: string[], kind: ShellKind = 'posix', depth = 0, privileged = false): boolean {
   const trimmed = command.trim();
   if (!trimmed) return true;
   if (depth > 8) return true;
@@ -747,13 +850,13 @@ function shellBlocked(command: string, cwd: string, scratchDirs?: string[], kind
   // A substitution runs its own command, so judge that command too instead of
   // refusing every use of one.
   for (const innerCommand of scan.inner) {
-    if (shellBlocked(innerCommand, cwd, scratchDirs, kind, depth + 1, integration)) return true;
+    if (shellBlocked(innerCommand, cwd, scratchDirs, kind, depth + 1, privileged)) return true;
   }
   const outer = scan.masked.trim();
   if (!outer) return true;
   const vars: ShellVars = new Map();
   for (const segment of splitShellSegments(outer)) {
-    if (shellSegmentBlocked(segment, cwd, scratchDirs, vars, integration)) return true;
+    if (shellSegmentBlocked(segment, cwd, scratchDirs, vars, privileged)) return true;
     collectShellVars(segment, vars);
   }
   return false;
@@ -772,10 +875,10 @@ export function evaluateToolGuard(mode: ProfileMode | null, ctx: GuardContext): 
   };
   const toolName = toolAliases[ctx.toolName] ?? ctx.toolName;
   const allowReason = (ctx.persona || 'readonly persona') + ' is readonly: writes are limited to .righthand/ and the scratchpad. Put reports under .righthand/tickets/<ID>/reports/.';
-  // Only the integration persona gets the narrowed git/gh allowance. Every other
+  // Only the privileged persona gets the narrowed git/gh allowance. Every other
   // readonly persona keeps the strict guard, and a missing persona means no
   // allowance at all.
-  const integration = INTEGRATION_PERSONAS.has((ctx.persona || '').toLowerCase());
+  const privileged = PRIVILEGED_PERSONAS.has((ctx.persona || '').toLowerCase());
 
   if (toolName === 'write_file' || toolName === 'edit_file') {
     let rawPath = '';
@@ -789,6 +892,20 @@ export function evaluateToolGuard(mode: ProfileMode | null, ctx: GuardContext): 
       return { block: true, reason: allowReason };
     }
     const target = resolve(ctx.cwd, rawPath);
+    if (privileged && isReleaseFile(target, ctx.cwd, rawPath)) {
+      let input: Record<string, unknown> = {};
+      try {
+        input = (ctx.input && typeof ctx.input === 'object') ? (ctx.input as Record<string, unknown>) : {};
+      } catch {
+        return { block: true, reason: allowReason };
+      }
+      // `edit_file` carries fragments, so the resulting manifest cannot be
+      // reconstructed here. A bump writes the whole file instead.
+      if (toolName === 'write_file' && releaseWriteAllowed(target, rawPath, input)) {
+        return { block: false };
+      }
+      return { block: true, reason: allowReason };
+    }
     if (!isAllowedWritePath(target, ctx.scratchDirs, rawPath)) {
       return { block: true, reason: allowReason };
     }
@@ -811,7 +928,7 @@ export function evaluateToolGuard(mode: ProfileMode | null, ctx: GuardContext): 
     const shellKind: ShellKind = toolName === 'powershell' || (process.platform === 'win32' && toolName !== 'bash')
       ? 'powershell'
       : 'posix';
-    if (shellBlocked(command, ctx.cwd, ctx.scratchDirs, shellKind, 0, integration)) {
+    if (shellBlocked(command, ctx.cwd, ctx.scratchDirs, shellKind, 0, privileged)) {
       return { block: true, reason: allowReason };
     }
     return { block: false };

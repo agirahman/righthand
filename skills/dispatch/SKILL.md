@@ -101,6 +101,12 @@ The brief must carry these fields:
 
 A writer ends at the commit inside its lane and reports the branch and SHA; it does not push and does not open a pull request. The orchestrator owns integration: after the gate passes it pushes the ticket branch and opens or updates the pull request, following `integration-flow` (rebase onto `origin/main`, `--force-with-lease`, never merge main into the branch). The guard enforces this split: writer personas may write and commit, and only the `orchestrator` persona among the readonly ones may run `git fetch`, `git rebase`, `git push` and `gh pr create/edit`.
 
+## Release
+
+After a release pull request merges, the orchestrator cuts the version itself: bump `version` in `package.json` and `package-lock.json`, `git add` them, `git commit -m "chore(release): <version>"`, `git tag v<version>`, `git push origin v<version>`, then `gh release create v<version>` with the note format of the previous release.
+
+The guard allows only a version change to those manifests, so a `scripts` entry cannot be introduced and then run through `npm run`. It still blocks `git commit --amend`, `git commit --no-verify`, a message-less commit or annotated tag, `git tag -d/-f/-e`, force and delete pushes, pushes to `main`, `gh pr merge`, `npm version` and `npm publish`. Publishing to npm is the maintainer's step.
+
 ## Checklist
 
 - [ ] `.righthand/` exists or `righthand init` ran.
