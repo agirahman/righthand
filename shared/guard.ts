@@ -469,13 +469,15 @@ function scanShellRedirects(segment: string): ShellRedirectScan {
   return {targets, body: chars.join('')};
 }
 
-function targetAllowed(rawTarget: string, cwd: string, scratchDirs?: string[], vars?: ShellVars): boolean {
+function targetAllowed(rawTarget: string, cwd: string, scratchDirs?: string[], vars?: ShellVars, privilegedRepoRoot = false): boolean {
   const expanded = expandShellToken(rawTarget.trim(), vars).replace(/^["']|["']$/g, '');
   if (!expanded) return false;
   const lower = expanded.toLowerCase();
   if (lower === 'nul' || lower === '/dev/null' || lower === '$null') return true;
   if (hasUnsafeTraversal(expanded)) return false;
-  return isAllowedWritePath(resolve(cwd, expanded), scratchDirs, expanded);
+  const target = resolve(cwd, expanded);
+  if (privilegedRepoRoot && isInsideRoot(target, cwd)) return true;
+  return isAllowedWritePath(target, scratchDirs, expanded);
 }
 
 function posixTargets(tokens: string[], command: string): string[] {
@@ -526,7 +528,7 @@ function mutationTargetsBlocked(targets: string[], cwd: string, scratchDirs?: st
   return false;
 }
 
-function interpreterBlocked(command: string, args: string[], cwd: string, scratchDirs?: string[], vars?: ShellVars): boolean {
+function interpreterBlocked(command: string, args: string[], cwd: string, scratchDirs?: string[], vars?: ShellVars, privileged = false): boolean {
   const lower = args.map((arg) => arg.toLowerCase());
 
   if (command === 'node' || command === 'nodejs' || command === 'deno' || command === 'bun') {
@@ -534,14 +536,14 @@ function interpreterBlocked(command: string, args: string[], cwd: string, scratc
     if (command === 'deno' && lower[0] === 'eval') return true;
     const script = args.find((arg) => looksLikePathToken(arg));
     if (!script) return false;
-    return !targetAllowed(script, cwd, scratchDirs, vars);
+    return !targetAllowed(script, cwd, scratchDirs, vars, privileged);
   }
 
   if (command === 'python' || command === 'python3' || command === 'py') {
     if (lower.some((arg) => arg === '-c' || arg === '-m' || arg === '-')) return true;
     const script = args.find((arg) => looksLikePathToken(arg));
     if (!script) return false;
-    return !targetAllowed(script, cwd, scratchDirs, vars);
+    return !targetAllowed(script, cwd, scratchDirs, vars, privileged);
   }
 
   if (command === 'pwsh' || command === 'powershell') {
@@ -550,10 +552,10 @@ function interpreterBlocked(command: string, args: string[], cwd: string, scratc
     if (fileIndex >= 0) {
       const target = args[fileIndex + 1];
       if (!target) return true;
-      return !targetAllowed(target, cwd, scratchDirs, vars);
+      return !targetAllowed(target, cwd, scratchDirs, vars, privileged);
     }
     const script = args.find((arg) => looksLikePathToken(arg));
-    if (script) return !targetAllowed(script, cwd, scratchDirs, vars);
+    if (script) return !targetAllowed(script, cwd, scratchDirs, vars, privileged);
     return true;
   }
 
@@ -561,7 +563,7 @@ function interpreterBlocked(command: string, args: string[], cwd: string, scratc
     if (lower.some((arg) => arg === '-c' || arg === '--command')) return true;
     const script = args.find((arg) => looksLikePathToken(arg));
     if (!script) return false;
-    return !targetAllowed(script, cwd, scratchDirs, vars);
+    return !targetAllowed(script, cwd, scratchDirs, vars, privileged);
   }
 
   return true;
@@ -712,7 +714,7 @@ function stripShellWrapper(command: string, args: string[]): string[] | null {
 }
 
 function commandBlocked(command: string, rawCommand: string, args: string[], cwd: string, scratchDirs?: string[], vars?: ShellVars, privileged = false): boolean {
-  if (SHELL_INTERPRETERS.has(command)) return interpreterBlocked(command, args, cwd, scratchDirs, vars);
+  if (SHELL_INTERPRETERS.has(command)) return interpreterBlocked(command, args, cwd, scratchDirs, vars, privileged);
   if (command === 'git') return gitBlocked(args, privileged);
   if (command === 'gh') return ghBlocked(args, privileged);
   if (command === 'npm' || command === 'pnpm' || command === 'yarn') return packageManagerBlocked(args);
@@ -862,6 +864,77 @@ function shellBlocked(command: string, cwd: string, scratchDirs?: string[], kind
   return false;
 }
 
+function shellBlockReason(command: string, cwd: string, scratchDirs: string[] | undefined, kind: ShellKind, privileged: boolean): string {
+  const trimmed = command.trim();
+  if (!trimmed) return 'shell input was unusable, so the call was refused rather than allowed';
+  const scan = scanCommandSubstitutions(trimmed, kind);
+  if (!scan) return 'shell command substitution was malformed and refused';
+  for (const inner of scan.inner) {
+    if (shellBlocked(inner, cwd, scratchDirs, kind, 0, privileged)) {
+      const reason = shellBlockReason(inner, cwd, scratchDirs, kind, privileged);
+      return `shell command substitution was refused: ${reason}`;
+    }
+  }
+  const segments = splitShellSegments(scan.masked);
+  for (const segment of segments) {
+    const redirects = scanShellRedirects(segment);
+    if (redirects.targets.some((target) => !targetAllowed(target, cwd, scratchDirs))) {
+      return 'shell redirect target is outside the allowed write roots';
+    }
+    const tokens = tokenizeShellSegment(redirects.body);
+    if (tokens.length === 0) continue;
+    let commandTokens = tokens;
+    for (let depth = 0; depth < 8; depth++) {
+      const wrappedCommand = commandTokens[0];
+      const wrappedName = (wrappedCommand.split(/[\\/]/).pop() ?? wrappedCommand).replace(/\.exe$/i, '').toLowerCase();
+      const unwrapped = stripShellWrapper(wrappedName, commandTokens.slice(1));
+      if (!unwrapped) break;
+      commandTokens = unwrapped;
+    }
+    const rawCommand = commandTokens[0];
+    const executable = (rawCommand.split(/[\\/]/).pop() ?? rawCommand).replace(/\.exe$/i, '').toLowerCase();
+    const args = commandTokens.slice(1);
+    const lower = args.map((arg) => arg.toLowerCase());
+    if (SHELL_INTERPRETERS.has(executable)) {
+      if (lower.some((arg) => ['-e', '-c', '--eval', '--command', '-encodedcommand', '-ec'].includes(arg) || arg.startsWith('--eval='))) {
+        return 'inline evaluation is always refused; write a script instead';
+      }
+      if (executable === 'deno' && lower[0] === 'eval') {
+        return 'inline evaluation is always refused; write a script instead';
+      }
+      if ((executable === 'python' || executable === 'python3' || executable === 'py') && lower.some((arg) => arg === '-m' || arg === '-')) {
+        return 'interpreter module or stdin execution is refused; run an allowed script file instead';
+      }
+      const script = args.find((arg) => looksLikePathToken(arg));
+      if (script && !targetAllowed(script, cwd, scratchDirs, undefined, privileged)) {
+        return 'interpreter script must resolve inside .righthand/, the scratchpad, or (privileged only) the repo root';
+      }
+      return 'interpreter command was refused by the script execution rule';
+    }
+    if (executable === 'git' && gitBlocked(args, privileged)) {
+      let index = 0;
+      while (index < args.length) {
+        if (['-C', '-c', '--git-dir', '--work-tree'].includes(args[index])) index += 2;
+        else if (args[index].startsWith('-')) index += 1;
+        else break;
+      }
+      const subcommand = args[index] || 'unspecified';
+      return `git allows read-only operations${privileged ? ' and privileged integration operations' : ''}; requested subcommand '${subcommand}' is not allowed`;
+    }
+    if (['npm', 'pnpm', 'yarn'].includes(executable) && packageManagerBlocked(args)) {
+      let index = 0;
+      while (index < args.length && args[index].startsWith('-')) {
+        if (['--prefix', '--dir', '-C', '-w', '--workspace'].includes(args[index])) index += 2;
+        else index += 1;
+      }
+      return `package manager operation '${args[index] || 'unspecified'}' was refused; use npm run <script> or npm test`;
+    }
+  }
+  if (scan.inner.length > 0) return 'shell command substitution was refused';
+  if (/[;|&]/.test(trimmed)) return 'shell metacharacter was refused';
+  return 'shell command was refused by the mutation rule';
+}
+
 export function evaluateToolGuard(mode: ProfileMode | null, ctx: GuardContext): GuardDecision {
   if (mode !== 'readonly') {
     return { block: false };
@@ -874,7 +947,7 @@ export function evaluateToolGuard(mode: ProfileMode | null, ctx: GuardContext): 
     find: 'glob',
   };
   const toolName = toolAliases[ctx.toolName] ?? ctx.toolName;
-  const allowReason = (ctx.persona || 'readonly persona') + ' is readonly: writes are limited to .righthand/ and the scratchpad. Put reports under .righthand/tickets/<ID>/reports/.';
+  const writeReason = (ctx.persona || 'readonly persona').toLowerCase() + ' is readonly: writes are limited to .righthand/ and the scratchpad. Put reports under .righthand/tickets/<ID>/reports/.';
   // Only the privileged persona gets the narrowed git/gh allowance. Every other
   // readonly persona keeps the strict guard, and a missing persona means no
   // allowance at all.
@@ -886,10 +959,10 @@ export function evaluateToolGuard(mode: ProfileMode | null, ctx: GuardContext): 
       const input = (ctx.input && typeof ctx.input === 'object') ? (ctx.input as Record<string, unknown>) : {};
       rawPath = typeof input.file_path === 'string' ? input.file_path : (typeof input.path === 'string' ? input.path : '');
     } catch {
-      return { block: true, reason: allowReason };
+      return { block: true, reason: 'write input was unusable, so the call was refused rather than allowed' };
     }
     if (!rawPath) {
-      return { block: true, reason: allowReason };
+      return { block: true, reason: 'write input was unusable, so the call was refused rather than allowed' };
     }
     const target = resolve(ctx.cwd, rawPath);
     if (privileged && isReleaseFile(target, ctx.cwd, rawPath)) {
@@ -897,17 +970,22 @@ export function evaluateToolGuard(mode: ProfileMode | null, ctx: GuardContext): 
       try {
         input = (ctx.input && typeof ctx.input === 'object') ? (ctx.input as Record<string, unknown>) : {};
       } catch {
-        return { block: true, reason: allowReason };
+        return { block: true, reason: 'release manifest input was unusable, so the call was refused rather than allowed' };
       }
       // `edit_file` carries fragments, so the resulting manifest cannot be
       // reconstructed here. A bump writes the whole file instead.
       if (toolName === 'write_file' && releaseWriteAllowed(target, rawPath, input)) {
         return { block: false };
       }
-      return { block: true, reason: allowReason };
+      return {
+        block: true,
+        reason: toolName === 'edit_file'
+          ? 'release manifest can only be written whole, never patched, because the fragment cannot be verified'
+          : 'release manifest writes may only change the version and must preserve every other field',
+      };
     }
     if (!isAllowedWritePath(target, ctx.scratchDirs, rawPath)) {
-      return { block: true, reason: allowReason };
+      return { block: true, reason: writeReason };
     }
     return { block: false };
   }
@@ -915,12 +993,12 @@ export function evaluateToolGuard(mode: ProfileMode | null, ctx: GuardContext): 
   const shellTools = new Set(['shell_command', 'powershell', 'bash', 'terminal']);
   if (shellTools.has(toolName)) {
     if (!ctx.input || typeof ctx.input !== 'object') {
-      return { block: true, reason: allowReason };
+      return { block: true, reason: 'shell input was unusable, so the call was refused rather than allowed' };
     }
     const input = ctx.input as Record<string, unknown>;
     const rawCmd = input.command ?? input.script;
     if (typeof rawCmd !== 'string' || rawCmd.trim() === '') {
-      return { block: true, reason: allowReason };
+      return { block: true, reason: 'shell input was unusable, so the call was refused rather than allowed' };
     }
     const command = rawCmd;
     // `powershell` and the default Windows shell escape with a backtick, so a
@@ -929,7 +1007,7 @@ export function evaluateToolGuard(mode: ProfileMode | null, ctx: GuardContext): 
       ? 'powershell'
       : 'posix';
     if (shellBlocked(command, ctx.cwd, ctx.scratchDirs, shellKind, 0, privileged)) {
-      return { block: true, reason: allowReason };
+      return { block: true, reason: shellBlockReason(command, ctx.cwd, ctx.scratchDirs, shellKind, privileged) };
     }
     return { block: false };
   }
@@ -944,7 +1022,7 @@ export function evaluateToolGuard(mode: ProfileMode | null, ctx: GuardContext): 
     const input = ctx.input as Record<string, unknown>;
     const mutating = ['command', 'script', 'file_path', 'path', 'patch', 'content'];
     if (mutating.some((k) => k in input)) {
-      return { block: true, reason: allowReason };
+      return { block: true, reason: 'unknown tool carried a mutating field, so it was refused' };
     }
   }
 
