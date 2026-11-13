@@ -90,6 +90,25 @@ function parseModsList(output) {
   return { installed: installed, version: version };
 }
 
+function parsePiList(output) {
+  const text = String(output == null ? '' : output);
+  const lines = text.split(/\r?\n/);
+  const packages = [];
+  for (let i = 0; i < lines.length; i++) {
+    const idMatch = lines[i].match(/^\s+(npm:\S+)(?:\s+v?(\d+\.\d+\.\d+(?:-[\w.]+)?))?\s*$/i);
+    if (!idMatch) continue;
+    const packageMatch = idMatch[1].match(/^npm:(@agirahman\/righthand)(?:@v?(\d+\.\d+\.\d+(?:-[\w.]+)?))?$/i);
+    if (!packageMatch) continue;
+    const installPath = (lines[i + 1] || '').trim();
+    packages.push({
+      id: `npm:${packageMatch[1]}`,
+      version: idMatch[2] || packageMatch[2] || null,
+      path: installPath || null,
+    });
+  }
+  return packages;
+}
+
 function parseVersion(v) {
   if (typeof v !== 'string') return null;
   const m = v.trim().match(/^v?(\d+)\.(\d+)\.(\d+)/);
@@ -130,12 +149,17 @@ function collectStrictFailures(input) {
       failures.push(`mod version drift: ${mod.version} vs ${mod.expected}`);
     }
   }
+  const pi = input.pi || {};
+  if (pi.installed && pi.version && pi.expected && compareVersions(pi.version, pi.expected) === 'drift') {
+    failures.push(`pi package version drift: ${pi.version} vs ${pi.expected}`);
+  }
   return failures;
 }
 
 module.exports = {
   checkPersonaConfig: checkPersonaConfig,
   parseModsList: parseModsList,
+  parsePiList: parsePiList,
   compareVersions: compareVersions,
   collectStrictFailures: collectStrictFailures,
 };
