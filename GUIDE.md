@@ -26,7 +26,7 @@ Updates: use each harness's own update command or re-run install. Removal: use e
 ## Pi (package)
 
 ```
-pi install git:github.com/agirahman/righthand
+pi install npm:@agirahman/righthand
 ```
 
 Reads `pi.skills` from `package.json`. Update with `pi update --extensions`.

@@ -4,33 +4,37 @@ Native integration for [Pi Coding Agent](https://github.com/earendil-works/pi).
 
 ## Features
 - **Native Extension**: Located at `.pi-plugin/extensions/righthand.ts`
-- **Dynamic Slash Command**: `/righthand` with autocomplete for all 12 personas, `/righthand list`, and `/righthand off`
+- **Dynamic Slash Command**: `/righthand` with autocomplete for all 11 personas and `/righthand off`
 - **Automatic Context Injection**: Injects active persona into `systemPromptOptions.sections.righthand` before agent start
 - **Status Indicator**: Shows active persona in Pi's status bar via `ctx.ui.setStatus`
 - **CLI Sync**: Shares persistent state in `.righthand/state/active-persona.json` with the `righthand` CLI
 
 ## Setup
 
-### Option 1: Project-local (Automatic)
-Pi automatically discovers extensions in `.pi/extensions/` inside the project where it runs.
+### Option 1: Project-local extension
+From the repository root, load the extension explicitly:
 
-### Option 2: Explicit flag
 ```bash
 pi -e .pi-plugin/extensions/righthand.ts
 ```
 
-### Option 3: Global install
-Copy `.pi/extensions/righthand.ts` to `~/.pi/agent/extensions/righthand.ts`.
+### Option 2: Install the package
+
+```bash
+pi install npm:@agirahman/righthand
+```
+
+### Option 3: Global extension
+Copy `.pi-plugin/extensions/righthand.ts` to `~/.pi/agent/extensions/righthand.ts`.
 
 ## Usage in Pi
-- `/righthand` or `/righthand list` — Open interactive picker to choose a persona
-- `/righthand backend` — Switch to `backend` persona
-- `/righthand off` — Deactivate active persona
+- `/righthand` — Open the interactive picker to choose a persona
+- `/righthand <persona>` — Switch to a persona
+- `/righthand off` — Deactivate the active persona
 
 ## Usage via CLI
 ```bash
-righthand backend
-righthand list
+righthand switch <persona>
 righthand off
 ```
 Changes made via CLI immediately reflect in Pi sessions.
