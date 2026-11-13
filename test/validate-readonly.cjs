@@ -364,6 +364,22 @@ try {
   const unknownMutation = guardReason('unknown_tool', { patch: 'change' });
   check('unknown mutating tool reason names unknown tool and field', unknownMutation.block === true && /unknown tool/i.test(unknownMutation.reason || '') && /mutating field/i.test(unknownMutation.reason || ''));
 
+  const reasonCases = [
+    ['rm -rf src', /\.righthand|scratchpad|outside/i],
+    ['Remove-Item -Recurse -Force src', /\.righthand|scratchpad|outside/i],
+    ['gh pr merge 61', /gh/i],
+    ['git push origin main', /main/i],
+    ['git push --force origin main', /force/i],
+    ['git commit --amend -m x', /amend/i],
+    ['git tag -d v1', /delete/i],
+    ['git commit', /message/i],
+  ].map(([command, pattern]) => [command, pattern, orchestratorNode(command)]);
+  for (const [command, pattern, decision] of reasonCases) {
+    check(`orchestrator ${command} reason names the refusing rule`, decision.block === true && pattern.test(decision.reason || ''));
+    check(`orchestrator ${command} reason avoids generic mutation rule`, !/mutation rule/i.test(decision.reason || ''));
+  }
+  check('orchestrator rm inside .righthand remains allowed', orchestratorNode('rm -rf .righthand/tickets/T1').block === false);
+
   if (failed > 0) {
     console.error(`\nValidation FAILED with ${failed} errors.`);
     process.exit(1);
