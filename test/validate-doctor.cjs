@@ -94,6 +94,26 @@ check('parseModsList empty', () => {
   if (r.version !== null) throw new Error('version');
 });
 
+// parsePiList
+check('parsePiList real list', () => {
+  const out = 'User packages:\n  npm:@agirahman/righthand\n    C:\\Users\\Agi\\.pi\\agent\\npm\\node_modules\\@agirahman\\righthand\n';
+  const r = dc.parsePiList(out);
+  if (r.length !== 1) throw new Error('packages ' + r.length);
+  if (r[0].id !== 'npm:@agirahman/righthand') throw new Error('id ' + r[0].id);
+  if (r[0].version !== null) throw new Error('version ' + r[0].version);
+  if (r[0].path !== 'C:\\Users\\Agi\\.pi\\agent\\npm\\node_modules\\@agirahman\\righthand') throw new Error('path ' + r[0].path);
+});
+check('parsePiList with version', () => {
+  const r = dc.parsePiList('  npm:@agirahman/righthand v1.2.3\n    /home/agi/.pi/node_modules/@agirahman/righthand\n');
+  if (r.length !== 1 || r[0].version !== '1.2.3') throw new Error('version ' + (r[0] && r[0].version));
+  const suffix = dc.parsePiList('  npm:@agirahman/righthand@1.2.3\n    /home/agi/.pi/node_modules/@agirahman/righthand\n');
+  if (suffix.length !== 1 || suffix[0].version !== '1.2.3') throw new Error('suffix version ' + (suffix[0] && suffix[0].version));
+});
+check('parsePiList unrelated and empty', () => {
+  if (dc.parsePiList('  npm:other-package\n    /tmp/other\n').length !== 0) throw new Error('unrelated package');
+  if (dc.parsePiList('').length !== 0) throw new Error('empty output');
+});
+
 // compareVersions
 check('compareVersions match', () => {
   if (dc.compareVersions('1.2.0', '1.2.0') !== 'match') throw new Error('match');
@@ -147,6 +167,12 @@ check('collectStrictFailures mod drift', () => {
     mod: { parsed: true, installed: true, version: '1.1.0', expected: '1.2.0' }
   });
   if (r.length === 0) throw new Error('expected failure');
+});
+check('collectStrictFailures pi drift', () => {
+  const r = dc.collectStrictFailures({
+    pi: { installed: true, version: '1.1.0', expected: '1.2.0' }
+  });
+  if (r.indexOf('pi package version drift: 1.1.0 vs 1.2.0') === -1) throw new Error('pi drift not reported');
 });
 check('collectStrictFailures informational only', () => {
   const r = dc.collectStrictFailures({
