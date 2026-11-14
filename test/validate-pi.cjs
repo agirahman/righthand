@@ -110,6 +110,7 @@ try {
   fs.writeFileSync(path.join(packageLayout, 'package.json'), '{}');
   copyDirectory(path.join(root, 'profiles'), path.join(packageLayout, 'profiles'));
   copyDirectory(path.join(root, 'dist', 'guard'), path.join(packageLayout, 'guard'));
+  copyDirectory(path.join(root, 'dist', 'harness'), path.join(packageLayout, 'harness'));
   fs.copyFileSync(extensionPath, path.join(packageLayout, '.pi-plugin', 'extensions', 'righthand.js'));
   const packageHandlers = new Map();
   let packageCommand;
@@ -199,7 +200,7 @@ try {
   if (previousScratchpad === undefined) delete process.env.COMMANDCODE_SCRATCHPAD;
   else process.env.COMMANDCODE_SCRATCHPAD = previousScratchpad;
 
-  const extensionSource = fs.readFileSync(path.join(root, '.pi-plugin', 'extensions', 'righthand.ts'), 'utf8');
+  const extensionSource = fs.readFileSync(path.join(root, 'harness', 'pi', 'extension.ts'), 'utf8');
   check('guard exceptions fail closed structurally', extensionSource.includes('return { block: true, reason: "Blocked: the readonly guard failed to evaluate this call." };'));
 
   (async () => {
