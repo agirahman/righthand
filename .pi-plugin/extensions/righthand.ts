@@ -1,6 +1,7 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { evaluateToolGuard } from "../../shared/guard";
-import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 
 export interface PersonaMetadata {
@@ -16,6 +17,15 @@ export interface PersonaMetadata {
 function getRepoRoot(): string {
   try {
     if (typeof __dirname !== "undefined") {
+      let directory = resolve(__dirname);
+      for (let depth = 0; depth < 10; depth++) {
+        if (existsSync(join(directory, "package.json")) && existsSync(join(directory, "profiles"))) {
+          return directory;
+        }
+        const parent = dirname(directory);
+        if (parent === directory) break;
+        directory = parent;
+      }
       return resolve(__dirname, "../..");
     }
   } catch {}
@@ -60,6 +70,7 @@ function loadAllPersonas(cwd: string): Map<string, PersonaMetadata> {
   const repoRoot = getRepoRoot();
   const searchDirs = [
     join(repoRoot, "profiles"),
+    join(homedir(), ".commandcode", "profiles"),
     join(cwd, "profiles"),
     join(cwd, ".pi", "profiles"),
   ];
@@ -89,9 +100,10 @@ function getStatePath(cwd: string): string {
 
 function readActivePersona(cwd: string): string | null {
   try {
-    const p = getStatePath(cwd);
-    if (!existsSync(p)) return null;
-    const data = JSON.parse(readFileSync(p, "utf8"));
+    const statePath = getStatePath(cwd);
+    const path = existsSync(statePath) ? statePath : join(cwd, ".righthand", "active-persona.json");
+    if (!existsSync(path)) return null;
+    const data = JSON.parse(readFileSync(path, "utf8"));
     return data?.active || null;
   } catch {
     return null;
@@ -99,15 +111,25 @@ function readActivePersona(cwd: string): string | null {
 }
 
 function writeActivePersona(cwd: string, persona: string | null): void {
+  let tempPath: string | undefined;
   try {
     const dir = join(cwd, ".righthand", "state");
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+    const target = getStatePath(cwd);
+    tempPath = join(dir, `.active-persona.${process.pid}.tmp`);
     writeFileSync(
-      getStatePath(cwd),
+      tempPath,
       JSON.stringify({ active: persona, updatedAt: new Date().toISOString() }, null, 2) + "\n",
       "utf8"
     );
-  } catch {}
+    renameSync(tempPath, target);
+  } catch {
+    if (tempPath) {
+      try {
+        unlinkSync(tempPath);
+      } catch {}
+    }
+  }
 }
 
 export default function righthandExtension(pi: ExtensionAPI) {

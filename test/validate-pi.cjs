@@ -102,13 +102,61 @@ try {
   const completionNames = completions?.map((item) => item.value) || [];
   check('completions include 11 personas, list, and off', completionNames.length === 13 && ['list', 'off'].every((name) => completionNames.includes(name)) && completionNames.filter((name) => name !== 'list' && name !== 'off').length === 11);
 
+  const isolatedCwd = path.join(base, 'isolated-cwd');
+  fs.mkdirSync(isolatedCwd, { recursive: true });
+  const packageLayout = path.join(base, 'simulated-package');
+  fs.mkdirSync(path.join(packageLayout, '.pi-plugin', 'extensions'), { recursive: true });
+  fs.mkdirSync(path.join(packageLayout, 'shared'), { recursive: true });
+  fs.writeFileSync(path.join(packageLayout, 'package.json'), '{}');
+  copyDirectory(path.join(root, 'profiles'), path.join(packageLayout, 'profiles'));
+  copyDirectory(path.join(root, 'dist', 'shared'), path.join(packageLayout, 'shared'));
+  fs.copyFileSync(extensionPath, path.join(packageLayout, '.pi-plugin', 'extensions', 'righthand.js'));
+  const packageHandlers = new Map();
+  let packageCommand;
+  require(path.join(packageLayout, '.pi-plugin', 'extensions', 'righthand.js')).default({
+    on(event, handler) { packageHandlers.set(event, handler); },
+    registerCommand(name, config) { packageCommand = { name, config }; },
+  });
+  const packagePreviousCwd = process.cwd();
+  let packageCompletions;
+  try {
+    process.chdir(isolatedCwd);
+    packageCompletions = packageCommand.config.getArgumentCompletions('');
+  } finally {
+    process.chdir(packagePreviousCwd);
+  }
+  const packagePersonaCount = packageCompletions?.filter((item) => item.value !== 'list' && item.value !== 'off').length;
+  check('simulated package layout discovers all 11 shipped personas', packagePersonaCount === 11);
+
+  let distCompletions;
+  try {
+    process.chdir(isolatedCwd);
+    distCompletions = command.config.getArgumentCompletions('');
+  } finally {
+    process.chdir(packagePreviousCwd);
+  }
+  const distPersonaCount = distCompletions?.filter((item) => item.value !== 'list' && item.value !== 'off').length;
+  check('compiled dist extension walks to the repo and discovers all 11 shipped personas', distPersonaCount === 11);
+
   const activePersona = 'worker';
+  const workerBody = fs.readFileSync(path.join(profilesDir, 'worker.md'), 'utf8').split(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/m)[1].trim();
+  const legacyStatePath = path.join(repoDir, '.righthand', 'active-persona.json');
+  fs.mkdirSync(path.dirname(legacyStatePath), { recursive: true });
+  fs.writeFileSync(legacyStatePath, JSON.stringify({ active: activePersona }));
+  const legacyEvent = { systemPromptOptions: { sections: {} } };
+  handlers.get('before_agent_start')(legacyEvent, ctx);
+  check('legacy state fallback resolves the existing worker persona', typeof legacyEvent.systemPromptOptions.sections.righthand === 'string' && legacyEvent.systemPromptOptions.sections.righthand.includes(workerBody));
+
   fs.mkdirSync(path.dirname(statePath), { recursive: true });
+  fs.writeFileSync(statePath, '{"active":');
+  const truncatedEvent = { systemPromptOptions: { sections: { righthand: 'stale' } } };
+  handlers.get('before_agent_start')(truncatedEvent, ctx);
+  check('truncated state JSON returns null without activating a persona', !Object.hasOwn(truncatedEvent.systemPromptOptions.sections, 'righthand'));
+
   fs.writeFileSync(statePath, JSON.stringify({ active: activePersona }));
   const activeEvent = { systemPromptOptions: { sections: {} } };
   handlers.get('before_agent_start')(activeEvent, ctx);
   const section = activeEvent.systemPromptOptions.sections.righthand;
-  const workerBody = fs.readFileSync(path.join(profilesDir, 'worker.md'), 'utf8').split(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/m)[1].trim();
   check('active persona populates righthand section', typeof section === 'string' && section.includes('worker') && section.includes(workerBody));
 
   handlers.get('session_start')({}, ctx);
@@ -160,6 +208,9 @@ try {
     await command.config.handler(activePersona, ctx);
     const activeState = JSON.parse(fs.readFileSync(statePath, 'utf8'));
     check('state round-trip persists off then persona', inactiveState.active === null && activeState.active === activePersona);
+    check('atomic write/read round-trip preserves persona state', JSON.parse(fs.readFileSync(statePath, 'utf8')).active === activePersona);
+    const stateDirectoryEntries = fs.readdirSync(path.dirname(statePath));
+    check('atomic write leaves only active-persona.json and no temp residue', stateDirectoryEntries.length === 1 && stateDirectoryEntries[0] === 'active-persona.json');
 
     if (failed > 0) {
       console.error(`\nPi validation FAILED with ${failed} errors.`);
