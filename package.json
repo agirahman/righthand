@@ -64,6 +64,7 @@
   "files": [
     "dist",
     "guard",
+    "harness",
     ".commandcode-mod",
     ".pi-plugin",
     ".opencode-plugin",
