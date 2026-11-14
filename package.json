@@ -63,7 +63,7 @@
   },
   "files": [
     "dist",
-    "shared",
+    "guard",
     ".commandcode-mod",
     ".pi-plugin",
     ".opencode-plugin",

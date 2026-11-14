@@ -145,7 +145,7 @@ Lane creation follows the `worktree-lanes` skill. Reporting and board events fol
 - Activate a persona with `/righthand <persona>` in Pi or `righthand switch <persona>` from the CLI (`.pi-plugin/README.md:30-40`).
 - Active persona state is stored at `<cwd>/.righthand/state/active-persona.json` (`.pi-plugin/extensions/righthand.ts:86-88`, `getStatePath`).
 - Injection is automatic: the `before_agent_start` handler assigns the persona to `systemPromptOptions.sections.righthand` (`.pi-plugin/extensions/righthand.ts:155-175`, `before_agent_start`).
-- Since #50, `readonly` persona tool calls are blocked by the shared guard; before #50 Pi had no enforcement (`4cbba4e`, `.pi-plugin/extensions/righthand.ts:134-153`, `tool_call` handler).
+- Since #50, `readonly` persona tool calls are blocked by the guard/engine; before #50 Pi had no enforcement (`4cbba4e`, `.pi-plugin/extensions/righthand.ts:134-153`, `tool_call` handler).
 - Pi is not a dispatch target until `bin/persona-config.js` accepts it; the current allowlist is `['commandcode']` (`bin/persona-config.js:8,74-81`).
 
 ## Model and harness
