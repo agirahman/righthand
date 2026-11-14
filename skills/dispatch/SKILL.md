@@ -41,7 +41,7 @@ Lane creation follows the `worktree-lanes` skill. Reporting and board events fol
 
 ### Pi verified mechanics
 
-- Install with `pi install npm:@agirahman/righthand`; `righthand setup pi` runs the same command (`bin/harness.js:22-29`).
+- Install with `pi install npm:@agirahman/righthand`; `righthand setup pi` runs the same command (`bin/harness.js:22-29`, `bin/righthand.js:385-417`).
 - The package manifest declares `.pi-plugin/extensions/righthand.ts` as the extension, `./skills` as the skills directory, and `https://raw.githubusercontent.com/agirahman/righthand/main/assets/righthand-banner.png` as the image (`package.json:22-29`).
 - Pi loads TypeScript extensions with jiti: the installed `@earendil-works/pi-coding-agent` 1.3.0 `dist/core/extensions/loader.js:2,22-25,461-481` creates a jiti loader and calls `jiti.import(extensionPath)`; its manifest declares `jiti` 2.7.0. This is why the `.ts` extension entry runs directly.
 - Activate a persona with `/righthand <persona>` in Pi or `righthand switch <persona>` from the CLI (`.pi-plugin/README.md:30-40`).
