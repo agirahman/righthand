@@ -1,4 +1,5 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { evaluateToolGuard } from "../../shared/guard";
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 
@@ -128,6 +129,27 @@ export default function righthandExtension(pi: ExtensionAPI) {
 
   pi.on("session_shutdown", (_event, ctx) => {
     ctx.ui.setStatus("righthand", undefined);
+  });
+
+  pi.on("tool_call", (event, ctx) => {
+    try {
+      const active = readActivePersona(ctx.cwd);
+      if (!active) return;
+      const persona = loadAllPersonas(ctx.cwd).get(active);
+      if (!persona || persona.mode !== "readonly") return;
+      const scratchDirs = process.env.COMMANDCODE_SCRATCHPAD ? [process.env.COMMANDCODE_SCRATCHPAD] : [];
+      const decision = evaluateToolGuard(persona.mode, {
+        toolName: event.toolName,
+        input: event.input,
+        cwd: ctx.cwd,
+        scratchDirs,
+        persona: active,
+      });
+      if (decision.block) return { block: true, reason: decision.reason };
+      return undefined;
+    } catch {
+      return { block: true, reason: "Blocked: the readonly guard failed to evaluate this call." };
+    }
   });
 
   pi.on("before_agent_start", (event, ctx) => {
