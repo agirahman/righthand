@@ -328,6 +328,58 @@ try {
   check('architect git rebase blocked', evaluateToolGuard('readonly', personaCtx('architect', 'git rebase origin/main')).block === true);
   check('no persona git push blocked', evaluateToolGuard('readonly', { toolName: 'powershell', input: { command: 'git push -u origin x' }, cwd: rootDir, scratchDirs: [scratchDir] }).block === true);
 
+  const guardReason = (toolName, input, persona = 'orchestrator') => evaluateToolGuard('readonly', {
+    toolName,
+    input,
+    cwd: rootDir,
+    scratchDirs: [scratchDir],
+    persona,
+  });
+  const orchestratorNode = (command) => guardReason('powershell', { command });
+  check('orchestrator repo node script allowed', orchestratorNode(`node ${path.join(rootDir, 'test', 'validate-board.cjs')}`).block === false);
+  check('orchestrator repo node script with flags allowed', orchestratorNode(`node --enable-source-maps ${path.join(rootDir, 'test', 'x.cjs')}`).block === false);
+  check('orchestrator node eval blocked', orchestratorNode('node -e "1+1"').block === true);
+  check('orchestrator node outside root blocked', orchestratorNode(`node ${path.join(base, 'outside.js')}`).block === true);
+  check('orchestrator node traversal blocked', orchestratorNode(`node ${rootDir}${path.sep}..${path.sep}escape.js`).block === true);
+  check('orchestrator python inline blocked', orchestratorNode('python -c "print(1)"').block === true);
+  check('orchestrator bash inline blocked', orchestratorNode('bash -c "echo hi"').block === true);
+  check('code-reviewer repo node script blocked', guardReason('powershell', { command: `node ${path.join(rootDir, 'test', 'x.cjs')}` }, 'code-reviewer').block === true);
+  check('code-reviewer scratch node script allowed', guardReason('powershell', { command: `node ${path.join(scratchDir, 'probe.js')}` }, 'code-reviewer').block === false);
+  const npmPack = orchestratorNode('npm pack');
+  check('orchestrator npm pack blocked with package rule reason', npmPack.block === true && /package manager|npm run/i.test(npmPack.reason || ''));
+  const gitBranchDelete = orchestratorNode('git branch -D x');
+  check('orchestrator git branch delete blocked with git rule reason', gitBranchDelete.block === true && /git|read-only/i.test(gitBranchDelete.reason || ''));
+  const nodeEval = orchestratorNode('node -e "1+1"');
+  check('orchestrator node eval reason names inline evaluation', nodeEval.block === true && /inline evaluation/i.test(nodeEval.reason || ''));
+  const readonlyWrite = guardReason('write_file', { file_path: path.join(rootDir, 'src', 'x.js') }, 'code-reviewer');
+  check('readonly write reason names allowed roots', readonlyWrite.block === true && /\.righthand\//i.test(readonlyWrite.reason || '') && /scratchpad/i.test(readonlyWrite.reason || ''));
+  const releasePatch = guardReason('edit_file', { file_path: manifestPath, old_string: 'x', new_string: 'y' });
+  check('release manifest patch reason names whole-write rule', releasePatch.block === true && /whole|patched|fragment/i.test(releasePatch.reason || ''));
+  const badShellInput = guardReason('shell_command', { command: 42 });
+  check('unusable shell input reason names fail-closed rule', badShellInput.block === true && /unusable|refused/i.test(badShellInput.reason || ''));
+  const redirect = guardReason('shell_command', { command: 'echo hi > src/x.js' });
+  check('shell redirect reason names detected construct', redirect.block === true && /redirect/i.test(redirect.reason || ''));
+  const substitution = guardReason('bash', { command: 'echo $(rm -rf src)' });
+  check('shell substitution reason names detected construct', substitution.block === true && /substitution/i.test(substitution.reason || ''));
+  const unknownMutation = guardReason('unknown_tool', { patch: 'change' });
+  check('unknown mutating tool reason names unknown tool and field', unknownMutation.block === true && /unknown tool/i.test(unknownMutation.reason || '') && /mutating field/i.test(unknownMutation.reason || ''));
+
+  const reasonCases = [
+    ['rm -rf src', /\.righthand|scratchpad|outside/i],
+    ['Remove-Item -Recurse -Force src', /\.righthand|scratchpad|outside/i],
+    ['gh pr merge 61', /gh/i],
+    ['git push origin main', /main/i],
+    ['git push --force origin main', /force/i],
+    ['git commit --amend -m x', /amend/i],
+    ['git tag -d v1', /delete/i],
+    ['git commit', /message/i],
+  ].map(([command, pattern]) => [command, pattern, orchestratorNode(command)]);
+  for (const [command, pattern, decision] of reasonCases) {
+    check(`orchestrator ${command} reason names the refusing rule`, decision.block === true && pattern.test(decision.reason || ''));
+    check(`orchestrator ${command} reason avoids generic mutation rule`, !/mutation rule/i.test(decision.reason || ''));
+  }
+  check('orchestrator rm inside .righthand remains allowed', orchestratorNode('rm -rf .righthand/tickets/T1').block === false);
+
   if (failed > 0) {
     console.error(`\nValidation FAILED with ${failed} errors.`);
     process.exit(1);
