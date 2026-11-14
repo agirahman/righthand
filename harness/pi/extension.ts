@@ -44,7 +44,7 @@ export default function righthandExtension(pi: ExtensionAPI) {
         cwd: ctx.cwd,
         scratchDirs,
         persona: active,
-        harness: piGuardMap,
+        harness: { ...piGuardMap, shellKind: event.toolName === "bash" ? "posix" : event.toolName === "powershell" ? "powershell" : piGuardMap.shellKind },
       });
       if (decision.block) return { block: true, reason: decision.reason };
       return undefined;
