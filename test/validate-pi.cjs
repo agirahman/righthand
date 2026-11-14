@@ -124,6 +124,36 @@ try {
   const shutdownStatus = statuses.at(-1);
   check('session_shutdown clears status through ctx.ui.setStatus', shutdownStatus?.key === 'righthand' && shutdownStatus.value === undefined);
 
+  const toolCallHandler = handlers.get('tool_call');
+  check('tool_call handler registered', typeof toolCallHandler === 'function');
+  const scratchDir = path.join(base, 'scratch');
+  fs.mkdirSync(scratchDir, { recursive: true });
+  const previousScratchpad = process.env.COMMANDCODE_SCRATCHPAD;
+  process.env.COMMANDCODE_SCRATCHPAD = scratchDir;
+  const toolCall = (toolName, input) => toolCallHandler({ type: 'tool_call', toolCallId: 'test', toolName, input }, ctx);
+
+  fs.writeFileSync(statePath, JSON.stringify({ active: 'security-auditor' }));
+  check('readonly write to src blocked', toolCall('write', { path: 'src/x.js', content: 'x' })?.block === true);
+  check('readonly edit to src blocked', toolCall('edit', { path: 'src/x.js', edits: [{ oldText: 'x', newText: 'y' }] })?.block === true);
+  check('readonly bash rm blocked', toolCall('bash', { command: 'rm -rf src' })?.block === true);
+  check('readonly bash git status allowed', toolCall('bash', { command: 'git status' })?.block !== true);
+  check('readonly write to .righthand reports allowed', toolCall('write', { path: '.righthand/tickets/T1/reports/r.md', content: 'report' })?.block !== true);
+  check('readonly write to COMMANDCODE_SCRATCHPAD allowed', toolCall('write', { path: path.join(scratchDir, 'r.md'), content: 'report' })?.block !== true);
+  check('readonly read allowed', toolCall('read', { path: 'src/x.js' })?.block !== true);
+  check('readonly grep allowed', toolCall('grep', { pattern: 'x' })?.block !== true);
+  check('readonly find allowed', toolCall('find', { pattern: '**/*.js' })?.block !== true);
+  check('readonly ls allowed', toolCall('ls', {})?.block !== true);
+
+  fs.writeFileSync(statePath, JSON.stringify({ active: 'worker' }));
+  check('writer write to src allowed', toolCall('write', { path: 'src/x.js', content: 'x' })?.block !== true);
+  fs.writeFileSync(statePath, JSON.stringify({ active: null }));
+  check('no active persona write to src allowed', toolCall('write', { path: 'src/x.js', content: 'x' })?.block !== true);
+  if (previousScratchpad === undefined) delete process.env.COMMANDCODE_SCRATCHPAD;
+  else process.env.COMMANDCODE_SCRATCHPAD = previousScratchpad;
+
+  const extensionSource = fs.readFileSync(path.join(root, '.pi-plugin', 'extensions', 'righthand.ts'), 'utf8');
+  check('guard exceptions fail closed structurally', extensionSource.includes('return { block: true, reason: "Blocked: the readonly guard failed to evaluate this call." };'));
+
   (async () => {
     await command.config.handler('off', ctx);
     const inactiveState = JSON.parse(fs.readFileSync(statePath, 'utf8'));
