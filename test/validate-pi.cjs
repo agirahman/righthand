@@ -106,10 +106,10 @@ try {
   fs.mkdirSync(isolatedCwd, { recursive: true });
   const packageLayout = path.join(base, 'simulated-package');
   fs.mkdirSync(path.join(packageLayout, '.pi-plugin', 'extensions'), { recursive: true });
-  fs.mkdirSync(path.join(packageLayout, 'shared'), { recursive: true });
+  fs.mkdirSync(path.join(packageLayout, 'guard'), { recursive: true });
   fs.writeFileSync(path.join(packageLayout, 'package.json'), '{}');
   copyDirectory(path.join(root, 'profiles'), path.join(packageLayout, 'profiles'));
-  copyDirectory(path.join(root, 'dist', 'shared'), path.join(packageLayout, 'shared'));
+  copyDirectory(path.join(root, 'dist', 'guard'), path.join(packageLayout, 'guard'));
   fs.copyFileSync(extensionPath, path.join(packageLayout, '.pi-plugin', 'extensions', 'righthand.js'));
   const packageHandlers = new Map();
   let packageCommand;

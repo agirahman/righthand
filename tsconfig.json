@@ -14,6 +14,6 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true
   },
-  "include": ["shared/**/*", ".commandcode-mod/mods/**/*", ".pi-plugin/extensions/**/*", ".omp/extensions/**/*", "types/**/*"],
+  "include": ["guard/**/*", ".commandcode-mod/mods/**/*", ".pi-plugin/extensions/**/*", ".omp/extensions/**/*", "types/**/*"],
   "exclude": ["node_modules", "dist", "test"]
 }

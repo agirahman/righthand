@@ -1,35 +1,8 @@
 import {existsSync, readFileSync} from 'node:fs';
 import {homedir} from 'node:os';
 import {join, resolve, dirname} from 'node:path';
-
-export type ProfileMode = 'writer' | 'readonly';
-
-export interface GuardContext {
-  toolName: string;
-  input: unknown;
-  cwd: string;
-  scratchDirs?: string[];
-  persona?: string;
-}
-
-export interface GuardDecision {
-  block: boolean;
-  reason?: string;
-}
-
-export type ShellKind = 'powershell' | 'posix';
-
-export type ShellVars = Map<string, string>;
-
-export interface SubstitutionScan {
-  inner: string[];
-  masked: string;
-}
-
-export interface ShellRedirectScan {
-  targets: string[];
-  body: string;
-}
+import {resolvePersonaPolicy} from './personas';
+import type {GuardContext, GuardDecision, ProfileMode, ShellKind, ShellRedirectScan, ShellVars, SubstitutionScan} from './types';
 
 function isInsideRoot(target: string, root: string): boolean {
   const resolvedRoot = resolve(root);
@@ -183,13 +156,6 @@ const GIT_READ_SUBCOMMANDS = new Set([
   'verify-commit', 'difftool', 'mergetool', 'range-diff', 'version', 'annotate',
   'diff-tree', 'diff-index', 'diff-files',
 ]);
-
-/**
- * Readonly personas with release and integration duties: fetch, rebase, push,
- * edit a pull request, and cut a version. Everyone else stays fully readonly,
- * and a session with no persona gets nothing.
- */
-const PRIVILEGED_PERSONAS = new Set(['orchestrator']);
 
 /**
  * The only repository files the release persona may write. Both live at the
@@ -1019,7 +985,7 @@ export function evaluateToolGuard(mode: ProfileMode | null, ctx: GuardContext): 
     return { block: false };
   }
 
-  const toolAliases: Record<string, string> = {
+  const toolAliases: Record<string, string> = ctx.harness?.toolAliases ?? {
     write: 'write_file',
     edit: 'edit_file',
     read: 'read_file',
@@ -1027,10 +993,8 @@ export function evaluateToolGuard(mode: ProfileMode | null, ctx: GuardContext): 
   };
   const toolName = toolAliases[ctx.toolName] ?? ctx.toolName;
   const writeReason = (ctx.persona || 'readonly persona').toLowerCase() + ' is readonly: writes are limited to .righthand/ and the scratchpad. Put reports under .righthand/tickets/<ID>/reports/.';
-  // Only the privileged persona gets the narrowed git/gh allowance. Every other
-  // readonly persona keeps the strict guard, and a missing persona means no
-  // allowance at all.
-  const privileged = PRIVILEGED_PERSONAS.has((ctx.persona || '').toLowerCase());
+  const policy = resolvePersonaPolicy(ctx.persona);
+  const privileged = policy.git.allowIntegration;
 
   if (toolName === 'write_file' || toolName === 'edit_file') {
     let rawPath = '';
@@ -1069,7 +1033,7 @@ export function evaluateToolGuard(mode: ProfileMode | null, ctx: GuardContext): 
     return { block: false };
   }
 
-  const shellTools = new Set(['shell_command', 'powershell', 'bash', 'terminal']);
+  const shellTools = new Set(ctx.harness?.shellTools ?? ['shell_command', 'powershell', 'bash', 'terminal']);
   if (shellTools.has(toolName)) {
     if (!ctx.input || typeof ctx.input !== 'object') {
       return { block: true, reason: 'shell input was unusable, so the call was refused rather than allowed' };
@@ -1082,9 +1046,9 @@ export function evaluateToolGuard(mode: ProfileMode | null, ctx: GuardContext): 
     const command = rawCmd;
     // `powershell` and the default Windows shell escape with a backtick, so a
     // backtick there is not substitution. `bash`/`sh` always substitute.
-    const shellKind: ShellKind = toolName === 'powershell' || (process.platform === 'win32' && toolName !== 'bash')
+    const shellKind: ShellKind = ctx.harness?.shellKind ?? (toolName === 'powershell' || (process.platform === 'win32' && toolName !== 'bash')
       ? 'powershell'
-      : 'posix';
+      : 'posix');
     if (shellBlocked(command, ctx.cwd, ctx.scratchDirs, shellKind, 0, privileged)) {
       return { block: true, reason: shellBlockReason(command, ctx.cwd, ctx.scratchDirs, shellKind, privileged, ctx.persona) };
     }

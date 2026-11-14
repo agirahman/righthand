@@ -23,16 +23,16 @@ import type {ModApi} from '@commandcode/harness';
 import {readFileSync, readdirSync, writeFileSync, mkdirSync, existsSync, renameSync} from 'node:fs';
 import {homedir} from 'node:os';
 import {join, resolve} from 'node:path';
-import {
-  evaluateToolGuard,
-  type ProfileMode,
-  type GuardContext,
-  type GuardDecision,
-  type ShellKind,
-  type ShellVars,
-  type SubstitutionScan,
-  type ShellRedirectScan,
-} from '../../shared/guard';
+import {evaluateToolGuard} from '../../guard/engine';
+import type {
+  ProfileMode,
+  GuardContext,
+  GuardDecision,
+  ShellKind,
+  ShellVars,
+  SubstitutionScan,
+  ShellRedirectScan,
+} from '../../guard/types';
 
 export {
   evaluateToolGuard,
