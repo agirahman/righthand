@@ -45,9 +45,9 @@ Lane creation follows the `worktree-lanes` skill. Reporting and board events fol
 - The package manifest declares `.pi-plugin/extensions/righthand.ts` as the extension, `./skills` as the skills directory, and `https://raw.githubusercontent.com/agirahman/righthand/main/assets/righthand-banner.png` as the image (`package.json:22-29`).
 - Pi loads TypeScript extensions with jiti: the installed `@earendil-works/pi-coding-agent` 1.3.0 `dist/core/extensions/loader.js:2,22-25,461-481` creates a jiti loader and calls `jiti.import(extensionPath)`; its manifest declares `jiti` 2.7.0. This is why the `.ts` extension entry runs directly.
 - Activate a persona with `/righthand <persona>` in Pi or `righthand switch <persona>` from the CLI (`.pi-plugin/README.md:30-40`).
-- Active persona state is stored at `<cwd>/.righthand/state/active-persona.json` (`.pi-plugin/extensions/righthand.ts:86-88`).
-- Injection is automatic: `before_agent_start` assigns the persona to `systemPromptOptions.sections.righthand` (`.pi-plugin/extensions/righthand.ts:155-175`).
-- Since #50, `readonly` persona tool calls are blocked by the shared guard; before #50 Pi had no enforcement (`4cbba4e`, `.pi-plugin/extensions/righthand.ts:134-153`).
+- Active persona state is stored at `<cwd>/.righthand/state/active-persona.json` (`.pi-plugin/extensions/righthand.ts:86-88`, `getStatePath`).
+- Injection is automatic: the `before_agent_start` handler assigns the persona to `systemPromptOptions.sections.righthand` (`.pi-plugin/extensions/righthand.ts:155-175`, `before_agent_start`).
+- Since #50, `readonly` persona tool calls are blocked by the shared guard; before #50 Pi had no enforcement (`4cbba4e`, `.pi-plugin/extensions/righthand.ts:134-153`, `tool_call` handler).
 - Pi is not a dispatch target until `bin/persona-config.js` accepts it; the current allowlist is `['commandcode']` (`bin/persona-config.js:8,74-81`).
 
 ## Model and harness
