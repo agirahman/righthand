@@ -8,6 +8,7 @@ declare module 'node:fs' {
   export function mkdirSync(path: string, options?: { recursive?: boolean }): void;
   export function writeFileSync(path: string, data: string, encoding?: string): void;
   export function renameSync(oldPath: string, newPath: string): void;
+  export function unlinkSync(path: string): void;
 }
 
 declare module 'node:os' {
@@ -31,6 +32,7 @@ declare module 'fs' {
   export function mkdirSync(path: string, options?: { recursive?: boolean }): void;
   export function writeFileSync(path: string, data: string, encoding?: string): void;
   export function renameSync(oldPath: string, newPath: string): void;
+  export function unlinkSync(path: string): void;
 }
 
 declare module 'os' {
