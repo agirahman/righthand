@@ -32,7 +32,7 @@
     "righthand": "./bin/righthand.js"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "node scripts/clean-dist.js && tsc",
     "prepublishOnly": "npm run build",
     "build:agents": "node scripts/build-agents.js",
     "typecheck": "tsc --noEmit",
