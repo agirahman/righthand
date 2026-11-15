@@ -225,7 +225,11 @@ try {
 
   const drift = spawnSync(process.execPath, [path.join(root, 'scripts', 'bundle-harness.js'), '--check'], { cwd: root, encoding: 'utf8', shell: false });
   const driftOutput = `${drift.stdout || ''}${drift.stderr || ''}`;
-  check('CLI check discovers zero bundle configs', drift.status === 0 && /Summary: 0 discovered configs? \(0 bundles\)\./.test(driftOutput));
+  const configCount = fs.readdirSync(path.join(root, 'harness'), { withFileTypes: true })
+    .filter((entry) => entry.isDirectory() && fs.existsSync(path.join(root, 'harness', entry.name, 'bundle.config.cjs')))
+    .length;
+  check('CLI check reports one summary line per discovered bundle config',
+    drift.status === 0 && new RegExp(`Summary: ${configCount} discovered configs? \\(${configCount} bundles?\\)\\.`).test(driftOutput));
   if (drift.stdout) process.stdout.write(drift.stdout);
   if (drift.stderr) process.stderr.write(drift.stderr);
 
