@@ -19,6 +19,36 @@ function check(name, condition) {
   }
 }
 
+function createFixture(name, files) {
+  const fixtureRoot = path.join(tempDir, name);
+  for (const [relative, content] of Object.entries(files)) {
+    const filePath = path.join(fixtureRoot, relative);
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    fs.writeFileSync(filePath, content);
+  }
+  return fixtureRoot;
+}
+
+function capture(name, action, verify) {
+  try {
+    const result = action();
+    check(name, verify(result));
+  } catch (error) {
+    check(name, false);
+    console.error(`  ${error.message}`);
+  }
+}
+
+function expectFailure(name, action, pattern) {
+  let error;
+  try {
+    action();
+  } catch (caught) {
+    error = caught;
+  }
+  check(name, Boolean(error && pattern.test(error.message)));
+}
+
 function makeHost(extension, persona, profilesDir) {
   const cwd = fs.mkdtempSync(path.join(tempDir, `host-${persona}-`));
   fs.mkdirSync(path.join(cwd, '.git'), { recursive: true });
@@ -36,6 +66,9 @@ function makeHost(extension, persona, profilesDir) {
     { name: 'write-blocked', toolName: 'write', input: { path: 'src/file.ts', content: 'x' } },
     { name: 'righthand-allowed', toolName: 'write', input: { path: '.righthand/tickets/T69/reports/result.md', content: 'x' } },
     { name: 'shell-blocked', toolName: 'bash', input: { command: 'rm -rf src/file.ts' } },
+    { name: 'read-source', toolName: 'read', input: { path: 'src/file.ts' } },
+    { name: 'edit-source', toolName: 'edit', input: { file_path: 'src/file.ts', old_string: 'x', new_string: 'y' } },
+    { name: 'shell-safe', toolName: 'bash', input: { command: 'git status --short' } },
   ];
   const toolCall = hooks.find((hook) => hook.name === 'tool_call');
   const decisions = corpus.map((item) => ({
@@ -104,8 +137,8 @@ try {
   check('round-trip deep-equal: bundled Pi and source adapter for all 11 personas', parity.length === 11);
   const readonlyRecord = parity.find((item) => item.persona === 'code-reviewer');
   const writerRecord = parity.find((item) => item.persona === 'worker');
-  check('readonly corpus blocks write and shell, allows .righthand/', readonlyRecord?.source.decisions.map((item) => item.block).join(',') === 'true,false,true');
-  check('writer corpus allows all three calls', writerRecord?.source.decisions.map((item) => item.block).join(',') === 'false,false,false');
+  check('readonly corpus blocks writes and shell mutation, allows .righthand/, and matches all six source/bundle calls', readonlyRecord?.source.decisions.map((item) => item.block).join(',') === 'true,false,true,false,true,false' && assert.deepEqual(readonlyRecord.bundled.decisions, readonlyRecord.source.decisions) === undefined);
+  check('writer corpus allows all six calls and matches source/bundle', writerRecord?.source.decisions.map((item) => item.block).join(',') === 'false,false,false,false,false,false' && assert.deepEqual(writerRecord.bundled.decisions, writerRecord.source.decisions) === undefined);
   console.log(`EVIDENCE: ${JSON.stringify({ readonly: readonlyRecord, writer: writerRecord }, null, 2)}`);
 
   const bundleInfo = first.results[0].info;
@@ -131,10 +164,64 @@ try {
   const reexportDir = path.join(reexportRoot, 'harness', 'demo');
   fs.mkdirSync(reexportDir, { recursive: true });
   fs.writeFileSync(path.join(reexportDir, 'extension.ts'), "import { helper } from './index';\nexport default function demoExtension() { return helper(); }\n");
-  fs.writeFileSync(path.join(reexportDir, 'index.ts'), "export { helper } from './helper';\n");
+  fs.writeFileSync(path.join(reexportDir, 'index.ts'), "export { helper } from './helper';\nexport type {\n  HelperType\n} from './types';\n");
   fs.writeFileSync(path.join(reexportDir, 'helper.ts'), 'export function helper() { return 1; }\n');
+  fs.writeFileSync(path.join(reexportDir, 'types.ts'), 'export type HelperType = string;\n');
   const reexport = bundle({ rootDir: reexportRoot, entry: 'harness/demo/extension.ts', dest: 'demo.mjs', format: 'ts', defaultExport: 'demoExtension' });
-  check('re-export-only modules are included in the graph', reexport.results[0].output.includes('function helper() { return 1; }')); 
+  check('re-export-only modules are included in the graph', reexport.results[0].output.includes('function helper() { return 1; }') && reexport.results[0].output.includes('type HelperType = string;') && !reexport.results[0].output.includes('export type { HelperType }'));
+
+  const multiImportRoot = createFixture('multiline-import-fixture', {
+    'harness/demo/extension.ts': "import {\n  helper\n} from './helper.js';\nexport default function demoExtension() { return helper(); }\n",
+    'harness/demo/helper.ts': 'export function helper() { return 42; }\n',
+  });
+  const multiImport = bundle({ rootDir: multiImportRoot, entry: 'harness/demo/extension.ts', dest: 'demo.ts', format: 'ts', defaultExport: 'demoExtension' }).results[0].output;
+  check('multi-line imports inline dependencies and leave no relative specifier', multiImport.includes('function helper() { return 42; }') && !/from\s+['"]\./.test(multiImport));
+
+  const duplicateOffsetRoot = createFixture('duplicate-offset-fixture', {
+    'harness/demo/extension.ts': "type Repeated = 'same';\ntype Repeated = 'same';\ntype Repeated = 'same';\nconst survivor = 'SURVIVE_AFTER_DUPLICATES';\nexport default function demoExtension() { return survivor; }\n",
+  });
+  const duplicateOffset = bundle({ rootDir: duplicateOffsetRoot, entry: 'harness/demo/extension.ts', dest: 'demo.ts', format: 'ts', defaultExport: 'demoExtension' }).results[0];
+  check('multiple duplicate ranges are removed without corrupting adjacent source', duplicateOffset.output.includes("const survivor = 'SURVIVE_AFTER_DUPLICATES';") && (duplicateOffset.output.match(/type Repeated/g) || []).length === 1 && duplicateOffset.info.duplicateDrops.length === 2);
+
+  const multilineTypeRoot = createFixture('multiline-type-fixture', {
+    'harness/demo/extension.ts': "import { first } from './first';\nimport './second';\nexport default function demoExtension() { return first; }\n",
+    'harness/demo/first.ts': "export type Shared =\n  | 'first';\nexport const first = 1;\n",
+    'harness/demo/second.ts': "export type Shared =\n  | 'second';\n",
+  });
+  expectFailure('different multi-line types are not treated as identical duplicates', () => bundle({ rootDir: multilineTypeRoot, entry: 'harness/demo/extension.ts', dest: 'demo.ts', format: 'ts', defaultExport: 'demoExtension' }), /Duplicate top-level declaration 'Shared'/);
+
+  const externalRoot = createFixture('ambient-stub-fixture', {
+    'harness/demo/extension.ts': "import { externalValue } from '@righthand-fixture/missing-package';\nexport default function demoExtension() { return externalValue(); }\n",
+  });
+  fs.symlinkSync(path.join(root, 'node_modules'), path.join(externalRoot, 'node_modules'), 'junction');
+  capture('uninstalled external runtime imports compile with ambient stubs', () => bundle({ rootDir: externalRoot, entry: 'harness/demo/extension.ts', dest: 'demo.mjs', format: 'js', defaultExport: 'demoExtension' }).results[0].output, (output) => /@righthand-fixture\/missing-package/.test(output));
+
+  const maskedSyntaxRoot = createFixture('masked-syntax-fixture', {
+    'harness/demo/extension.ts': "const template = `\nimport { phantom } from './template-missing';\ntype Ghost = 'template';\n`;\n/*\nimport { phantom } from './comment-missing';\ntype Ghost = 'comment';\n*/\ntype Ghost = 'real';\nexport default function demoExtension() { return template; }\n",
+  });
+  capture('comments and template contents are ignored by scanners', () => bundle({ rootDir: maskedSyntaxRoot, entry: 'harness/demo/extension.ts', dest: 'demo.ts', format: 'ts', defaultExport: 'demoExtension' }).results[0].output, (output) => output.includes("type Ghost = 'real';") && output.includes("type Ghost = 'template';") && output.includes("type Ghost = 'comment';"));
+
+  const arrayConfigRoot = createFixture('array-config-fixture', {
+    'harness/demo/bundle.config.cjs': "module.exports = [{ entry: 'harness/demo/one.ts', dest: 'one.ts', format: 'ts', defaultExport: 'one' }, { entry: 'harness/demo/two.ts', dest: 'two.ts', format: 'ts', defaultExport: 'two' }];\n",
+    'harness/demo/one.ts': 'export default function one() {}\n',
+    'harness/demo/two.ts': 'export default function two() {}\n',
+  });
+  check('array bundle configs produce every configured bundle', bundle({ rootDir: arrayConfigRoot }).count === 2);
+
+  const negativeRoot = createFixture('negative-fixtures', {
+    'harness/demo/extension.ts': "import { first } from './first';\nexport default function demoExtension() { return first; }\n",
+    'harness/demo/first.ts': "import { second } from './second';\nexport const first = second;\n",
+    'harness/demo/second.ts': "import { first } from './first';\nexport const second = first;\n",
+    'harness/demo/unresolved.ts': "import { missing } from './missing';\nexport default function demoExtension() { return missing; }\n",
+    'harness/demo/unsupported.ts': 'export default () => 1;\n',
+    'harness/demo/escaping.ts': "import { outside } from '../../../outside.js';\nexport default function demoExtension() { return outside; }\n",
+  });
+  fs.writeFileSync(path.join(tempDir, 'outside.ts'), 'export const outside = 1;\n');
+  const negativeConfig = (entry) => ({ rootDir: negativeRoot, entry, dest: 'out.ts', format: 'ts', defaultExport: entry === 'harness/demo/unsupported.ts' ? 'unsupported' : 'demoExtension' });
+  expectFailure('circular imports are refused', () => bundle(negativeConfig('harness/demo/extension.ts')), /Circular relative import/);
+  expectFailure('unresolvable relative imports are refused', () => bundle(negativeConfig('harness/demo/unresolved.ts')), /Cannot resolve relative import/);
+  expectFailure('unsupported default exports are refused', () => bundle(negativeConfig('harness/demo/unsupported.ts')), /Unsupported default export form/);
+  expectFailure('imports escaping the repository are refused', () => bundle(negativeConfig('harness/demo/escaping.ts')), /Relative import escapes repository root/);
 
   const drift = spawnSync(process.execPath, [path.join(root, 'scripts', 'bundle-harness.js'), '--check'], { cwd: root, encoding: 'utf8', shell: false });
   const driftOutput = `${drift.stdout || ''}${drift.stderr || ''}`;

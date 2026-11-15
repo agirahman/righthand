@@ -28,15 +28,61 @@ function resolveImport(fromFile, specifier, rootDir) {
   return resolved;
 }
 
+function maskCommentsAndTemplates(source) {
+  const masked = source.split('');
+  let state = 'code';
+  for (let index = 0; index < source.length; index++) {
+    const character = source[index];
+    const next = source[index + 1];
+    if (state === 'code') {
+      if (character === "'") state = 'single';
+      else if (character === '"') state = 'double';
+      else if (character === '`') {
+        masked[index] = ' ';
+        state = 'template';
+      } else if (character === '/' && next === '*') {
+        masked[index] = ' ';
+        masked[index + 1] = ' ';
+        index++;
+        state = 'block';
+      } else if (character === '/' && next === '/') {
+        masked[index] = ' ';
+        masked[index + 1] = ' ';
+        index++;
+        state = 'line';
+      }
+    } else if (state === 'single' || state === 'double') {
+      if (character === '\\') index++;
+      else if ((state === 'single' && character === "'") || (state === 'double' && character === '"')) state = 'code';
+    } else if (state === 'template') {
+      if (character !== '\n' && character !== '\r') masked[index] = ' ';
+      if (character === '\\') {
+        if (source[index + 1] !== '\n' && source[index + 1] !== '\r') masked[index + 1] = ' ';
+        index++;
+      } else if (character === '`') state = 'code';
+    } else {
+      if (character !== '\n' && character !== '\r') masked[index] = ' ';
+      if (state === 'block' && character === '*' && next === '/') {
+        masked[index + 1] = ' ';
+        index++;
+        state = 'code';
+      } else if (state === 'line' && (character === '\n' || character === '\r')) state = 'code';
+    }
+  }
+  return masked.join('');
+}
+
 function parseImports(source) {
   const imports = [];
-  const pattern = /^[ \t]*(import|export)\s+(?:(type)\s+)?([^\r\n]*?)\s+from\s+(['"])([^'"]+)\4\s*;?[ \t]*$/gm;
+  const scanned = maskCommentsAndTemplates(source);
+  const clause = '((?:(?:[\\w$]+[ \\t]*,[ \\t]*)?\\{[^}]*\\}|(?:[\\w$]+[ \\t]*,[ \\t]*)?\\*(?:[ \\t]+as[ \\t]+[\\w$]+)?)|[\\w$]+)';
+  const pattern = new RegExp(`^[ \\t]*(import|export)\\s+(?:(type)\\s+)?${clause}[ \\t\\r\\n]*from[ \\t\\r\\n]*(['"])([^'"\\r\\n]+)\\4[ \\t]*;?[ \\t]*$`, 'gm');
   let match;
-  while ((match = pattern.exec(source))) {
+  while ((match = pattern.exec(scanned))) {
     imports.push({ start: match.index, end: pattern.lastIndex, typeOnly: Boolean(match[2]), clause: match[3].trim(), specifier: match[5], reexport: match[1] === 'export' });
   }
-  const sideEffectPattern = /^[ \t]*import\s+(['"])([^'"]+)\1\s*;?[ \t]*$/gm;
-  while ((match = sideEffectPattern.exec(source))) {
+  const sideEffectPattern = /^[ \t]*import\s+(['"])([^'"\r\n]+)\1\s*;?[ \t]*$/gm;
+  while ((match = sideEffectPattern.exec(scanned))) {
     if (imports.some((item) => item.start <= match.index && item.end >= sideEffectPattern.lastIndex)) continue;
     imports.push({ start: match.index, end: sideEffectPattern.lastIndex, typeOnly: false, clause: '', specifier: match[2], sideEffect: true });
   }
@@ -117,14 +163,15 @@ function addImport(groups, imported, typeAliases) {
 
 function declarationMatches(source) {
   const declarations = [];
+  const scanned = maskCommentsAndTemplates(source);
   const pattern = /^(?:export\s+)?(?:(?:declare|abstract|async)\s+)*(const|let|var|function|class|interface|type|enum|namespace)\s+([A-Za-z_$][\w$]*)\b/gm;
   let match;
-  while ((match = pattern.exec(source))) {
+  while ((match = pattern.exec(scanned))) {
     let end = source.indexOf('\n', match.index);
     if (end < 0) end = source.length;
     if (match[1] === 'type') {
-      const semicolon = source.indexOf(';', match.index);
-      if (semicolon >= 0 && semicolon < end) end = semicolon + 1;
+      const semicolon = scanned.indexOf(';', match.index);
+      if (semicolon >= 0) end = semicolon + 1;
     }
     declarations.push({ name: match[2], kind: match[1], start: match.index, end, text: source.slice(match.index, end).trim() });
   }
@@ -151,7 +198,6 @@ function stripExports(source, file, isEntry, defaults) {
   }
   const unsupported = /^\s*export\s+default\b/m.exec(output);
   if (unsupported) throw new Error(`Unsupported default export form in ${file}; use a named function or identifier`);
-  output = output.replace(/^[ \t]*export\s+(?:\*|\{[\s\S]*?\})\s*(?:from\s*(['"][^'"]+['"]))?\s*;?[ \t]*$/gm, '');
   output = output.replace(/^(\s*)export\s+(?=(?:(?:declare|abstract|async)\s+)*(?:const|let|var|function|class|interface|type|enum|namespace)\b)/gm, '$1');
   return output;
 }
@@ -170,8 +216,17 @@ function mergeExternalImports(groups) {
   return output;
 }
 
-function ambientTypeStubs() {
-  return '';
+function ambientTypeStubs(external, rootDir) {
+  const missing = Array.from(external.keys()).filter((specifier) => {
+    if (specifier.startsWith('node:')) return false;
+    try {
+      require.resolve(specifier, { paths: [rootDir] });
+      return false;
+    } catch {
+      return true;
+    }
+  });
+  return missing.length ? `${missing.map((specifier) => `declare module '${specifier}';`).join('\n')}\n` : '';
 }
 
 function buildBundle(config, rootDir) {
@@ -217,6 +272,7 @@ function buildBundle(config, rootDir) {
     let source = item.source;
     for (const range of importRanges.get(item.file).slice().reverse()) source = removeRange(source, range.start, range.end);
     const declarations = declarationMatches(source);
+    const rangesToRemove = [];
     for (const declaration of declarations) {
       const previous = names.get(declaration.name);
       if (!previous) {
@@ -224,12 +280,13 @@ function buildBundle(config, rootDir) {
         continue;
       }
       if (declaration.kind === 'type' && previous.kind === 'type' && declaration.text.replace(/^export\s+/, '') === previous.text.replace(/^export\s+/, '')) {
-        source = removeRange(source, declaration.start, declaration.end);
+        rangesToRemove.push({ start: declaration.start, end: declaration.end });
         duplicateDrops.push({ name: declaration.name, first: path.relative(rootDir, previous.file).replace(/\\/g, '/'), duplicate: path.relative(rootDir, item.file).replace(/\\/g, '/') });
         continue;
       }
       throw new Error(`Duplicate top-level declaration '${declaration.name}' in ${path.relative(rootDir, previous.file).replace(/\\/g, '/')} and ${path.relative(rootDir, item.file).replace(/\\/g, '/')}`);
     }
+    for (const range of rangesToRemove.sort((a, b) => b.start - a.start)) source = removeRange(source, range.start, range.end);
     source = stripExports(source, path.relative(rootDir, item.file).replace(/\\/g, '/'), item.file === entry, defaults);
     emitted.push(source.trim());
   }
@@ -249,7 +306,7 @@ function transpileJavaScript(body, info, rootDir) {
     const inputPath = path.join(tempDir, `bundle${info.intermediateExt}`);
     const stubPath = path.join(tempDir, 'bundle-external-types.d.ts');
     fs.writeFileSync(inputPath, body, 'utf8');
-    const stubs = ambientTypeStubs(info.external);
+    const stubs = ambientTypeStubs(info.external, rootDir);
     if (stubs) fs.writeFileSync(stubPath, stubs, 'utf8');
     const outputDir = path.join(tempDir, 'out');
     const compiler = path.join(rootDir, 'node_modules', 'typescript', 'bin', 'tsc');
@@ -271,10 +328,11 @@ function normalizeEol(content) {
 }
 
 function checkImportHygiene(output, config) {
-  if (/\b(?:import|export)[ \t]+(?:[^'";\r\n]*?[ \t]+from[ \t]*)?['"]\./m.test(output)) {
+  const imports = parseImports(output);
+  if (imports.some((item) => item.specifier.startsWith('.'))) {
     throw new Error(`Relative import survived in generated output for ${config.entry}`);
   }
-  const specifiers = Array.from(output.matchAll(/^[ \t]*import[ \t]+(?:[^'";\r\n]*?[ \t]+from[ \t]*)?['"]([^'"]+)['"][ \t]*;[ \t]*$/gm), (match) => match[1]);
+  const specifiers = imports.filter((item) => !item.reexport).map((item) => item.specifier);
   for (const specifier of new Set(specifiers)) {
     const count = specifiers.filter((item) => item === specifier).length;
     if (count !== 1) throw new Error(`External import '${specifier}' appears in ${count} statements for ${config.entry}`);
