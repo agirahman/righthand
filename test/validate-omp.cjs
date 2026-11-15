@@ -81,6 +81,7 @@ try {
     'write src/file.ts': toolCall('write', { path: 'src/file.ts', content: 'x' })?.block === true,
     'write report': toolCall('write', { path: '.righthand/tickets/T70/reports/result.md', content: 'x' })?.block === true,
     'bash rm -rf src/file.ts': toolCall('bash', { command: 'rm -rf src/file.ts' })?.block === true,
+    'bash process substitution': toolCall('bash', { command: 'cat <(rm -rf src/file.ts)' })?.block === true,
     read: toolCall('read', { path: 'src/file.ts' })?.block === true,
     grep: toolCall('grep', { pattern: 'x' })?.block === true,
     glob: toolCall('glob', { pattern: '**/*.ts' })?.block === true,
@@ -91,8 +92,10 @@ try {
   check('readonly read allows', !readonlyDecisions.read);
   check('readonly grep allows', !readonlyDecisions.grep);
   check('readonly glob allows', !readonlyDecisions.glob);
-  check('Windows bash destructive command blocked by per-call dialect',
+  check('Windows bash rm blocks under either dialect',
     process.platform !== 'win32' || readonlyDecisions['bash rm -rf src/file.ts']);
+  check('Windows bash process substitution blocks under per-call POSIX dialect',
+    process.platform !== 'win32' || readonlyDecisions['bash process substitution']);
 
   fs.writeFileSync(statePath, JSON.stringify({ active: 'worker' }));
   const writerDecisions = {
