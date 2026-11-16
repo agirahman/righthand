@@ -457,7 +457,8 @@ async function main() {
 
     const neuteredPath = path.join(tempDir, 'neutered-server.js');
     const dialectExpression = 'event.tool === "bash" ? "posix" : event.tool === "powershell" ? "powershell" : openCodeGuardMap.shellKind';
-    const neutered = server.source.replace(dialectExpression, 'openCodeGuardMap.shellKind');
+    const neutered = server.source.replace(dialectExpression, '"powershell"');
+    check('dialect mutation changes the tracked bundle', neutered !== server.source);
     fs.writeFileSync(neuteredPath, neutered);
     const neuteredServer = makeHarness(neuteredPath);
     const neuteredContext = {
