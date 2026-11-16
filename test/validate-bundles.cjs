@@ -226,8 +226,9 @@ try {
   const drift = spawnSync(process.execPath, [path.join(root, 'scripts', 'bundle-harness.js'), '--check'], { cwd: root, encoding: 'utf8', shell: false });
   const driftOutput = `${drift.stdout || ''}${drift.stderr || ''}`;
   const bundleCount = require('../scripts/bundle-harness.js').bundle({ check: true }).count;
-  check('CLI check reports the real number of discovered bundles',
-    drift.status === 0 && new RegExp(`Summary: ${bundleCount} discovered configs? \\(${bundleCount} bundles?\\)\\.`).test(driftOutput));
+  check('CLI check reports the expected repository bundle total',
+    drift.status === 0 && /Summary: 3 discovered configs? \(3 bundles?\)\./.test(driftOutput));
+  check('CLI bundle count agrees with the independent repository total', bundleCount === 3);
   if (drift.stdout) process.stdout.write(drift.stdout);
   if (drift.stderr) process.stderr.write(drift.stderr);
 

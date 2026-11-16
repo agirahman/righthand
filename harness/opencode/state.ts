@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
+import { readActivePersona } from "../common/state.js";
 
 export const MAX_AGE = 30 * 24 * 60 * 60 * 1000;
 
@@ -15,6 +16,10 @@ export interface OpenCodeState {
 }
 
 const statePath = join(homedir(), ".local", "state", "opencode", "righthand.json");
+
+export function activePersonaForSession(sessionID: string, cwd: string): string | null {
+  return loadSessionState().sessions?.[sessionID]?.persona ?? readActivePersona(cwd);
+}
 
 export function loadSessionState(): OpenCodeState {
   try {

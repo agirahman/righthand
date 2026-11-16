@@ -309,6 +309,9 @@ function completionCandidates(personas, prefix) {
 }
 const MAX_AGE = 30 * 24 * 60 * 60 * 1000;
 const statePath = join(homedir(), ".local", "state", "opencode", "righthand.json");
+function activePersonaForSession(sessionID, cwd) {
+    return loadSessionState().sessions?.[sessionID]?.persona ?? readActivePersona(cwd);
+}
 function loadSessionState() {
     try {
         const parsed = JSON.parse(readFileSync(statePath, "utf8"));
@@ -345,7 +348,10 @@ function saveSessionState(state) {
     }
 }
 const packageProfilesDir = join(getRepoRoot(), "profiles");
-const loadOpenCodePersonas = (cwd) => loadAllPersonas(cwd, { packageDir: packageProfilesDir });
+const loadOpenCodePersonas = (cwd) => loadAllPersonas(cwd, {
+    packageDir: packageProfilesDir,
+    projectDirs: [join(cwd, "profiles"), join(cwd, ".commandcode", "profiles"), join(cwd, ".opencode", "profiles")],
+});
 function PersonaFooter(props) {
     const context = usePlugin();
     const isChild = createMemo(() => {
@@ -358,7 +364,7 @@ function PersonaFooter(props) {
         const id = props.sessionID;
         if (!id)
             return undefined;
-        const name = props.active[id];
+        const name = props.active[id] ?? activePersonaForSession(id, process.cwd());
         if (!name)
             return undefined;
         const persona = props.available.find((item) => item.name.toLowerCase() === name.toLowerCase());
@@ -393,7 +399,6 @@ const righthandOpenCodeTui = Plugin.define({
             else
                 delete state.sessions[sessionID];
             saveSessionState(state);
-            writeActivePersona(cwd, persona?.name.toLowerCase() ?? null);
             await update((draft) => {
                 if (persona)
                     draft.active[sessionID] = persona.name.toLowerCase();
@@ -403,7 +408,7 @@ const righthandOpenCodeTui = Plugin.define({
             context.ui.toast.show({
                 message: persona
                     ? `RightHand persona: ${persona.role} (${persona.mode})`
-                    : "Persona dinonaktifkan — kembali ke default.",
+                    : "Persona dinonaktifkan - kembali ke default.",
                 variant: "success",
             });
         };
@@ -419,12 +424,12 @@ const righthandOpenCodeTui = Plugin.define({
                 return;
             }
             const profiles = Array.from(loadOpenCodePersonas(cwd).values()).sort((a, b) => a.name.localeCompare(b.name));
-            const currentName = loadSessionState().sessions[sessionID]?.persona;
+            const currentName = activePersonaForSession(sessionID, cwd) ?? undefined;
             const rawArg = (input ?? "").trim().toLowerCase();
             const action = parseRighthandArgs(rawArg);
             if (action.action === "list") {
                 const lines = profiles.length > 0
-                    ? profiles.map((persona) => `${persona.name === currentName ? "=>" : "  "} ${persona.name}${persona.mode === "writer" ? " (writer)" : ""} — ${persona.desc || persona.role}`)
+                    ? profiles.map((persona) => `${persona.name === currentName ? "=>" : "  "} ${persona.name}${persona.mode === "writer" ? " (writer)" : ""} - ${persona.desc || persona.role}`)
                     : ["Belum ada persona di profiles/"];
                 await context.ui.dialog.alert({ title: "RightHand Personas", message: [...lines, "", "Pakai: /righthand <nama>  |  /righthand off"].join("\n") });
                 return;
@@ -446,7 +451,7 @@ const righthandOpenCodeTui = Plugin.define({
                         ...profiles.map((persona) => ({
                             title: persona.name,
                             value: persona.name,
-                            description: (persona.name === currentName ? "aktif — " : "") + `${persona.desc || persona.role}${persona.mode === "writer" ? " [writer]" : ""}`,
+                            description: (persona.name === currentName ? "aktif - " : "") + `${persona.desc || persona.role}${persona.mode === "writer" ? " [writer]" : ""}`,
                         })),
                     ],
                 });

@@ -1203,7 +1203,7 @@ function evaluateToolGuard(mode, ctx) {
     // unknown tool: fail closed if mutating fields present
     if (ctx.input && typeof ctx.input === 'object') {
         const input = ctx.input;
-        const mutating = ['command', 'script', 'file_path', 'path', 'patch', 'content'];
+        const mutating = ['command', 'script', 'file_path', 'path', 'patch', 'content', 'filePath', 'patchText'];
         if (mutating.some((k) => k in input)) {
             return { block: true, reason: 'unknown tool carried a mutating field, so it was refused' };
         }
@@ -1524,6 +1524,9 @@ const openCodeGuardMap = {
 };
 const MAX_AGE = 30 * 24 * 60 * 60 * 1000;
 const statePath = join(homedir(), ".local", "state", "opencode", "righthand.json");
+function activePersonaForSession(sessionID, cwd) {
+    return loadSessionState().sessions?.[sessionID]?.persona ?? readActivePersona(cwd);
+}
 function loadSessionState() {
     try {
         const parsed = JSON.parse(readFileSync(statePath, "utf8"));
@@ -1560,8 +1563,10 @@ function saveSessionState(state) {
     }
 }
 const packageProfilesDir = join(getRepoRoot(), "profiles");
-const loadOpenCodePersonas = (cwd) => loadAllPersonas(cwd, { packageDir: packageProfilesDir });
-const activePersonaForSession = (sessionID, cwd) => loadSessionState().sessions?.[sessionID]?.persona ?? readActivePersona(cwd);
+const loadOpenCodePersonas = (cwd) => loadAllPersonas(cwd, {
+    packageDir: packageProfilesDir,
+    projectDirs: [join(cwd, "profiles"), join(cwd, ".commandcode", "profiles"), join(cwd, ".opencode", "profiles")],
+});
 const righthandOpenCodePlugin = Plugin.define({
     id: "user.righthand.server",
     async setup(context) {
@@ -1581,7 +1586,7 @@ const righthandOpenCodePlugin = Plugin.define({
                 text: buildPersonaPrompt(persona),
             });
         });
-        const toolRegistration = context.tool.hook("execute.before", (event) => {
+        const toolRegistration = await context.tool.hook("execute.before", (event) => {
             let refusal;
             try {
                 const active = activePersonaForSession(event.sessionID, cwd);
@@ -1590,18 +1595,33 @@ const righthandOpenCodePlugin = Plugin.define({
                 const persona = loadOpenCodePersonas(cwd).get(active.toLowerCase());
                 if (!persona || persona.mode !== "readonly")
                     return;
-                const shellKind = event.tool === "bash" ? "posix" : event.tool === "powershell" ? "powershell" : openCodeGuardMap.shellKind;
-                const scratchDirs = process.env.COMMANDCODE_SCRATCHPAD ? [process.env.COMMANDCODE_SCRATCHPAD] : [];
-                const decision = evaluateToolGuard(persona.mode, {
-                    toolName: event.tool,
-                    input: event.input,
-                    cwd,
-                    scratchDirs,
-                    persona: active,
-                    harness: { ...openCodeGuardMap, shellKind },
-                });
-                if (decision.block)
-                    refusal = decision.reason ?? "Blocked by the readonly guard.";
+                if (event.tool === "apply_patch") {
+                    refusal = "apply_patch can rewrite any file, so it is refused for readonly personas";
+                }
+                else if (event.tool === "batch") {
+                    refusal = "batch may bypass execute.before for nested tools, so it is refused for readonly personas";
+                }
+                else {
+                    const shellKind = event.tool === "bash" ? "posix" : event.tool === "powershell" ? "powershell" : openCodeGuardMap.shellKind;
+                    const scratchDirs = process.env.COMMANDCODE_SCRATCHPAD ? [process.env.COMMANDCODE_SCRATCHPAD] : [];
+                    const input = event.input && typeof event.input === "object" ? event.input : {};
+                    const normalizedInput = (event.tool === "write" || event.tool === "edit")
+                        && typeof input.filePath === "string"
+                        && !("file_path" in input)
+                        && !("path" in input)
+                        ? { ...input, file_path: input.filePath }
+                        : input;
+                    const decision = evaluateToolGuard(persona.mode, {
+                        toolName: event.tool,
+                        input: normalizedInput,
+                        cwd,
+                        scratchDirs,
+                        persona: active,
+                        harness: { ...openCodeGuardMap, shellKind },
+                    });
+                    if (decision.block)
+                        refusal = decision.reason ?? "Blocked by the readonly guard.";
+                }
             }
             catch {
                 throw new Error("Blocked: the readonly guard failed to evaluate this call.");

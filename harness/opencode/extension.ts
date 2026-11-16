@@ -1,20 +1,17 @@
 import { evaluateToolGuard } from "../../guard/engine.js";
 import { Plugin } from "@opencode/plugin";
 import { loadAllPersonas, getRepoRoot, type PersonaMetadata } from "../common/index.js";
-import { readActivePersona } from "../common/state.js";
 import { buildPersonaPrompt } from "../common/prompt.js";
-import { buildStatusLabel } from "../common/status.js";
-import { completionCandidates, parseRighthandArgs } from "../common/commands.js";
 import { join } from "node:path";
 import { openCodeGuardMap } from "./guard-map.js";
-import { loadSessionState } from "./state.js";
+import { activePersonaForSession } from "./state.js";
 
 const packageProfilesDir = join(getRepoRoot(), "profiles");
 const loadOpenCodePersonas = (cwd: string): Map<string, PersonaMetadata> =>
-  loadAllPersonas(cwd, { packageDir: packageProfilesDir });
-
-const activePersonaForSession = (sessionID: string, cwd: string): string | null =>
-  loadSessionState().sessions?.[sessionID]?.persona ?? readActivePersona(cwd);
+  loadAllPersonas(cwd, {
+    packageDir: packageProfilesDir,
+    projectDirs: [join(cwd, "profiles"), join(cwd, ".commandcode", "profiles"), join(cwd, ".opencode", "profiles")],
+  });
 
 export const righthandOpenCodePlugin = Plugin.define({
   id: "user.righthand.server",
@@ -36,25 +33,37 @@ export const righthandOpenCodePlugin = Plugin.define({
       });
     });
 
-    const toolRegistration = context.tool.hook("execute.before", (event: any) => {
+    const toolRegistration = await context.tool.hook("execute.before", (event: any) => {
       let refusal: string | undefined;
       try {
         const active = activePersonaForSession(event.sessionID, cwd);
         if (!active) return;
         const persona = loadOpenCodePersonas(cwd).get(active.toLowerCase());
         if (!persona || persona.mode !== "readonly") return;
-
-        const shellKind = event.tool === "bash" ? "posix" : event.tool === "powershell" ? "powershell" : openCodeGuardMap.shellKind;
-        const scratchDirs = process.env.COMMANDCODE_SCRATCHPAD ? [process.env.COMMANDCODE_SCRATCHPAD] : [];
-        const decision = evaluateToolGuard(persona.mode, {
-          toolName: event.tool,
-          input: event.input,
-          cwd,
-          scratchDirs,
-          persona: active,
-          harness: { ...openCodeGuardMap, shellKind },
-        });
-        if (decision.block) refusal = decision.reason ?? "Blocked by the readonly guard.";
+        if (event.tool === "apply_patch") {
+          refusal = "apply_patch can rewrite any file, so it is refused for readonly personas";
+        } else if (event.tool === "batch") {
+          refusal = "batch may bypass execute.before for nested tools, so it is refused for readonly personas";
+        } else {
+          const shellKind = event.tool === "bash" ? "posix" : event.tool === "powershell" ? "powershell" : openCodeGuardMap.shellKind;
+          const scratchDirs = process.env.COMMANDCODE_SCRATCHPAD ? [process.env.COMMANDCODE_SCRATCHPAD] : [];
+          const input = event.input && typeof event.input === "object" ? event.input : {};
+          const normalizedInput = (event.tool === "write" || event.tool === "edit")
+            && typeof input.filePath === "string"
+            && !("file_path" in input)
+            && !("path" in input)
+            ? { ...input, file_path: input.filePath }
+            : input;
+          const decision = evaluateToolGuard(persona.mode, {
+            toolName: event.tool,
+            input: normalizedInput,
+            cwd,
+            scratchDirs,
+            persona: active,
+            harness: { ...openCodeGuardMap, shellKind },
+          });
+          if (decision.block) refusal = decision.reason ?? "Blocked by the readonly guard.";
+        }
       } catch {
         throw new Error("Blocked: the readonly guard failed to evaluate this call.");
       }

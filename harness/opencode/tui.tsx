@@ -1,14 +1,16 @@
 import { Plugin, usePlugin } from "@opencode/plugin/tui";
 import { Show, createMemo } from "solid-js";
 import { loadAllPersonas, getRepoRoot, type PersonaMetadata } from "../common/index.js";
-import { writeActivePersona } from "../common/state.js";
 import { parseRighthandArgs } from "../common/commands.js";
 import { join } from "node:path";
-import { loadSessionState, MAX_AGE, saveSessionState } from "./state.js";
+import { activePersonaForSession, loadSessionState, MAX_AGE, saveSessionState } from "./state.js";
 
 const packageProfilesDir = join(getRepoRoot(), "profiles");
 const loadOpenCodePersonas = (cwd: string): Map<string, PersonaMetadata> =>
-  loadAllPersonas(cwd, { packageDir: packageProfilesDir });
+  loadAllPersonas(cwd, {
+    packageDir: packageProfilesDir,
+    projectDirs: [join(cwd, "profiles"), join(cwd, ".commandcode", "profiles"), join(cwd, ".opencode", "profiles")],
+  });
 
 function PersonaFooter(props: { sessionID?: string; active: Record<string, string>; available: PersonaMetadata[] }) {
   const context = usePlugin() as any;
@@ -20,7 +22,7 @@ function PersonaFooter(props: { sessionID?: string; active: Record<string, strin
   const label = createMemo(() => {
     const id = props.sessionID;
     if (!id) return undefined;
-    const name = props.active[id];
+    const name = props.active[id] ?? activePersonaForSession(id, process.cwd());
     if (!name) return undefined;
     const persona = props.available.find((item) => item.name.toLowerCase() === name.toLowerCase());
     return persona ? persona.role : name;
@@ -56,7 +58,6 @@ export const righthandOpenCodeTui = Plugin.define({
       if (persona) state.sessions[sessionID] = { persona: persona.name.toLowerCase(), updated: Date.now() };
       else delete state.sessions[sessionID];
       saveSessionState(state);
-      writeActivePersona(cwd, persona?.name.toLowerCase() ?? null);
 
       await update((draft: any) => {
         if (persona) draft.active[sessionID] = persona.name.toLowerCase();
@@ -65,7 +66,7 @@ export const righthandOpenCodeTui = Plugin.define({
       context.ui.toast.show({
         message: persona
           ? `RightHand persona: ${persona.role} (${persona.mode})`
-          : "Persona dinonaktifkan — kembali ke default.",
+          : "Persona dinonaktifkan - kembali ke default.",
         variant: "success",
       });
     };
@@ -83,13 +84,13 @@ export const righthandOpenCodeTui = Plugin.define({
       }
 
       const profiles = Array.from(loadOpenCodePersonas(cwd).values()).sort((a, b) => a.name.localeCompare(b.name));
-      const currentName = loadSessionState().sessions[sessionID]?.persona;
+      const currentName = activePersonaForSession(sessionID, cwd) ?? undefined;
       const rawArg = (input ?? "").trim().toLowerCase();
       const action = parseRighthandArgs(rawArg);
 
       if (action.action === "list") {
         const lines = profiles.length > 0
-          ? profiles.map((persona) => `${persona.name === currentName ? "=>" : "  "} ${persona.name}${persona.mode === "writer" ? " (writer)" : ""} — ${persona.desc || persona.role}`)
+          ? profiles.map((persona) => `${persona.name === currentName ? "=>" : "  "} ${persona.name}${persona.mode === "writer" ? " (writer)" : ""} - ${persona.desc || persona.role}`)
           : ["Belum ada persona di profiles/"];
         await context.ui.dialog.alert({ title: "RightHand Personas", message: [...lines, "", "Pakai: /righthand <nama>  |  /righthand off"].join("\n") });
         return;
@@ -113,7 +114,7 @@ export const righthandOpenCodeTui = Plugin.define({
             ...profiles.map((persona) => ({
               title: persona.name,
               value: persona.name,
-              description: (persona.name === currentName ? "aktif — " : "") + `${persona.desc || persona.role}${persona.mode === "writer" ? " [writer]" : ""}`,
+              description: (persona.name === currentName ? "aktif - " : "") + `${persona.desc || persona.role}${persona.mode === "writer" ? " [writer]" : ""}`,
             })),
           ],
         });

@@ -10,7 +10,7 @@ const { bundle } = require('../scripts/bundle-harness.js');
 
 const root = path.resolve(__dirname, '..');
 const originalCwd = process.cwd();
-const scratchDir = path.join(os.tmpdir(), 't71-fix');
+const scratchDir = path.join(os.tmpdir(), 't71-fix2');
 fs.mkdirSync(scratchDir, { recursive: true });
 const tempDir = fs.mkdtempSync(path.join(scratchDir, 'rh-opencode-'));
 const userHome = path.join(tempDir, 'home');
@@ -92,7 +92,7 @@ function makeHarness(bundlePath) {
   );
   const definition = module.exports.default;
   check(`${path.basename(bundlePath)} exports Plugin.define object`, definition && typeof definition.setup === 'function');
-  return { definition, hooks, slots, layers, source };
+  return { definition, hooks, slots, layers, source, disposeCalls: 0 };
 }
 
 async function loadServer(bundlePath) {
@@ -106,9 +106,9 @@ async function loadServer(bundlePath) {
       async get() { return {}; },
     },
     tool: {
-      hook(name, handler) {
+      async hook(name, handler) {
         server.hooks.push({ group: 'tool', name, handler });
-        return { dispose() {} };
+        return { async dispose() { server.disposeCalls++; } };
       },
     },
     permission: {
@@ -125,8 +125,10 @@ async function main() {
     fs.mkdirSync(path.join(repoDir, '.git'), { recursive: true });
     fs.writeFileSync(path.join(repoDir, 'package.json'), '{}');
     fs.mkdirSync(path.join(repoDir, '.righthand', 'state'), { recursive: true });
+    fs.mkdirSync(path.join(repoDir, '.opencode', 'profiles'), { recursive: true });
     fs.mkdirSync(userHome, { recursive: true });
     fs.cpSync(path.join(root, 'profiles'), profilesDir, { recursive: true });
+    fs.writeFileSync(path.join(repoDir, '.opencode', 'profiles', 'legacy-specialist.md'), '---\nname: legacy-specialist\nrole: Legacy Specialist\nmode: readonly\n---\nLegacy profile.\n');
     check('fixture includes code-reviewer profile at package root', fs.existsSync(path.join(profilesDir, 'code-reviewer.md')));
     process.env.HOME = userHome;
     process.env.USERPROFILE = userHome;
@@ -144,9 +146,9 @@ async function main() {
         async get() { return {}; },
       },
       tool: {
-        hook(name, handler) {
+        async hook(name, handler) {
           server.hooks.push({ group: 'tool', name, handler });
-          return { dispose() {} };
+          return { async dispose() { server.disposeCalls++; } };
         },
       },
       permission: {
@@ -158,16 +160,27 @@ async function main() {
     check('server retains context session hook and registers execute.before',
       server.hooks.map(({ group, name }) => `${group}.${name}`).join(',') === 'session.context,tool.execute.before');
     check('server leaves permission channel untouched', !server.hooks.some((hook) => hook.group === 'permission'));
+    const disposeServer = await loadServer(serverPath);
+    const disposeTeardown = await disposeServer.definition.setup({
+      session: serverContext.session,
+      tool: { async hook(name, handler) {
+        disposeServer.hooks.push({ group: 'tool', name, handler });
+        return { async dispose() { disposeServer.disposeCalls++; } };
+      } },
+    });
+    await disposeTeardown();
+    check('async tool registration is disposed during teardown', disposeServer.disposeCalls === 1);
 
     const tui = makeHarness(tuiPath);
+    let tuiList = '';
     const tuiContext = {
       storage: { store(_name, config) { return [config.initial, async () => {}]; } },
       keymap: { layer(factory) { tui.layers.push(factory()); } },
       ui: {
         slot(config) { tui.slots.push(config); },
         toast: { show() {} },
-        router: { current: () => ({ type: 'session', sessionID }) },
-        dialog: { async alert() {}, async select() { return undefined; } },
+        router: { current: () => ({ type: 'session', sessionID: sessionId }) },
+        dialog: { async alert(input) { tuiList = input.message; }, async select() { return undefined; } },
       },
       data: { session: { get: () => ({}), root: (id) => id } },
       theme: { text: { base: '', muted: '' } },
@@ -190,16 +203,35 @@ async function main() {
       id: 'tool-1',
       input,
     });
+    const commonActiveFile = path.join(repoDir, '.righthand', 'state', 'active-persona.json');
+    fs.writeFileSync(commonActiveFile, JSON.stringify({ active: 'code-reviewer' }));
+    await tui.layers[0].commands.find((command) => command.slash?.name === 'righthand').run('list');
+    check('TUI discovers .opencode profiles and marks common fallback active',
+      tuiList.includes('legacy-specialist') && tuiList.includes('=> code-reviewer'));
+    fs.writeFileSync(commonActiveFile, JSON.stringify({ active: null }));
 
     writeState(null);
-    let inactiveRejected = false;
-    try { await invoke('write', { path: 'src/file.ts', content: 'x' }); } catch { inactiveRejected = true; }
-    check('no active persona allows write', !inactiveRejected);
+    const unrestrictedCases = [
+      ['write', { filePath: 'src/file.ts', content: 'x' }],
+      ['edit', { filePath: 'src/file.ts', oldString: 'x', newString: 'y' }],
+      ['apply_patch', { patchText: '*** Begin Patch\\n*** Update File: src/file.ts\\n+changed\\n*** End Patch' }],
+      ['batch', { calls: [{ tool: 'write', input: { filePath: 'src/file.ts', content: 'x' } }] }],
+      ['bash', { command: 'rm -rf src/file.ts' }],
+      ['bash', { command: 'cat <(rm -rf src/file.ts)' }],
+    ];
+    for (const [tool, input] of unrestrictedCases) {
+      let rejected = false;
+      try { await invoke(tool, input); } catch { rejected = true; }
+      check(`no active persona allows ${tool}`, !rejected);
+    }
 
     writeState('code-reviewer');
     const readonlyCases = [
-      ['write src/file.ts blocks', 'write', { path: 'src/file.ts', content: 'x' }, true],
-      ['write .righthand allows', 'write', { path: '.righthand/tickets/T71/reports/result.md', content: 'x' }, false],
+      ['write filePath src/file.ts blocks', 'write', { filePath: 'src/file.ts', content: 'x' }, true],
+      ['write filePath .righthand allows', 'write', { filePath: '.righthand/tickets/T71/reports/x.md', content: 'x' }, false],
+      ['edit filePath src/file.ts blocks', 'edit', { filePath: 'src/file.ts', oldString: 'x', newString: 'y' }, true],
+      ['apply_patch refuses readonly persona', 'apply_patch', { patchText: '*** Begin Patch\\n*** Update File: src/file.ts\\n+changed\\n*** End Patch' }, true],
+      ['batch refuses readonly persona', 'batch', { calls: [{ tool: 'write', input: { filePath: 'src/file.ts', content: 'x' } }] }, true],
       ['bash rm -rf src/file.ts blocks on Windows', 'bash', { command: 'rm -rf src/file.ts' }, true],
       ['bash process substitution blocks under per-call POSIX dialect', 'bash', { command: 'cat <(rm -rf src/file.ts)' }, true],
       ['read allows', 'read', { path: 'src/file.ts' }, false],
@@ -208,25 +240,40 @@ async function main() {
     ];
     const readonlyDecisions = {};
     let readonlyWriteReason = '';
+    let readonlyEditReason = '';
+    let readonlyPatchReason = '';
+    let readonlyBatchReason = '';
+    let readonlyInput = null;
     for (const [name, tool, input, blocked] of readonlyCases) {
       let rejectionMessage = '';
       try { await invoke(tool, input); } catch (error) { rejectionMessage = error.message; }
       const rejected = rejectionMessage !== '';
-      if (name === 'write src/file.ts blocks') readonlyWriteReason = rejectionMessage;
+      if (name === 'write filePath src/file.ts blocks') readonlyWriteReason = rejectionMessage;
+      if (name === 'edit filePath src/file.ts blocks') readonlyEditReason = rejectionMessage;
+      if (name === 'apply_patch refuses readonly persona') readonlyPatchReason = rejectionMessage;
+      if (name === 'batch refuses readonly persona') readonlyBatchReason = rejectionMessage;
+      if (name === 'write filePath .righthand allows') readonlyInput = input;
       readonlyDecisions[name] = rejected;
       check(name, rejected === blocked);
     }
     const expectedWriteReason = 'code-reviewer is readonly: writes are limited to .righthand/ and the scratchpad. Put reports under .righthand/tickets/<ID>/reports/.';
-    check('readonly write refusal preserves the guard policy reason', readonlyWriteReason === expectedWriteReason);
-    console.log(`GUARD REFUSAL: ${readonlyWriteReason}`);
+    check('write and edit preserve the exact guard policy reason',
+      readonlyWriteReason === expectedWriteReason && readonlyEditReason === expectedWriteReason);
+    check('V2 write does not report unusable input', !readonlyWriteReason.includes('write input was unusable'));
+    check('apply_patch refusal names the tool and is stable', readonlyPatchReason === 'apply_patch can rewrite any file, so it is refused for readonly personas');
+    check('batch refusal documents nested hook bypass', readonlyBatchReason === 'batch may bypass execute.before for nested tools, so it is refused for readonly personas');
+    check('normalization preserves host input keys without mutation', readonlyInput?.filePath === '.righthand/tickets/T71/reports/x.md' && !('file_path' in readonlyInput));
+    console.log(`GUARD REFUSALS: write=${readonlyWriteReason}; apply_patch=${readonlyPatchReason}; batch=${readonlyBatchReason}`);
     console.log('GUARD INTERNAL FAILURE: Blocked: the readonly guard failed to evaluate this call.');
     check('per-call POSIX dialect blocks process substitution on Windows',
       readonlyDecisions['bash process substitution blocks under per-call POSIX dialect']);
 
     writeState('worker');
-    let writerRejected = false;
-    try { await invoke('write', { path: 'src/file.ts', content: 'x' }); } catch { writerRejected = true; }
-    check('writer allows write src/file.ts', !writerRejected);
+    for (const [tool, input] of unrestrictedCases) {
+      let rejected = false;
+      try { await invoke(tool, input); } catch { rejected = true; }
+      check(`writer allows ${tool}`, !rejected);
+    }
 
     fs.writeFileSync(stateFile, JSON.stringify({ version: 1, sessions: {} }));
     fs.writeFileSync(path.join(repoDir, '.righthand', 'state', 'active-persona.json'), JSON.stringify({ active: 'code-reviewer' }));
@@ -254,6 +301,24 @@ async function main() {
     } catch (error) { mutatedPolicyMessage = error.message; }
     await expectMutationFailure('policy refusal propagation', () => assert.equal(mutatedPolicyMessage, expectedWriteReason));
     console.log(`BITE MUTATION policy refusal: actual=${mutatedPolicyMessage}; expected=${expectedWriteReason}`);
+
+    const normalizationMutationPath = path.join(tempDir, 'mutation-normalization-server.js');
+    const normalizationMutation = server.source.replace(
+      /const normalizedInput = \(event\.tool === "write" \|\| event\.tool === "edit"\)[\s\S]*?: input;/,
+      'const normalizedInput = input;',
+    );
+    check('normalization mutation changes the tracked bundle', normalizationMutation !== server.source);
+    fs.writeFileSync(normalizationMutationPath, normalizationMutation);
+    const normalizationMutationServer = await loadServer(normalizationMutationPath);
+    let mutatedNormalizationMessage = '';
+    try {
+      await normalizationMutationServer.hooks.find((hook) => hook.name === 'execute.before').handler({
+        tool: 'write', sessionID: sessionId, agent: 'test', messageID: 'mutated-normalization', id: 'mutated-normalization',
+        input: { filePath: 'src/file.ts', content: 'x' },
+      });
+    } catch (error) { mutatedNormalizationMessage = error.message; }
+    await expectMutationFailure('V2 filePath normalization', () => assert.equal(mutatedNormalizationMessage, expectedWriteReason));
+    console.log(`BITE MUTATION V2 normalization: actual=${mutatedNormalizationMessage}; expected=${expectedWriteReason}`);
 
     const contextMutationPath = path.join(tempDir, 'mutation-context-server.js');
     const contextMutation = server.source.replace(
@@ -361,10 +426,10 @@ async function main() {
     } catch { neuteredRejected = true; }
     check('neutered bundle allows dialect-sensitive process substitution', neutered !== server.source && !neuteredRejected);
 
-    const checkResult = bundle({ check: true });
-    check('generated server and TUI bundles match bundler output', checkResult.count === 3);
-    const drift = bundle({ check: true, outputDir: tempDir });
-    check('bundle checker reports real total (OMP + two OpenCode bundles)', drift.count === 3);
+    const openCodeConfigs = require('../harness/opencode/bundle.config.cjs');
+    const openCodeResults = openCodeConfigs.map((config) => bundle({ ...config, check: true }));
+    check('generated server and TUI bundles match OpenCode config', openCodeConfigs.length === 2 && openCodeResults.every((result) => result.count === 1));
+    check('OpenCode bundle config contains exactly two entries', openCodeConfigs.length === 2);
 
     console.log(`EVIDENCE: ${JSON.stringify({ readonlyDecisions }, null, 2)}`);
     if (failed > 0) {

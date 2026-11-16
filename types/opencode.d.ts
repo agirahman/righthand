@@ -12,7 +12,7 @@ declare module '@opencode/plugin' {
       messageID: string;
       id: string;
       input: Record<string, unknown>;
-    }) => void | Promise<void>): { dispose?(): void | Promise<void> } | void;
+    }) => void | Promise<void>): Promise<{ dispose(): void | Promise<void> }>;
   }
 
   export interface OpenCodePermissionContext {
