@@ -134,7 +134,7 @@ async function main() {
     process.env.USERPROFILE = userHome;
 
     const serverPath = path.join(root, '.opencode-plugin', 'plugins', 'righthand-server.js');
-    const tuiPath = path.join(root, '.opencode-plugin', 'plugins', 'righthand-tui.js');
+    const tuiPath = process.env.RH_OPENCODE_TUI_BUNDLE || path.join(root, '.opencode-plugin', 'plugins', 'righthand-tui.js');
     process.chdir(repoDir);
     const server = makeHarness(serverPath);
     const serverContext = {
@@ -173,12 +173,13 @@ async function main() {
 
     const tui = makeHarness(tuiPath);
     let tuiList = '';
+    const tuiToasts = [];
     const tuiContext = {
       storage: { store(_name, config) { return [config.initial, async () => {}]; } },
       keymap: { layer(factory) { tui.layers.push(factory()); } },
       ui: {
         slot(config) { tui.slots.push(config); },
-        toast: { show() {} },
+        toast: { show(input) { tuiToasts.push(input.message); } },
         router: { current: () => ({ type: 'session', sessionID: sessionId }) },
         dialog: { async alert(input) { tuiList = input.message; }, async select() { return undefined; } },
       },
@@ -203,12 +204,55 @@ async function main() {
       id: 'tool-1',
       input,
     });
+    const runTui = tui.layers[0].commands.find((command) => command.slash?.name === 'righthand').run;
+    const readGlobalActive = () => JSON.parse(fs.readFileSync(commonActiveFile, 'utf8'));
+    const isWriteBlocked = async () => {
+      try {
+        await invoke('write', { filePath: 'src/file.ts', content: 'x' });
+        return false;
+      } catch {
+        return true;
+      }
+    };
     const commonActiveFile = path.join(repoDir, '.righthand', 'state', 'active-persona.json');
     fs.writeFileSync(commonActiveFile, JSON.stringify({ active: 'code-reviewer' }));
-    await tui.layers[0].commands.find((command) => command.slash?.name === 'righthand').run('list');
+    await runTui('list');
     check('TUI discovers .opencode profiles and marks common fallback active',
       tuiList.includes('legacy-specialist') && tuiList.includes('=> code-reviewer'));
     fs.writeFileSync(commonActiveFile, JSON.stringify({ active: null }));
+    writeState(null);
+    await runTui('code-reviewer');
+    const blockedBeforeSessionOff = await isWriteBlocked();
+    await runTui('off');
+    const allowedAfterSessionOff = !(await isWriteBlocked());
+    const globalAfterSessionOff = readGlobalActive();
+    const sessionAfterSessionOff = JSON.parse(fs.readFileSync(stateFile, 'utf8')).sessions;
+    check('TUI activation blocks writes before off', blockedBeforeSessionOff);
+    check('TUI off allows writes after session activation', allowedAfterSessionOff);
+    check('TUI off clears global persona after session activation', globalAfterSessionOff.active === null);
+    check('TUI off clears session persona after session activation', !sessionAfterSessionOff[sessionId]);
+    console.log(`OFF PROBE session: toast=${tuiToasts.at(-1)}; global=${JSON.stringify(globalAfterSessionOff)}; session=${JSON.stringify(sessionAfterSessionOff)}; writeBlocked=${!allowedAfterSessionOff}`);
+
+    fs.writeFileSync(commonActiveFile, JSON.stringify({ active: 'code-reviewer' }));
+    fs.writeFileSync(stateFile, JSON.stringify({ version: 1, sessions: {} }));
+    const freshServer = await loadServer(serverPath);
+    const invokeFresh = async () => {
+      try {
+        await freshServer.hooks.find((hook) => hook.name === 'execute.before').handler({
+          tool: 'write', sessionID: sessionId, agent: 'test', messageID: 'after-global-off', id: 'after-global-off',
+          input: { filePath: 'src/file.ts', content: 'x' },
+        });
+        return true;
+      } catch {
+        return false;
+      }
+    };
+    await runTui('off');
+    const allowedAfterGlobalOff = await invokeFresh();
+    const globalAfterGlobalOff = readGlobalActive();
+    check('TUI off allows writes when persona existed only globally', allowedAfterGlobalOff);
+    check('TUI off clears global-only persona', globalAfterGlobalOff.active === null);
+    console.log(`OFF PROBE global-only: toast=${tuiToasts.at(-1)}; global=${JSON.stringify(globalAfterGlobalOff)}; writeBlocked=${!allowedAfterGlobalOff}`);
 
     writeState(null);
     const unrestrictedCases = [

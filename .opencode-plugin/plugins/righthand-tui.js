@@ -399,6 +399,7 @@ const righthandOpenCodeTui = Plugin.define({
             else
                 delete state.sessions[sessionID];
             saveSessionState(state);
+            writeActivePersona(cwd, persona?.name.toLowerCase() ?? null);
             await update((draft) => {
                 if (persona)
                     draft.active[sessionID] = persona.name.toLowerCase();

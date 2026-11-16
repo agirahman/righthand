@@ -2,6 +2,7 @@ import { Plugin, usePlugin } from "@opencode/plugin/tui";
 import { Show, createMemo } from "solid-js";
 import { loadAllPersonas, getRepoRoot, type PersonaMetadata } from "../common/index.js";
 import { parseRighthandArgs } from "../common/commands.js";
+import { writeActivePersona } from "../common/state.js";
 import { join } from "node:path";
 import { activePersonaForSession, loadSessionState, MAX_AGE, saveSessionState } from "./state.js";
 
@@ -58,6 +59,7 @@ export const righthandOpenCodeTui = Plugin.define({
       if (persona) state.sessions[sessionID] = { persona: persona.name.toLowerCase(), updated: Date.now() };
       else delete state.sessions[sessionID];
       saveSessionState(state);
+      writeActivePersona(cwd, persona?.name.toLowerCase() ?? null);
 
       await update((draft: any) => {
         if (persona) draft.active[sessionID] = persona.name.toLowerCase();
