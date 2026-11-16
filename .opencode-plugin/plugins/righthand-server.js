@@ -1561,6 +1561,7 @@ function saveSessionState(state) {
 }
 const packageProfilesDir = join(getRepoRoot(), "profiles");
 const loadOpenCodePersonas = (cwd) => loadAllPersonas(cwd, { packageDir: packageProfilesDir });
+const activePersonaForSession = (sessionID, cwd) => loadSessionState().sessions?.[sessionID]?.persona ?? readActivePersona(cwd);
 const righthandOpenCodePlugin = Plugin.define({
     id: "user.righthand.server",
     async setup(context) {
@@ -1569,7 +1570,7 @@ const righthandOpenCodePlugin = Plugin.define({
             const info = await context.session.get({ sessionID: event.sessionID });
             if (info.parentID)
                 return;
-            const active = loadSessionState().sessions?.[event.sessionID]?.persona;
+            const active = activePersonaForSession(event.sessionID, cwd);
             if (!active)
                 return;
             const persona = loadOpenCodePersonas(cwd).get(active.toLowerCase());
@@ -1581,8 +1582,9 @@ const righthandOpenCodePlugin = Plugin.define({
             });
         });
         const toolRegistration = context.tool.hook("execute.before", (event) => {
+            let refusal;
             try {
-                const active = loadSessionState().sessions?.[event.sessionID]?.persona ?? readActivePersona(cwd);
+                const active = activePersonaForSession(event.sessionID, cwd);
                 if (!active)
                     return;
                 const persona = loadOpenCodePersonas(cwd).get(active.toLowerCase());
@@ -1599,13 +1601,13 @@ const righthandOpenCodePlugin = Plugin.define({
                     harness: { ...openCodeGuardMap, shellKind },
                 });
                 if (decision.block)
-                    throw new Error(decision.reason ?? "Blocked by the readonly guard.");
+                    refusal = decision.reason ?? "Blocked by the readonly guard.";
             }
-            catch (error) {
-                if (error instanceof Error && error.message.startsWith("Blocked"))
-                    throw error;
+            catch {
                 throw new Error("Blocked: the readonly guard failed to evaluate this call.");
             }
+            if (refusal)
+                throw new Error(refusal);
         });
         return async () => {
             await sessionRegistration.dispose();

@@ -13,6 +13,9 @@ const packageProfilesDir = join(getRepoRoot(), "profiles");
 const loadOpenCodePersonas = (cwd: string): Map<string, PersonaMetadata> =>
   loadAllPersonas(cwd, { packageDir: packageProfilesDir });
 
+const activePersonaForSession = (sessionID: string, cwd: string): string | null =>
+  loadSessionState().sessions?.[sessionID]?.persona ?? readActivePersona(cwd);
+
 export const righthandOpenCodePlugin = Plugin.define({
   id: "user.righthand.server",
 
@@ -22,7 +25,7 @@ export const righthandOpenCodePlugin = Plugin.define({
       const info = await context.session.get({ sessionID: event.sessionID });
       if (info.parentID) return;
 
-      const active = loadSessionState().sessions?.[event.sessionID]?.persona;
+      const active = activePersonaForSession(event.sessionID, cwd);
       if (!active) return;
       const persona = loadOpenCodePersonas(cwd).get(active.toLowerCase());
       if (!persona) return;
@@ -34,8 +37,9 @@ export const righthandOpenCodePlugin = Plugin.define({
     });
 
     const toolRegistration = context.tool.hook("execute.before", (event: any) => {
+      let refusal: string | undefined;
       try {
-        const active = loadSessionState().sessions?.[event.sessionID]?.persona ?? readActivePersona(cwd);
+        const active = activePersonaForSession(event.sessionID, cwd);
         if (!active) return;
         const persona = loadOpenCodePersonas(cwd).get(active.toLowerCase());
         if (!persona || persona.mode !== "readonly") return;
@@ -50,11 +54,11 @@ export const righthandOpenCodePlugin = Plugin.define({
           persona: active,
           harness: { ...openCodeGuardMap, shellKind },
         });
-        if (decision.block) throw new Error(decision.reason ?? "Blocked by the readonly guard.");
-      } catch (error) {
-        if (error instanceof Error && error.message.startsWith("Blocked")) throw error;
+        if (decision.block) refusal = decision.reason ?? "Blocked by the readonly guard.";
+      } catch {
         throw new Error("Blocked: the readonly guard failed to evaluate this call.");
       }
+      if (refusal) throw new Error(refusal);
     });
 
     return async () => {
