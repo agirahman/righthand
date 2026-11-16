@@ -1599,7 +1599,7 @@ const righthandOpenCodePlugin = Plugin.define({
                     refusal = "apply_patch can rewrite any file, so it is refused for readonly personas";
                 }
                 else if (event.tool === "batch") {
-                    refusal = "batch may bypass execute.before for nested tools, so it is refused for readonly personas";
+                    refusal = "batch wraps nested tool calls the guard cannot statically classify, so it is refused for readonly personas";
                 }
                 else {
                     const shellKind = event.tool === "bash" ? "posix" : event.tool === "powershell" ? "powershell" : openCodeGuardMap.shellKind;

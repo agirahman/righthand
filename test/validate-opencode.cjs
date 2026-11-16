@@ -10,7 +10,7 @@ const { bundle } = require('../scripts/bundle-harness.js');
 
 const root = path.resolve(__dirname, '..');
 const originalCwd = process.cwd();
-const scratchDir = path.join(os.tmpdir(), 't71-fix2');
+const scratchDir = path.join(os.tmpdir(), 't71-fix4');
 fs.mkdirSync(scratchDir, { recursive: true });
 const tempDir = fs.mkdtempSync(path.join(scratchDir, 'rh-opencode-'));
 const userHome = path.join(tempDir, 'home');
@@ -46,7 +46,7 @@ async function expectMutationFailure(name, assertion) {
 }
 
 function makeHarness(bundlePath) {
-  const source = fs.readFileSync(bundlePath, 'utf8');
+  const source = fs.readFileSync(bundlePath, 'utf8').replace(/\r\n/g, '\n');
   const hooks = [];
   const slots = [];
   const layers = [];
@@ -305,7 +305,7 @@ async function main() {
       readonlyWriteReason === expectedWriteReason && readonlyEditReason === expectedWriteReason);
     check('V2 write does not report unusable input', !readonlyWriteReason.includes('write input was unusable'));
     check('apply_patch refusal names the tool and is stable', readonlyPatchReason === 'apply_patch can rewrite any file, so it is refused for readonly personas');
-    check('batch refusal documents nested hook bypass', readonlyBatchReason === 'batch may bypass execute.before for nested tools, so it is refused for readonly personas');
+    check('batch refusal explains static classification limits', readonlyBatchReason === 'batch wraps nested tool calls the guard cannot statically classify, so it is refused for readonly personas');
     check('normalization preserves host input keys without mutation', readonlyInput?.filePath === '.righthand/tickets/T71/reports/x.md' && !('file_path' in readonlyInput));
     console.log(`GUARD REFUSALS: write=${readonlyWriteReason}; apply_patch=${readonlyPatchReason}; batch=${readonlyBatchReason}`);
     console.log('GUARD INTERNAL FAILURE: Blocked: the readonly guard failed to evaluate this call.');
@@ -334,6 +334,7 @@ async function main() {
       'throw new Error(refusal);',
       'throw new Error("Blocked: the readonly guard failed to evaluate this call.");',
     );
+    check('policy refusal mutation changes the tracked bundle', policyMutation !== server.source);
     fs.writeFileSync(policyMutationPath, policyMutation);
     const policyMutationServer = await loadServer(policyMutationPath);
     let mutatedPolicyMessage = '';
@@ -369,6 +370,7 @@ async function main() {
       'const active = activePersonaForSession(event.sessionID, cwd);',
       'const active = loadSessionState().sessions?.[event.sessionID]?.persona;',
     );
+    check('context fallback mutation changes the tracked bundle', contextMutation !== server.source);
     fs.writeFileSync(contextMutationPath, contextMutation);
     const contextMutationServer = await loadServer(contextMutationPath);
     const mutatedPrompt = [];
@@ -385,6 +387,7 @@ async function main() {
       'catch {\n                throw new Error("Blocked: the readonly guard failed to evaluate this call.");\n            }',
       'catch (error) {\n                throw error;\n            }',
     );
+    check('guard exception mutation changes the tracked bundle', failureMutation !== server.source);
     fs.writeFileSync(failureMutationPath, failureMutation);
     const failureMutationServer = await loadServer(failureMutationPath);
     let mutatedFailureMessage = '';
@@ -404,6 +407,7 @@ async function main() {
       'catch {\n                throw new Error("Blocked: the readonly guard failed to evaluate this call.");\n            }',
       'catch (error) {\n                throw error;\n            }',
     );
+    check('diagnostic mutation changes the tracked bundle', diagnosticBundle !== server.source);
     fs.writeFileSync(diagnosticPath, diagnosticBundle);
     const diagnosticServer = await loadServer(diagnosticPath);
     let guardThrowMessage = '';
@@ -416,6 +420,7 @@ async function main() {
 
     const getterMutationPath = path.join(tempDir, 'mutation-getter-server.js');
     const getterMutation = diagnosticBundle.replace('const rawCmd = input.command ?? input.script;', 'const rawCmd = input.script;');
+    check('getter mutation changes the diagnostic bundle', getterMutation !== diagnosticBundle);
     fs.writeFileSync(getterMutationPath, getterMutation);
     const getterMutationServer = await loadServer(getterMutationPath);
     let mutatedGetterMessage = '';
