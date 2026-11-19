@@ -93,7 +93,15 @@ export default function (cmd: ModApi): void {
       return activeProfile;
     }
 
-    // 4. State file written by the CLI (righthand switch / off)
+    // 4. Per-process persona channel set by the dispatcher
+    const envPersona = process.env.RIGHTHAND_PERSONA;
+    if (typeof envPersona === 'string' && envPersona.trim() !== '') {
+      const envProfile = envPersona.trim().toLowerCase();
+      activeProfile = envProfile;
+      return activeProfile;
+    }
+
+    // 5. State file written by the CLI (righthand switch / off)
     const stateFilePath = join(cmd.cwd, '.righthand', 'state', 'active-persona.json');
     const legacyStatePath = join(cmd.cwd, '.righthand', 'active-persona.json');
     if (existsSync(stateFilePath) || existsSync(legacyStatePath)) {
@@ -102,7 +110,7 @@ export default function (cmd: ModApi): void {
       return activeProfile;
     }
 
-    // 5. No persona
+    // 6. No persona
     activeProfile = null;
     return null;
   };

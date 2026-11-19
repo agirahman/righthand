@@ -128,7 +128,7 @@ expectThrow('unsupported harness throws ConfigError', 'not supported for dispatc
   try {
     const dir = path.join(d, '.righthand');
     fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(path.join(dir, 'persona.json'), JSON.stringify({ personas: { backend: { harness: 'pi' } } }));
+    fs.writeFileSync(path.join(dir, 'persona.json'), JSON.stringify({ personas: { backend: { harness: 'omp' } } }));
     pc.resolvePersona(d, 'backend', { orchestratorModel: 'm' });
   } finally { rmTmp(d); }
 });

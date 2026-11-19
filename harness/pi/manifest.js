@@ -5,6 +5,7 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 
 const { isInPath } = require('../lib/path');
+const piLaunch = require('./launch');
 
 const IS_WIN = process.platform === 'win32';
 
@@ -73,6 +74,8 @@ module.exports = {
   aliases: [],
   label: 'Pi Coding Agent',
   pathCheck: ['pi'],
+  dispatchable: true,
+  buildLaunch: piLaunch.buildLaunch,
   detectInstall: detectInstall,
   statusInfo: statusInfo,
   doctorSetupLines: doctorSetupLines,

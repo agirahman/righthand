@@ -115,6 +115,20 @@ try {
   check('tool_call fails closed when guard evaluation throws',
     toolCall('write', new Proxy({}, { ownKeys() { throw new Error('forced guard failure'); } }))?.block === true);
 
+  const previousPersonaEnv = process.env.RIGHTHAND_PERSONA;
+  try {
+    fs.writeFileSync(statePath, JSON.stringify({ active: 'code-reviewer' }));
+    process.env.RIGHTHAND_PERSONA = 'worker';
+    check('env channel overrides the state file persona',
+      toolCall('write', { path: 'src/file.ts', content: 'x' })?.block !== true);
+    delete process.env.RIGHTHAND_PERSONA;
+    check('unset env falls back to the state file readonly persona',
+      toolCall('write', { path: 'src/file.ts', content: 'x' })?.block === true);
+  } finally {
+    if (previousPersonaEnv === undefined) delete process.env.RIGHTHAND_PERSONA;
+    else process.env.RIGHTHAND_PERSONA = previousPersonaEnv;
+  }
+
   fs.writeFileSync(statePath, JSON.stringify({ active: 'worker' }));
   const promptEvent = { systemPromptOptions: { sections: {} } };
   handlers.get('before_agent_start')(promptEvent, ctx);

@@ -129,17 +129,17 @@ check('resolveHarness alias and case behaviour', () => {
   }
 });
 
-check('SUPPORTED_DISPATCH_HARNESSES equals ["commandcode"]', () => {
-  if (!deepEqual(pc.SUPPORTED_DISPATCH_HARNESSES, ['commandcode'])) {
+check('SUPPORTED_DISPATCH_HARNESSES equals ["commandcode","pi"]', () => {
+  if (!deepEqual(pc.SUPPORTED_DISPATCH_HARNESSES, ['commandcode', 'pi'])) {
     throw new Error('SUPPORTED_DISPATCH_HARNESSES=' + JSON.stringify(pc.SUPPORTED_DISPATCH_HARNESSES));
   }
-  if (!deepEqual(registry.dispatchable(), ['commandcode'])) {
+  if (!deepEqual(registry.dispatchable(), ['commandcode', 'pi'])) {
     throw new Error('registry.dispatchable()=' + JSON.stringify(registry.dispatchable()));
   }
 });
 
 check('each manifest hook that exists is a function', () => {
-  const hookNames = ['skillsTarget', 'userProfilesDir', 'listInstalled', 'detectInstall', 'contributesAnySetup', 'statusInfo', 'doctorSetupLines', 'doctorModLines', 'strictData'];
+  const hookNames = ['buildLaunch', 'skillsTarget', 'userProfilesDir', 'listInstalled', 'detectInstall', 'contributesAnySetup', 'statusInfo', 'doctorSetupLines', 'doctorModLines', 'strictData'];
   for (const m of registry.listManifests()) {
     for (const name of hookNames) {
       if (Object.prototype.hasOwnProperty.call(m, name) && typeof m[name] !== 'function') {
@@ -154,6 +154,11 @@ check('each manifest hook that exists is a function', () => {
   if (!cmdc || cmdc.dispatchable !== true) throw new Error('cmdc dispatchable flag missing');
   const pi = registry.getManifest('pi');
   if (!pi || typeof pi.detectInstall !== 'function') throw new Error('pi detectInstall missing');
+  for (const m of registry.listManifests()) {
+    if (m.dispatchable === true && typeof m.buildLaunch !== 'function') {
+      throw new Error(`dispatchable manifest ${m.key} has no buildLaunch hook`);
+    }
+  }
 });
 
 check('fifth-harness discovery in temp copy without editing bin/', () => {

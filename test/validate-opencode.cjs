@@ -329,6 +329,27 @@ async function main() {
     check('common active persona fallback blocks write', fallbackError === expectedWriteReason);
     console.log(`COMMON FALLBACK: context prompt=${fallbackPrompt[0]?.text.includes('## Active RightHand Persona: code-reviewer')}; write refusal=${fallbackError}`);
 
+    const previousPersonaEnv = process.env.RIGHTHAND_PERSONA;
+    try {
+      process.env.RIGHTHAND_PERSONA = 'worker';
+      const envPrompt = [];
+      await server.hooks.find((hook) => hook.group === 'session' && hook.name === 'context').handler({ sessionID: sessionId, system: envPrompt });
+      let envError = '';
+      try { await invoke('write', { path: 'src/file.ts', content: 'x' }); } catch (error) { envError = error.message; }
+      check('env channel overrides the file persona in the session context prompt', envPrompt[0]?.text.includes('## Active RightHand Persona: worker') === true);
+      check('env channel writer persona allows a src write while the file says readonly', envError === '');
+
+      delete process.env.RIGHTHAND_PERSONA;
+      const filePrompt = [];
+      await server.hooks.find((hook) => hook.group === 'session' && hook.name === 'context').handler({ sessionID: sessionId, system: filePrompt });
+      let fileError = '';
+      try { await invoke('write', { path: 'src/file.ts', content: 'x' }); } catch (error) { fileError = error.message; }
+      check('unset env falls back to the file readonly persona', filePrompt[0]?.text.includes('## Active RightHand Persona: code-reviewer') === true && fileError === expectedWriteReason);
+    } finally {
+      if (previousPersonaEnv === undefined) delete process.env.RIGHTHAND_PERSONA;
+      else process.env.RIGHTHAND_PERSONA = previousPersonaEnv;
+    }
+
     const policyMutationPath = path.join(tempDir, 'mutation-policy-server.js');
     const policyMutation = server.source.replace(
       'throw new Error(refusal);',
