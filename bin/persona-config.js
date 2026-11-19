@@ -4,8 +4,10 @@ const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
 
+const registry = require('../harness/registry');
+
 const CONFIG_REL = '.righthand/persona.json';
-const SUPPORTED_DISPATCH_HARNESSES = ['commandcode'];
+const SUPPORTED_DISPATCH_HARNESSES = registry.dispatchable();
 
 class ConfigError extends Error {
   constructor(message) {
@@ -76,7 +78,7 @@ function validateConfig(input, file) {
         if (typeof h !== 'string' || h.trim() === '') {
           throw new ConfigError(`${displayLabel}: "harness" must be a non-empty string for persona "${name}"`);
         }
-        if (h !== 'commandcode') {
+        if (!SUPPORTED_DISPATCH_HARNESSES.includes(h)) {
           throw new ConfigError(`${displayLabel}: harness "${h}" for persona "${name}" is not supported for dispatch; supported harnesses: ${SUPPORTED_DISPATCH_HARNESSES.join(', ')}`);
         }
       }
@@ -146,7 +148,7 @@ function resolvePersona(cwd, name, options) {
     harness = entry.harness;
     harnessSource = 'persona';
   } else {
-    harness = 'commandcode';
+    harness = registry.defaultDispatchHarness() || 'commandcode';
     harnessSource = 'orchestrator';
   }
 

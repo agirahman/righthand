@@ -4,60 +4,16 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
+const registry = require('../harness/registry');
+
 const root = path.resolve(__dirname, '..');
 const skillsDir = path.join(root, 'skills');
 
 const IS_WIN = process.platform === 'win32';
-const CMDC_BIN = IS_WIN ? 'cmdc' : 'cmd';
-
-const HARNESSES = {
-  cmdc: {
-    type: 'spawn',
-    bin: CMDC_BIN,
-    args: ['mods', 'add', '-g', '@agirahman/righthand'],
-    aliases: ['commandcode'],
-    label: 'Command Code',
-    pathCheck: [CMDC_BIN],
-  },
-  pi: {
-    type: 'spawn',
-    bin: 'pi',
-    args: ['install', 'npm:@agirahman/righthand'],
-    aliases: [],
-    label: 'Pi Coding Agent',
-    pathCheck: ['pi'],
-  },
-  omp: {
-    type: 'copy',
-    aliases: [],
-    label: 'Oh-My-Pi (OMP)',
-    pathCheck: [],
-    files: [
-      { src: '.omp/extensions/righthand.ts', dest: '.omp/extensions/righthand.ts' },
-    ],
-  },
-  opencode: {
-    type: 'copy',
-    aliases: [],
-    label: 'OpenCode',
-    pathCheck: ['opencode'],
-    destBase: 'home',
-    legacyFiles: ['.opencode/plugins/righthand-server.js', '.opencode/plugins/righthand-tui.js'],
-    files: [
-      { src: '.opencode-plugin/plugins/righthand-server.js', dest: 'opencode/plugins/righthand-server.js' },
-      { src: '.opencode-plugin/plugins/righthand-tui.js',    dest: 'opencode/plugins/righthand-tui.js' },
-    ],
-  },
-};
+const HARNESSES = registry.HARNESSES;
 
 function resolveHarness(name) {
-  if (!name) return null;
-  const lower = name.toLowerCase();
-  if (HARNESSES[lower]) return lower;
-  for (const [key, cfg] of Object.entries(HARNESSES)) {
-    if (cfg.aliases && cfg.aliases.includes(lower)) return key;
-  }
-  return null;
+  return registry.resolveHarness(name);
 }
 
 function configBaseDir() {
@@ -91,7 +47,7 @@ function listSkillNames() {
     .sort();
 }
 
-function resolveSkillTarget(harness, opts) {
+function defaultSkillsTarget(opts) {
   opts = opts || {};
   const candidates = [opts.dest, opts.destination, opts.target, opts.targetDir, opts.destDir];
   for (const c of candidates) {
@@ -99,6 +55,15 @@ function resolveSkillTarget(harness, opts) {
   }
   const home = opts.home || os.homedir();
   return path.join(home, '.commandcode', 'skills');
+}
+
+function resolveSkillTarget(harness, opts) {
+  opts = opts || {};
+  // Preserve historical behaviour: ignores harness argument and always resolves
+  // the cmdc skills target (from the cmdc manifest declaration).
+  const m = registry.getManifest('cmdc');
+  if (m && typeof m.skillsTarget === 'function') return m.skillsTarget(opts);
+  return defaultSkillsTarget(opts);
 }
 
 function walkFiles(dir, base) {
@@ -123,13 +88,14 @@ function readSafe(p) {
 function syncSkills(harness, opts) {
   opts = opts || {};
   const key = typeof harness === 'string' ? resolveHarness(harness) : harness;
-  const canonical = (typeof key === 'string' && HARNESSES[key]) ? key : (typeof harness === 'string' ? harness.toLowerCase() : null);
-  // Only cmdc is supported for skill sync.
-  if (canonical !== 'cmdc') {
+  const canonical = (typeof key === 'string' && HARNESSES[key]) ? key : (typeof harness === 'string' ? String(harness).toLowerCase() : null);
+  const m = canonical ? registry.getManifest(canonical) : null;
+  // Only harnesses declaring a skillsTarget sync.
+  if (!m || typeof m.skillsTarget !== 'function') {
     return { written: 0, unchanged: 0, files: [] };
   }
   const dryRun = !!opts.dryRun;
-  const targetRoot = resolveSkillTarget('cmdc', opts);
+  const targetRoot = m.skillsTarget(opts);
   const names = listSkillNames();
   let written = 0;
   let unchanged = 0;
@@ -179,6 +145,7 @@ function syncSkills(harness, opts) {
 
 function checkSkills(opts) {
   opts = opts || {};
+  // Check the cmdc skills target (reported by doctor today), derived from registry.
   const targetRoot = resolveSkillTarget('cmdc', opts);
   const names = listSkillNames();
   const missingOrStale = [];
