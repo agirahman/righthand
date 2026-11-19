@@ -73,7 +73,7 @@ Pin a harness for a single launch without editing `persona.json`:
 
     righthand launch pi worker --cwd <lane>
 
-A Pi launch spawns `pi --approve` plus `--model <model>` when a model is resolved, and injects the persona through `RIGHTHAND_PERSONA` in the child process environment. Pi reads that variable before the state file, so a dispatched process keeps the persona the dispatcher chose. `righthand launch pi worker --print` prints the command line followed by an `env: RIGHTHAND_PERSONA=worker` line.
+A Pi launch spawns `pi --approve` plus `--model <model>` when a model is resolved, and injects the persona through `RIGHTHAND_PERSONA` in the child process environment. Pi reads that variable before the state file, so a dispatched process keeps the persona the dispatcher chose. The `--model` flag is verified against `pi --help`, but that a resolved model actually drives a Pi session is unverified: no Pi model call has been exercised. `righthand launch pi worker --print` prints the command line followed by an `env: RIGHTHAND_PERSONA=worker` line.
 
 ## Readonly enforcement
 
