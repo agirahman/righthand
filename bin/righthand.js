@@ -13,6 +13,7 @@ const root = path.resolve(__dirname, '..');
 const profilesDir = path.join(root, 'profiles');
 
 const harness = require('./harness');
+const registry = require('../harness/registry');
 const dc = require('./doctor-checks');
 const HARNESSES = harness.HARNESSES;
 const resolveHarness = harness.resolveHarness;
@@ -43,6 +44,75 @@ function loadProfile(name) {
   const p = path.join(profilesDir, `${name}.md`);
   if (!fs.existsSync(p)) return null;
   return fs.readFileSync(p, 'utf8');
+}
+
+// ---------------------------------------------------------------------------
+// Harness helpers
+// ---------------------------------------------------------------------------
+function getHarnessManifest(key) {
+  return registry.getManifest(key);
+}
+
+function harnessContext() {
+  return { dc, pkg, expected: pkg.version, cache: {} };
+}
+
+function firstManifestWithHook(hook) {
+  for (const m of registry.listManifests()) {
+    if (typeof m[hook] === 'function') return m;
+  }
+  return null;
+}
+
+function collectStrictHarnessData(ctx) {
+  const out = [];
+  for (const m of registry.listManifests()) {
+    if (typeof m.strictData !== 'function') continue;
+    out.push({
+      key: m.key,
+      label: m.strictLabel || m.key,
+      requiresParsed: !!m.strictRequiresParsed,
+      data: m.strictData(ctx),
+    });
+  }
+  return out;
+}
+
+function runHarnessSkillsAndProfileCleanup(key, dryRun) {
+  const m = getHarnessManifest(key);
+  if (!m) return;
+  if (typeof m.skillsTarget === 'function') {
+    const res = syncSkills(key, { dryRun });
+    for (const name of listSkillNames()) {
+      const s = (res.skills && res.skills[name]) || { failed: 0 };
+      const mark = s.failed > 0 ? '✗' : '✓';
+      console.log(`  ${mark} ${name}${dryRun ? ' (dry run)' : ''}`);
+      for (const p of (res.failed || []).filter((f) => f.startsWith(name + '/'))) {
+        console.log(`    ✗ ${p}`);
+      }
+    }
+    console.log(`  ✓ skills: ${res.written} written, ${res.unchanged} unchanged`);
+  }
+  if (typeof m.userProfilesDir === 'function') {
+    const userProfilesDir = m.userProfilesDir();
+    if (fs.existsSync(userProfilesDir)) {
+      for (const retired of RETIRED_PERSONAS) {
+        const retiredPath = path.join(userProfilesDir, retired + '.md');
+        if (fs.existsSync(retiredPath)) {
+          if (dryRun) {
+            console.log(`  → (dry run) remove retired persona ${retired}`);
+          } else {
+            try {
+              fs.unlinkSync(retiredPath);
+              console.log(`  removed retired persona: ${retired}`);
+            } catch (e) {
+              console.log(`  warning: could not remove ${retiredPath}: ${e && e.message ? e.message : e}`);
+            }
+          }
+        }
+      }
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -184,20 +254,6 @@ function cmdInject() {
   console.log(`## Active RightHand persona: ${state.active}\n\n${body.trim()}\n`);
 }
 
-function getPiPackage() {
-  if (!isInPath('pi')) return null;
-  const r = IS_WIN
-    ? spawnSync(process.env.ComSpec || 'cmd.exe', ['/d', '/s', '/c', 'pi list'], { encoding: 'utf8', timeout: 10000, shell: false, stdio: ['ignore', 'pipe', 'pipe'] })
-    : spawnSync('pi', ['list'], { encoding: 'utf8', timeout: 10000, shell: false, stdio: ['ignore', 'pipe', 'pipe'] });
-  if (!r || r.error || r.status !== 0) return null;
-  const installed = dc.parsePiList(r.stdout).find((p) => p.id === 'npm:@agirahman/righthand');
-  if (!installed || !installed.path) return null;
-  let manifest;
-  try { manifest = JSON.parse(fs.readFileSync(path.join(installed.path, 'package.json'), 'utf8')); } catch (e) { return null; }
-  if (manifest.name !== '@agirahman/righthand') return null;
-  return { path: installed.path, version: manifest.version || installed.version, manifest: manifest };
-}
-
 function cmdStatus() {
   const cwd = process.cwd();
   const state = readState(cwd);
@@ -211,26 +267,20 @@ function cmdStatus() {
   }
 
   console.log('Setup harnesses:');
-  const piPackage = getPiPackage();
-  let cmdcInstalled = false;
-  let cmdcVersion = null;
-  try {
-    const r = runModsList();
-    if (r && !r.error && r.status === 0) {
-      const parsed = dc.parseModsList(r.stdout || '');
-      cmdcInstalled = parsed.installed;
-      cmdcVersion = parsed.version;
-    }
-  } catch (e) {}
+  const ctx = harnessContext();
   for (const [key, h] of Object.entries(HARNESSES)) {
-    if (h.type === 'copy') {
+    const m = getHarnessManifest(key);
+    let info;
+    if (m && typeof m.statusInfo === 'function') {
+      info = m.statusInfo(ctx);
+    } else if (h.type === 'copy') {
       const allExist = h.files.every(({ dest }) => fs.existsSync(resolveDestPath(h, dest)));
-      console.log(`  ${allExist ? '✓' : '-'} ${key}: ${allExist ? 'set up' : 'not set up'}`);
-    } else if (key === 'pi') {
-      console.log(`  ${piPackage ? '✓' : '-'} ${key}: ${piPackage ? `installed v${piPackage.version || 'unknown'}` : 'not set up'}`);
-    } else if (key === 'cmdc') {
-      console.log(`  ${cmdcInstalled ? '✓' : '-'} ${key}: ${cmdcInstalled ? `installed${cmdcVersion ? ` v${cmdcVersion}` : ''}` : 'not set up or unverified'}`);
+      info = { mark: allExist ? '✓' : '-', text: allExist ? 'set up' : 'not set up' };
+    } else {
+      const found = h.pathCheck && h.pathCheck.length > 0 && h.pathCheck.some((b) => isInPath(b));
+      info = { mark: found ? '✓' : '-', text: found ? 'available' : 'not detected' };
     }
+    console.log(`  ${info.mark} ${key}: ${info.text}`);
   }
 }
 
@@ -358,7 +408,13 @@ function cmdLaunch(personaName, opts) {
   }
 
   const args = buildLaunchArgs(personaName, resolution);
-  const bin = IS_WIN ? 'cmdc' : 'cmd';
+  const resolvedHarnessKey = resolveHarness(resolution.harness);
+  const launchManifest = resolvedHarnessKey ? getHarnessManifest(resolvedHarnessKey) : null;
+  if (!launchManifest || !launchManifest.bin) {
+    console.error(`Error: harness "${resolution.harness}" has no launch manifest or binary declared`);
+    process.exit(2);
+  }
+  const bin = launchManifest.bin;
 
   if (opts.print) {
     console.log(formatCommand(bin, args));
@@ -415,36 +471,7 @@ function cmdSetup(target, opts) {
           console.log(`  ✗ install failed (exit ${r.status})`);
         }
       }
-      if (key === 'cmdc') {
-        const res = syncSkills('cmdc', { dryRun });
-        for (const name of listSkillNames()) {
-          const s = (res.skills && res.skills[name]) || { failed: 0 };
-          const mark = s.failed > 0 ? '✗' : '✓';
-          console.log(`  ${mark} ${name}${dryRun ? ' (dry run)' : ''}`);
-          for (const p of (res.failed || []).filter((f) => f.startsWith(name + '/'))) {
-            console.log(`    ✗ ${p}`);
-          }
-        }
-        console.log(`  ✓ skills: ${res.written} written, ${res.unchanged} unchanged`);
-        const userProfilesDir = path.join(os.homedir(), '.commandcode', 'profiles');
-        if (fs.existsSync(userProfilesDir)) {
-          for (const retired of RETIRED_PERSONAS) {
-            const retiredPath = path.join(userProfilesDir, retired + '.md');
-            if (fs.existsSync(retiredPath)) {
-              if (dryRun) {
-                console.log(`  → (dry run) remove retired persona ${retired}`);
-              } else {
-                try {
-                  fs.unlinkSync(retiredPath);
-                  console.log(`  removed retired persona: ${retired}`);
-                } catch (e) {
-                  console.log(`  warning: could not remove ${retiredPath}: ${e && e.message ? e.message : e}`);
-                }
-              }
-            }
-          }
-        }
-      }
+      runHarnessSkillsAndProfileCleanup(key, dryRun);
     } else if (h.type === 'copy') {
       for (const { src, dest } of h.files) {
         const srcPath = path.join(root, src);
@@ -522,7 +549,7 @@ function cmdUpdate(target, opts) {
     }
   }
 
-  // Spawn harnesses (cmdc/pi) auto-update via package manager
+  // Spawn harnesses auto-update via package manager
   if (spawnTargets.length > 0) {
     for (const key of spawnTargets) {
       const h = HARNESSES[key];
@@ -541,36 +568,7 @@ function cmdUpdate(target, opts) {
       } else {
         console.log(`  → (dry run) ${h.bin} ${h.args.join(' ')}`);
       }
-      if (key === 'cmdc') {
-        const res = syncSkills('cmdc', { dryRun });
-        for (const name of listSkillNames()) {
-          const s = (res.skills && res.skills[name]) || { failed: 0 };
-          const mark = s.failed > 0 ? '✗' : '✓';
-          console.log(`  ${mark} ${name}${dryRun ? ' (dry run)' : ''}`);
-          for (const p of (res.failed || []).filter((f) => f.startsWith(name + '/'))) {
-            console.log(`    ✗ ${p}`);
-          }
-        }
-        console.log(`  ✓ skills: ${res.written} written, ${res.unchanged} unchanged`);
-        const userProfilesDir = path.join(os.homedir(), '.commandcode', 'profiles');
-        if (fs.existsSync(userProfilesDir)) {
-          for (const retired of RETIRED_PERSONAS) {
-            const retiredPath = path.join(userProfilesDir, retired + '.md');
-            if (fs.existsSync(retiredPath)) {
-              if (dryRun) {
-                console.log(`  → (dry run) remove retired persona ${retired}`);
-              } else {
-                try {
-                  fs.unlinkSync(retiredPath);
-                  console.log(`  removed retired persona: ${retired}`);
-                } catch (e) {
-                  console.log(`  warning: could not remove ${retiredPath}: ${e && e.message ? e.message : e}`);
-                }
-              }
-            }
-          }
-        }
-      }
+      runHarnessSkillsAndProfileCleanup(key, dryRun);
     }
   }
 
@@ -582,18 +580,6 @@ function cmdUpdate(target, opts) {
       console.log('Nothing to update. For Pi/CommandCode, use their own package manager.');
     }
   }
-}
-
-function runModsList() {
-  if (process.platform === 'win32') {
-    const comspec = process.env.ComSpec || 'cmd.exe';
-    return spawnSync(comspec, ['/d', '/s', '/c', 'cmdc mods list'], {
-      encoding: 'utf8', timeout: 10000, shell: false, stdio: ['ignore', 'pipe', 'pipe'],
-    });
-  }
-  return spawnSync('cmdc', ['mods', 'list'], {
-    encoding: 'utf8', timeout: 10000, shell: false, stdio: ['ignore', 'pipe', 'pipe'],
-  });
 }
 
 function cmdDoctor() {
@@ -634,48 +620,21 @@ function cmdDoctor() {
     console.log(`  - unsupported harness: ${h.persona} ${h.harness}`);
   }
 
-  let modParsed = false;
-  let modInstalled = false;
-  let modVersion = null;
-  try {
-    const r = runModsList();
-    const out = (r && r.stdout) ? r.stdout : '';
-    if (r && !r.error && r.status === 0) {
-      const parsed = dc.parseModsList(out);
-      modInstalled = parsed.installed;
-      modVersion = parsed.version;
-      modParsed = true;
-    } else if (out.indexOf('righthand') !== -1) {
-      const parsed = dc.parseModsList(out);
-      modInstalled = parsed.installed;
-      modVersion = parsed.version;
-      modParsed = true;
-    }
-  } catch (e) {}
-
-  if (!modParsed) {
-    console.log('  - mod: unverified');
-  } else if (!modInstalled) {
-    console.log('  ✗ mod: not installed');
-  } else if (modVersion === null) {
-    console.log('  ✓ mod: installed (version not reported)');
-  } else {
-    const cmp = dc.compareVersions(modVersion, pkg.version);
-    const mark = cmp === 'match' ? '✓' : (cmp === 'drift' ? '✗' : '-');
-    console.log(`  ${mark} mod: installed v${modVersion}`);
+  const ctx = harnessContext();
+  for (const m of registry.listManifests()) {
+    if (typeof m.doctorModLines !== 'function') continue;
+    for (const line of m.doctorModLines(ctx)) console.log(line);
   }
 
   // Harness PATH check
   console.log('\nHarness PATH:');
   for (const [key, h] of Object.entries(HARNESSES)) {
+    const m = getHarnessManifest(key);
     if (h.pathCheck && h.pathCheck.length > 0) {
       const found = h.pathCheck.some(b => isInPath(b));
       const displayBin = h.pathCheck.join(' / ');
-      const extra = key === 'cmdc' ? ` (${IS_WIN ? 'Windows: cmdc' : 'Linux/macOS: cmd'})` : '';
+      const extra = m && typeof m.pathNote === 'string' ? m.pathNote : '';
       console.log(`  ${found ? '✓' : '✗'} ${displayBin.padEnd(12)} ${found ? 'found' : 'not in PATH'}${extra}`);
-    } else if (key === 'pi') {
-      const found = h.pathCheck.some((b) => isInPath(b));
-      console.log(`  ${found ? '✓' : '✗'} ${key.padEnd(12)} ${found ? 'found' : 'not in PATH'}`);
     } else {
       console.log(`  - ${key.padEnd(12)} auto-discovered (no binary)`);
     }
@@ -686,9 +645,15 @@ function cmdDoctor() {
   console.log(`  righthand initialized: ${fs.existsSync(path.join(cwd, '.righthand', 'tickets')) ? 'yes' : 'no'}`);
 
   let anySetup = false;
-  let piPackage = null;
 
   for (const [key, h] of Object.entries(HARNESSES)) {
+    const m = getHarnessManifest(key);
+    if (m && typeof m.doctorSetupLines === 'function') {
+      const res = m.doctorSetupLines(ctx);
+      for (const line of res.lines) console.log(line);
+      if (res.anySetup) anySetup = true;
+      continue;
+    }
     if (h.type === 'copy') {
       const allExist = h.files.every(({ dest }) => fs.existsSync(resolveDestPath(h, dest)));
       const status = allExist ? '✓' : '✗';
@@ -711,32 +676,12 @@ function cmdDoctor() {
           for (const p of stale) console.log(`               ${p}`);
         }
       }
-    } else if (key === 'pi') {
-      piPackage = getPiPackage();
-      if (piPackage) {
-        anySetup = true;
-        const cmp = piPackage.version ? dc.compareVersions(piPackage.version, pkg.version) : 'unknown';
-        const mark = cmp === 'match' ? '✓' : (cmp === 'drift' ? '✗' : '-');
-        console.log(`  ${mark} ${key.padEnd(10)} installed v${piPackage.version || 'unknown'}`);
-        if (cmp === 'drift') console.log(`             version drift: ${piPackage.version} vs ${pkg.version}`);
-        const piConfig = piPackage.manifest.pi || {};
-        const resourceExists = (entries) => Array.isArray(entries) && entries.some((entry) => {
-          const resourcePath = typeof entry === 'string' ? entry : entry && entry.path;
-          return typeof resourcePath === 'string' && fs.existsSync(path.join(piPackage.path, resourcePath));
-        });
-        for (const [resource, provided] of [
-          ['extension entry', resourceExists(piConfig.extensions)],
-          ['skills directory', resourceExists(piConfig.skills)],
-          ['image', typeof piConfig.image === 'string' && piConfig.image.length > 0],
-        ]) console.log(`             ${provided ? '✓' : '✗'} ${resource}${provided ? '' : ' not provided or missing'}`);
-      } else {
-        const found = h.pathCheck && h.pathCheck.length > 0 && h.pathCheck.some((b) => isInPath(b));
-        console.log(`  ✗ ${key.padEnd(10)} not installed${found ? ' (pi binary found)' : ''} — Run: righthand setup pi`);
-      }
     } else if (h.type === 'spawn') {
       const found = h.pathCheck && h.pathCheck.length > 0 ? h.pathCheck.some(b => isInPath(b)) : false;
       console.log(`  ${found ? '✓' : '✗'} ${key.padEnd(10)} ${found ? 'available' : 'not in PATH'}`);
-      if (key === 'cmdc' && modParsed && modInstalled) anySetup = true;
+      if (typeof m.contributesAnySetup === 'function') {
+        if (m.contributesAnySetup(ctx)) anySetup = true;
+      }
     }
   }
   console.log(`  ${anySetup ? '✓' : '-'} any harness setup: ${anySetup ? 'detected' : 'none detected'}`);
@@ -746,28 +691,30 @@ function cmdDoctor() {
   console.log(`\nActive Persona: ${state.active ? `${state.active}` : 'none'}`);
 
   // Legacy user profiles (informational only)
-  const legacyUserDir = path.join(os.homedir(), '.commandcode', 'profiles');
-  if (fs.existsSync(legacyUserDir)) {
-    let legacyFiles = [];
-    try {
-      legacyFiles = fs.readdirSync(legacyUserDir).filter((f) => f.endsWith('.md') && !f.startsWith('.'));
-    } catch (e) {
-      legacyFiles = [];
+  const legacyOwner = firstManifestWithHook('userProfilesDir');
+  if (legacyOwner) {
+    const legacyUserDir = legacyOwner.userProfilesDir();
+    if (fs.existsSync(legacyUserDir)) {
+      let legacyFiles = [];
+      try {
+        legacyFiles = fs.readdirSync(legacyUserDir).filter((f) => f.endsWith('.md') && !f.startsWith('.'));
+      } catch (e) {
+        legacyFiles = [];
+      }
+      const legacyNames = legacyFiles.map((f) => f.slice(0, -3));
+      const retiredFound = legacyNames.filter((n) => RETIRED_PERSONAS.indexOf(n) !== -1);
+      const shippedSet = new Set(listProfiles());
+      const shadowing = legacyNames.filter((n) => shippedSet.has(n));
+      console.log(`\nLegacy user profiles (${legacyUserDir}): ${legacyFiles.length} files`);
+      if (retiredFound.length > 0) console.log(`  retired: ${retiredFound.join(', ')}`);
+      if (shadowing.length > 0) console.log(`  shadow shipped: ${shadowing.join(', ')}`);
     }
-    const legacyNames = legacyFiles.map((f) => f.slice(0, -3));
-    const retiredFound = legacyNames.filter((n) => RETIRED_PERSONAS.indexOf(n) !== -1);
-    const shippedSet = new Set(listProfiles());
-    const shadowing = legacyNames.filter((n) => shippedSet.has(n));
-    console.log(`\nLegacy user profiles (${legacyUserDir}): ${legacyFiles.length} files`);
-    if (retiredFound.length > 0) console.log(`  retired: ${retiredFound.join(', ')}`);
-    if (shadowing.length > 0) console.log(`  shadow shipped: ${shadowing.join(', ')}`);
   }
 
   const strictFailures = dc.collectStrictFailures({
     personaConfig: pcResult,
     skills: skillStatus,
-    mod: { parsed: modParsed, installed: modInstalled, version: modVersion, expected: pkg.version },
-    pi: { installed: !!piPackage, version: piPackage && piPackage.version, expected: pkg.version }
+    harnesses: collectStrictHarnessData(ctx)
   });
   if (strict && strictFailures.length > 0) process.exit(1);
   if (strict) process.exit(0);

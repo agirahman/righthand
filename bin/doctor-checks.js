@@ -124,6 +124,14 @@ function compareVersions(installed, expected) {
   return 'drift';
 }
 
+function versionDrift(entry, label, requiresParsed) {
+  if (!entry.version || !entry.expected) return [];
+  if (!entry.installed) return [];
+  if (requiresParsed && !entry.parsed) return [];
+  if (compareVersions(entry.version, entry.expected) !== 'drift') return [];
+  return [`${label} version drift: ${entry.version} vs ${entry.expected}`];
+}
+
 function collectStrictFailures(input) {
   input = input || {};
   const failures = [];
@@ -142,16 +150,15 @@ function collectStrictFailures(input) {
   if (missing.length > 0) {
     failures.push(`capability skills missing or stale: ${missing.join(', ')}`);
   }
-  const mod = input.mod || {};
-  if (mod.parsed && mod.installed && mod.version && mod.expected) {
-    const cmp = compareVersions(mod.version, mod.expected);
-    if (cmp === 'drift') {
-      failures.push(`mod version drift: ${mod.version} vs ${mod.expected}`);
+  if (Array.isArray(input.harnesses)) {
+    for (const h of input.harnesses) {
+      if (!h || !h.data) continue;
+      failures.push(...versionDrift(h.data, h.label || 'mod', !!h.requiresParsed));
     }
-  }
-  const pi = input.pi || {};
-  if (pi.installed && pi.version && pi.expected && compareVersions(pi.version, pi.expected) === 'drift') {
-    failures.push(`pi package version drift: ${pi.version} vs ${pi.expected}`);
+  } else {
+    // Legacy shape: mod/pi keys supplied directly.
+    if (input.mod) failures.push(...versionDrift(input.mod, 'mod', true));
+    if (input.pi) failures.push(...versionDrift(input.pi, 'pi package', false));
   }
   return failures;
 }
