@@ -88,6 +88,7 @@ righthand init                   # Provision .righthand/ in the current project
 righthand status                 # One-liner: active persona + setup harnesses
 righthand config [persona]       # Resolve dispatch harness and model for a persona
 righthand launch <persona>       # Launch an agent for a persona (--print to dry-run)
+righthand launch <harness> <persona>  # Pin the harness for one launch (commandcode, pi)
 # --- Setup & Maintenance ---
 righthand setup <harness|all>    # Install RightHand into a harness
 righthand update [harness]       # Re-sync files for omp/opencode after npm update
@@ -202,7 +203,7 @@ Helper scripts automate creating Herdr workspace tabs and provisioning ticket wo
 
 ### Per-persona dispatch model and harness
 
-Dispatch harness and model are resolved per persona from `<main checkout>/.righthand/persona.json` (optional, local only). Inspect with `righthand config [persona]`. Only `commandcode` is supported as a harness today. The model value is passed through untouched, so it must be an id the target harness accepts; discover available ids with `cmdc --list-models`.
+Dispatch harness and model are resolved per persona from `<main checkout>/.righthand/persona.json` (optional, local only). Inspect with `righthand config [persona]`. Dispatchable harnesses are `commandcode` and `pi`; `righthand launch <harness> <persona>` pins one for a single launch without touching the file, and `omp`/`opencode` are valid ids that are not dispatch targets. The model value is passed through untouched, so it must be an id the target harness accepts; discover available ids with `cmdc --list-models`.
 
 ---
 
