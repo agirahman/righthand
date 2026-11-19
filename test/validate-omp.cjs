@@ -141,7 +141,8 @@ try {
     check('off command deactivates and notifies',
       JSON.parse(fs.readFileSync(statePath, 'utf8')).active === null && notifications.at(-1)?.message === 'RightHand persona deactivated');
 
-    check('generated bundle matches real OMP bundle config', bundle({ check: true }).count === 1);
+    const ompConfig = require('../harness/omp/bundle.config.cjs');
+    check('generated bundle matches real OMP bundle config', bundle({ ...ompConfig, check: true }).count === 1);
     console.log(`EVIDENCE: ${JSON.stringify({ readonly: readonlyDecisions, writer: writerDecisions }, null, 2)}`);
     if (failed > 0) {
       console.error(`\nOMP validation FAILED with ${failed} errors.`);

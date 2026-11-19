@@ -1165,7 +1165,7 @@ function evaluateToolGuard(mode: ProfileMode | null, ctx: GuardContext): GuardDe
   // unknown tool: fail closed if mutating fields present
   if (ctx.input && typeof ctx.input === 'object') {
     const input = ctx.input as Record<string, unknown>;
-    const mutating = ['command', 'script', 'file_path', 'path', 'patch', 'content'];
+    const mutating = ['command', 'script', 'file_path', 'path', 'patch', 'content', 'filePath', 'patchText'];
     if (mutating.some((k) => k in input)) {
       return { block: true, reason: 'unknown tool carried a mutating field, so it was refused' };
     }
