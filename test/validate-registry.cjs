@@ -232,11 +232,12 @@ function makeCliCopy() {
   return tmp;
 }
 
-function runCli(tmp, args) {
+function runCli(tmp, args, env) {
   const r = spawnSync(process.execPath, [path.join(tmp, 'bin', 'righthand.js'), ...args], {
     cwd: tmp,
     encoding: 'utf8',
     timeout: 60000,
+    env: env || process.env,
   });
   return { status: r.status, stdout: r.stdout || '', stderr: r.stderr || '' };
 }
@@ -278,6 +279,46 @@ check('CLI setup accepts the fifth spawn harness with --dry-run', () => {
     if (r.status !== 0) throw new Error(`setup exited ${r.status}: ${r.stderr.trim()}`);
     if (r.stdout.indexOf(`[${FIFTH_LABEL}]`) === -1) {
       throw new Error('setup did not print the fifth harness label:\n' + r.stdout);
+    }
+  } finally {
+    rmTmp(tmp);
+  }
+});
+
+check('status uses strict cmdc probe while doctor stays lenient on nonzero exit', () => {
+  const tmp = makeCliCopy();
+  try {
+    const fakeBin = path.join(tmp, 'fakebin');
+    fs.mkdirSync(fakeBin, { recursive: true });
+    const listBody = [
+      'Mods (1)',
+      '  righthand  v9.9.9  - user - from npm:@agirahman/righthand',
+    ];
+    if (process.platform === 'win32') {
+      fs.writeFileSync(
+        path.join(fakeBin, 'cmdc.cmd'),
+        '@echo off\r\n' + listBody.map((l) => 'echo ' + l + '\r\n').join('') + 'exit /b 1\r\n',
+        'utf8'
+      );
+    } else {
+      const script = path.join(fakeBin, 'cmdc');
+      fs.writeFileSync(script, '#!/bin/sh\n' + listBody.map((l) => 'echo "' + l + '"\n').join('') + 'exit 1\n', 'utf8');
+      fs.chmodSync(script, 0o755);
+    }
+    const delim = process.platform === 'win32' ? ';' : ':';
+    const env = { ...process.env, PATH: fakeBin + delim + (process.env.PATH || '') };
+    delete env.HERDR_PANE_ID;
+
+    const st = runCli(tmp, ['status'], env);
+    if (st.status !== 0) throw new Error(`status exited ${st.status}: ${st.stderr.trim()}`);
+    if (!/^ {2}- cmdc: not set up or unverified/m.test(st.stdout)) {
+      throw new Error('status treated a nonzero-exit mods list as installed:\n' + st.stdout);
+    }
+
+    const doc = runCli(tmp, ['doctor'], env);
+    if (doc.status === null) throw new Error('doctor failed to run');
+    if (!/^ {2}[\u2713\u2717-] mod: installed v9\.9\.9/m.test(doc.stdout)) {
+      throw new Error('doctor no longer accepts a nonzero-exit mods list:\n' + doc.stdout);
     }
   } finally {
     rmTmp(tmp);

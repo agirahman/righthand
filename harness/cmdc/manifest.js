@@ -35,10 +35,12 @@ function listInstalled() {
   });
 }
 
-function probe(ctx) {
+function probe(ctx, opts) {
   ctx = ctx || {};
   if (!ctx.dc) throw new Error('cmdc manifest probe requires ctx.dc');
-  if (ctx.cache && ctx.cache.cmdc) return ctx.cache.cmdc;
+  const lenient = !!(opts && opts.lenient);
+  const cacheKey = lenient ? 'cmdcLenient' : 'cmdcStrict';
+  if (ctx.cache && ctx.cache[cacheKey]) return ctx.cache[cacheKey];
   let parsed = false;
   let installed = false;
   let version = null;
@@ -50,7 +52,9 @@ function probe(ctx) {
       installed = p.installed;
       version = p.version;
       parsed = true;
-    } else if (out.indexOf('righthand') !== -1) {
+    } else if (lenient && out.indexOf('righthand') !== -1) {
+      // Doctor's historical semantics: a nonzero exit still counts when the
+      // output looks like a RightHand mods list. Status never used this.
       const p = ctx.dc.parseModsList(out);
       installed = p.installed;
       version = p.version;
@@ -58,12 +62,20 @@ function probe(ctx) {
     }
   } catch (e) {}
   const res = { parsed, installed, version };
-  if (ctx.cache) ctx.cache.cmdc = res;
+  if (ctx.cache) ctx.cache[cacheKey] = res;
   return res;
 }
 
+function strictProbe(ctx) {
+  return probe(ctx, { lenient: false });
+}
+
+function lenientProbe(ctx) {
+  return probe(ctx, { lenient: true });
+}
+
 function statusInfo(ctx) {
-  const st = probe(ctx);
+  const st = strictProbe(ctx);
   return {
     mark: st.installed ? '\u2713' : '-',
     text: st.installed ? `installed${st.version ? ` v${st.version}` : ''}` : 'not set up or unverified',
@@ -72,7 +84,7 @@ function statusInfo(ctx) {
 
 function doctorModLines(ctx) {
   const expected = ctx && ctx.expected;
-  const st = probe(ctx);
+  const st = lenientProbe(ctx);
   if (!st.parsed) return ['  - mod: unverified'];
   if (!st.installed) return ['  ✗ mod: not installed'];
   if (st.version === null) return ['  \u2713 mod: installed (version not reported)'];
@@ -99,13 +111,13 @@ module.exports = {
   statusInfo: statusInfo,
   doctorModLines: doctorModLines,
   contributesAnySetup: function contributesAnySetup(ctx) {
-    const st = probe(ctx);
+    const st = lenientProbe(ctx);
     return !!(st.parsed && st.installed);
   },
   strictLabel: 'mod',
   strictRequiresParsed: true,
   strictData: function strictData(ctx) {
-    const st = probe(ctx);
+    const st = lenientProbe(ctx);
     return { parsed: st.parsed, installed: st.installed, version: st.version, expected: ctx && ctx.expected };
   },
 };
