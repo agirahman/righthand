@@ -301,6 +301,10 @@ check('status uses strict cmdc probe while doctor stays lenient on nonzero exit'
         'utf8'
       );
     } else {
+      // The fake must be named `cmdc` here, not `cmd`: the cmdc manifest's
+      // listInstalled() spawns `cmdc` on every platform, while CMDC_BIN
+      // (`cmd` on non-win32) only names the spawn bin and the PATH check.
+      // Renaming this file to `cmd` would make the check a Linux no-op.
       const script = path.join(fakeBin, 'cmdc');
       fs.writeFileSync(script, '#!/bin/sh\n' + listBody.map((l) => 'echo "' + l + '"\n').join('') + 'exit 1\n', 'utf8');
       fs.chmodSync(script, 0o755);
