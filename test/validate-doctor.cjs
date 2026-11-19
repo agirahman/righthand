@@ -51,13 +51,13 @@ check('valid config with unknown persona name', () => {
   } finally { rmTmp(d); }
 });
 
-// 3. config with harness: pi
-check('config with harness pi', () => {
+// 3. config with harness: omp (valid harness, not dispatchable)
+check('config with harness omp', () => {
   const d = mkTmp();
   try {
     const dir = path.join(d, '.righthand');
     fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(path.join(dir, 'persona.json'), JSON.stringify({ personas: { backend: { harness: 'pi' } } }));
+    fs.writeFileSync(path.join(dir, 'persona.json'), JSON.stringify({ personas: { backend: { harness: 'omp' } } }));
     const r = dc.checkPersonaConfig(d);
     if (r.status !== 'error') throw new Error('status ' + r.status);
     if (!r.message) throw new Error('no message');

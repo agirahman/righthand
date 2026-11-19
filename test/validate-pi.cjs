@@ -200,6 +200,34 @@ try {
   if (previousScratchpad === undefined) delete process.env.COMMANDCODE_SCRATCHPAD;
   else process.env.COMMANDCODE_SCRATCHPAD = previousScratchpad;
 
+  const securityBody = fs.readFileSync(path.join(profilesDir, 'security-auditor.md'), 'utf8').split(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/m)[1].trim();
+  const previousPersonaEnv = process.env.RIGHTHAND_PERSONA;
+  try {
+    fs.writeFileSync(statePath, JSON.stringify({ active: 'worker' }));
+    process.env.RIGHTHAND_PERSONA = 'security-auditor';
+    const envEvent = { systemPromptOptions: { sections: {} } };
+    handlers.get('before_agent_start')(envEvent, ctx);
+    const envSection = envEvent.systemPromptOptions.sections.righthand;
+    check('env channel overrides the state file persona', typeof envSection === 'string' && envSection.includes(securityBody) && !envSection.includes(workerBody));
+    check('env channel readonly persona blocks a src write while file says worker', toolCall('write', { path: 'src/x.js', content: 'x' })?.block === true);
+
+    process.env.RIGHTHAND_PERSONA = '  Worker  ';
+    const normalizedEvent = { systemPromptOptions: { sections: {} } };
+    handlers.get('before_agent_start')(normalizedEvent, ctx);
+    check('env channel trims and lowercases the persona name', typeof normalizedEvent.systemPromptOptions.sections.righthand === 'string' && normalizedEvent.systemPromptOptions.sections.righthand.includes(workerBody));
+    check('env channel normalized writer persona allows a src write', toolCall('write', { path: 'src/x.js', content: 'x' })?.block !== true);
+
+    delete process.env.RIGHTHAND_PERSONA;
+    fs.writeFileSync(statePath, JSON.stringify({ active: 'security-auditor' }));
+    const fileEvent = { systemPromptOptions: { sections: {} } };
+    handlers.get('before_agent_start')(fileEvent, ctx);
+    check('unset env falls back to the state file persona', typeof fileEvent.systemPromptOptions.sections.righthand === 'string' && fileEvent.systemPromptOptions.sections.righthand.includes(securityBody));
+    check('unset env state file readonly persona still blocks a src write', toolCall('write', { path: 'src/x.js', content: 'x' })?.block === true);
+  } finally {
+    if (previousPersonaEnv === undefined) delete process.env.RIGHTHAND_PERSONA;
+    else process.env.RIGHTHAND_PERSONA = previousPersonaEnv;
+  }
+
   const extensionSource = fs.readFileSync(path.join(root, 'harness', 'pi', 'extension.ts'), 'utf8');
   check('guard exceptions fail closed structurally', extensionSource.includes('return { block: true, reason: "Blocked: the readonly guard failed to evaluate this call." };'));
 

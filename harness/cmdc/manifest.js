@@ -4,8 +4,10 @@ const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 
+const cmdcLaunch = require('./launch');
+
 const IS_WIN = process.platform === 'win32';
-const CMDC_BIN = IS_WIN ? 'cmdc' : 'cmd';
+const CMDC_BIN = cmdcLaunch.CMDC_BIN;
 
 function skillsTarget(opts) {
   opts = opts || {};
@@ -104,6 +106,7 @@ module.exports = {
   pathNote: ` (${IS_WIN ? 'Windows: cmdc' : 'Linux/macOS: cmd'})`,
   dispatchable: true,
   dispatchAlias: 'commandcode',
+  buildLaunch: cmdcLaunch.buildLaunch,
   skillsTarget: skillsTarget,
   userProfilesDir: userProfilesDir,
   listInstalled: listInstalled,

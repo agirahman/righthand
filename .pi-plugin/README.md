@@ -38,3 +38,7 @@ righthand switch <persona>
 righthand off
 ```
 Changes made via CLI immediately reflect in Pi sessions.
+
+## Dispatch
+
+Pi is a dispatch target: `righthand launch pi <persona> [--cwd <lane>]` spawns `pi --approve` plus `--model <model>` when a model is resolved, and sets `RIGHTHAND_PERSONA=<persona>` in the child process environment. That variable is read before the state file, so a dispatched process runs the dispatcher's persona even when `.righthand/state/active-persona.json` names another one. `--print` shows the command line followed by an `env: RIGHTHAND_PERSONA=<persona>` line. The `--model` flag is verified against `pi --help`; that a resolved model actually drives a Pi session is unverified, since no Pi model call has been exercised.

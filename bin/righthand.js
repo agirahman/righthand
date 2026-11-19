@@ -7,7 +7,7 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 const { readState, writeState } = require('./state');
 const { readConfig, resolvePersona, formatResolution, ConfigError, SUPPORTED_DISPATCH_HARNESSES } = require('./persona-config');
-const { buildLaunchArgs, formatCommand } = require('./launch');
+const { formatCommand } = require('./launch');
 const pkg = require('../package.json');
 const root = path.resolve(__dirname, '..');
 const profilesDir = path.join(root, 'profiles');
@@ -26,6 +26,8 @@ const listSkillNames = harness.listSkillNames;
 const checkSkills = harness.checkSkills;
 
 const IS_WIN = process.platform === 'win32';
+
+const LAUNCH_USAGE = 'Usage: righthand launch [harness] <persona> [--cwd <dir>] [--print]';
 
 const RETIRED_PERSONAS = ['editor'];
 
@@ -194,7 +196,7 @@ Setup Commands:
 
 Dispatch Commands:
   config [persona]         Resolve dispatch harness and model for a persona
-  launch <persona>         Launch an agent for a persona [--cwd <dir>] [--print]
+  launch [harness] <persona> Launch an agent for a persona [--cwd <dir>] [--print]
 
 Harnesses: cmdc (commandcode), pi, omp, opencode
 
@@ -348,8 +350,18 @@ function cmdConfig(personaArg) {
 function cmdLaunch(personaName, opts) {
   opts = opts || {};
   if (!personaName) {
-    console.error('Usage: righthand launch <persona> [--cwd <dir>] [--print]');
+    console.error(LAUNCH_USAGE);
     process.exit(1);
+  }
+
+  let explicitHarnessKey = null;
+  if (opts.harness) {
+    explicitHarnessKey = resolveHarness(opts.harness);
+    if (!explicitHarnessKey) {
+      console.error(`Unknown harness: ${opts.harness}`);
+      console.error(`Available: ${Object.keys(HARNESSES).join(', ')}`);
+      process.exit(1);
+    }
   }
 
   // --cwd validation
@@ -402,29 +414,43 @@ function cmdLaunch(personaName, opts) {
     throw e;
   }
 
+  // An explicit harness position overrides the configured harness for this
+  // launch only; the config file is left untouched.
+  if (explicitHarnessKey) {
+    const explicitManifest = getHarnessManifest(explicitHarnessKey);
+    resolution = Object.assign({}, resolution, {
+      harness: (explicitManifest && (explicitManifest.dispatchAlias || explicitManifest.key)) || explicitHarnessKey,
+      harness_source: 'argument',
+      harnessSource: 'argument',
+    });
+  }
+
   if (!SUPPORTED_DISPATCH_HARNESSES.includes(resolution.harness)) {
     console.error(`Error: persona "${personaName}" uses harness "${resolution.harness}", not supported for dispatch; supported: ${SUPPORTED_DISPATCH_HARNESSES.join(', ')}`);
     process.exit(2);
   }
 
-  const args = buildLaunchArgs(personaName, resolution);
   const resolvedHarnessKey = resolveHarness(resolution.harness);
   const launchManifest = resolvedHarnessKey ? getHarnessManifest(resolvedHarnessKey) : null;
-  if (!launchManifest || !launchManifest.bin) {
-    console.error(`Error: harness "${resolution.harness}" has no launch manifest or binary declared`);
+  if (!launchManifest || typeof launchManifest.buildLaunch !== 'function') {
+    console.error(`Error: harness "${resolution.harness}" has no launch builder declared`);
     process.exit(2);
   }
-  const bin = launchManifest.bin;
+  const launch = launchManifest.buildLaunch(personaName, resolution);
+  const bin = launch.bin;
+  const args = launch.args;
+  const launchEnv = launch.env || {};
 
   if (opts.print) {
     console.log(formatCommand(bin, args));
+    for (const [key, value] of Object.entries(launchEnv)) console.log(`env: ${key}=${value}`);
     process.exit(0);
   }
 
   const { spawn } = require('child_process');
   let child;
   try {
-    child = spawn(bin, args, { cwd: targetCwd, stdio: 'inherit', shell: IS_WIN });
+    child = spawn(bin, args, { cwd: targetCwd, stdio: 'inherit', shell: IS_WIN, env: Object.assign({}, process.env, launchEnv) });
   } catch (e) {
     console.error(`Error: unable to spawn ${bin}: ${e.message}`);
     process.exit(1);
@@ -751,7 +777,7 @@ if (!cmd || cmd === 'list') {
   cmdConfig(arg);
 } else if (cmd === 'launch') {
   const rest = argv.slice(1);
-  let personaName = null;
+  const launchPositional = [];
   let cwdOpt = null;
   let print = false;
   for (let i = 0; i < rest.length; i++) {
@@ -764,11 +790,17 @@ if (!cmd || cmd === 'list') {
         process.exit(1);
       }
       cwdOpt = rest[++i];
-    } else if (!a.startsWith('--') && !personaName) {
-      personaName = a;
+    } else if (!a.startsWith('--')) {
+      launchPositional.push(a);
     }
   }
-  cmdLaunch(personaName, { cwd: cwdOpt, print });
+  if (launchPositional.length > 2) {
+    console.error(LAUNCH_USAGE);
+    process.exit(1);
+  }
+  const launchHarness = launchPositional.length === 2 ? launchPositional[0] : null;
+  const personaName = launchPositional.length === 2 ? launchPositional[1] : launchPositional[0];
+  cmdLaunch(personaName, { cwd: cwdOpt, print, harness: launchHarness });
 } else if (cmd === '-v' || cmd === '--version' || cmd === 'version') {
   cmdVersion();
 } else if (cmd === '-h' || cmd === '--help' || cmd === 'help') {

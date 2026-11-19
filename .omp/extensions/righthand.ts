@@ -1438,6 +1438,10 @@ function getStatePath(cwd: string): string {
 }
 
 function readActivePersona(cwd: string): string | null {
+  const fromEnv = process.env.RIGHTHAND_PERSONA;
+  if (typeof fromEnv === 'string' && fromEnv.trim() !== '') {
+    return fromEnv.trim().toLowerCase();
+  }
   const canonicalPath = getStatePath(cwd);
   const legacyPath = join(cwd, '.righthand', 'active-persona.json');
   const path = existsSync(canonicalPath) ? canonicalPath : legacyPath;

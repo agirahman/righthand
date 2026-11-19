@@ -121,6 +121,22 @@ try {
   check('atomic write leaves no temporary file',
     JSON.stringify(fs.readdirSync(stateDir).sort()) === JSON.stringify(['active-persona.json']));
 
+  const previousPersonaEnv = process.env.RIGHTHAND_PERSONA;
+  try {
+    process.env.RIGHTHAND_PERSONA = '  EnvOverride  ';
+    check('env channel wins over the state file and normalizes',
+      common.readActivePersona(base) === 'envoverride');
+    process.env.RIGHTHAND_PERSONA = '   ';
+    check('blank env channel falls through to the state file',
+      common.readActivePersona(base) === 'worker');
+    delete process.env.RIGHTHAND_PERSONA;
+    check('unset env channel reads the state file',
+      common.readActivePersona(base) === 'worker');
+  } finally {
+    if (previousPersonaEnv === undefined) delete process.env.RIGHTHAND_PERSONA;
+    else process.env.RIGHTHAND_PERSONA = previousPersonaEnv;
+  }
+
   const worker = shippedProfiles.get('worker');
   const piPrompt = `## Active RightHand Persona: worker (General Worker) [mode: writer]\n> ${worker.desc}\n\n${worker.body}`;
   check('default prompt exactly matches Pi adapter output',
@@ -182,6 +198,21 @@ const commonSource = harnessFiles
 const wrapper = /export function loadAllPersonas\([^)]*\)\s*:\s*Map<[\s\S]*?(?=\nexport function|\nexport const|\nexport interface|$)/.exec(commonSource);
 check('common tree has no parsePersona and wrapper does not walk directories',
   !/function\s+parsePersona\s*\(/.test(commonSource) && !!wrapper && !/readdirSync\s*\(/.test(wrapper[0]));
+
+const registry = require(path.join(root, 'harness', 'registry.js'));
+const launchManifests = registry.listManifests().filter((m) => m.dispatchable === true);
+check('every dispatchable manifest exposes a working buildLaunch contract',
+  launchManifests.length > 0 && launchManifests.every((m) => {
+    if (typeof m.buildLaunch !== 'function') return false;
+    const built = m.buildLaunch('worker', { model: 'reflection/beam:free' });
+    return built && typeof built.bin === 'string' && built.bin !== '' &&
+      Array.isArray(built.args) && built.args.every((a) => typeof a === 'string') &&
+      built.env && typeof built.env === 'object' && !Array.isArray(built.env) &&
+      Object.values(built.env).every((v) => typeof v === 'string');
+  }));
+const nonDispatchable = registry.listManifests().filter((m) => m.key === 'omp' || m.key === 'opencode');
+check('non-dispatchable harnesses expose no launch builder',
+  nonDispatchable.length === 2 && nonDispatchable.every((m) => typeof m.buildLaunch !== 'function'));
 
 if (failed > 0) {
   console.error(`\nHarness parity validation FAILED with ${failed} errors.`);
