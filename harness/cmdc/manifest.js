@@ -1,6 +1,5 @@
 'use strict';
 
-const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
@@ -36,20 +35,50 @@ function listInstalled() {
   });
 }
 
-function getStatus(ctx) {
+function probe(ctx) {
   ctx = ctx || {};
-  const dc = ctx.dc || require('../../bin/doctor-checks');
-  let cmdcInstalled = false;
-  let cmdcVersion = null;
+  if (!ctx.dc) throw new Error('cmdc manifest probe requires ctx.dc');
+  if (ctx.cache && ctx.cache.cmdc) return ctx.cache.cmdc;
+  let parsed = false;
+  let installed = false;
+  let version = null;
   try {
     const r = listInstalled();
+    const out = (r && r.stdout) ? r.stdout : '';
     if (r && !r.error && r.status === 0) {
-      const parsed = dc.parseModsList(r.stdout || '');
-      cmdcInstalled = parsed.installed;
-      cmdcVersion = parsed.version;
+      const p = ctx.dc.parseModsList(out);
+      installed = p.installed;
+      version = p.version;
+      parsed = true;
+    } else if (out.indexOf('righthand') !== -1) {
+      const p = ctx.dc.parseModsList(out);
+      installed = p.installed;
+      version = p.version;
+      parsed = true;
     }
   } catch (e) {}
-  return { installed: cmdcInstalled, version: cmdcVersion };
+  const res = { parsed, installed, version };
+  if (ctx.cache) ctx.cache.cmdc = res;
+  return res;
+}
+
+function statusInfo(ctx) {
+  const st = probe(ctx);
+  return {
+    mark: st.installed ? '\u2713' : '-',
+    text: st.installed ? `installed${st.version ? ` v${st.version}` : ''}` : 'not set up or unverified',
+  };
+}
+
+function doctorModLines(ctx) {
+  const expected = ctx && ctx.expected;
+  const st = probe(ctx);
+  if (!st.parsed) return ['  - mod: unverified'];
+  if (!st.installed) return ['  ✗ mod: not installed'];
+  if (st.version === null) return ['  \u2713 mod: installed (version not reported)'];
+  const cmp = ctx.dc.compareVersions(st.version, expected);
+  const mark = cmp === 'match' ? '\u2713' : (cmp === 'drift' ? '✗' : '-');
+  return [`  ${mark} mod: installed v${st.version}`];
 }
 
 module.exports = {
@@ -66,14 +95,17 @@ module.exports = {
   skillsTarget: skillsTarget,
   userProfilesDir: userProfilesDir,
   listInstalled: listInstalled,
+  probe: probe,
+  statusInfo: statusInfo,
+  doctorModLines: doctorModLines,
   contributesAnySetup: function contributesAnySetup(ctx) {
-    return !!(ctx && ctx.modParsed && ctx.modInstalled);
+    const st = probe(ctx);
+    return !!(st.parsed && st.installed);
   },
   strictLabel: 'mod',
   strictRequiresParsed: true,
   strictData: function strictData(ctx) {
-    ctx = ctx || {};
-    return { parsed: ctx.modParsed, installed: ctx.modInstalled, version: ctx.modVersion, expected: ctx.expected };
+    const st = probe(ctx);
+    return { parsed: st.parsed, installed: st.installed, version: st.version, expected: ctx && ctx.expected };
   },
-  getStatus: getStatus,
 };

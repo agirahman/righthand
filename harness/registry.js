@@ -84,6 +84,17 @@ function defaultDispatchHarness() {
   return null;
 }
 
+function firstWithHook(hook) {
+  for (const m of _default.manifests) {
+    if (typeof m[hook] === 'function') return m;
+  }
+  return null;
+}
+
+function skillsOwner() {
+  return firstWithHook('skillsTarget');
+}
+
 module.exports = {
   HARNESSES: _default.HARNESSES,
   manifests: _default.manifests,
@@ -92,5 +103,6 @@ module.exports = {
   listManifests: listManifests,
   dispatchable: dispatchable,
   defaultDispatchHarness: defaultDispatchHarness,
+  skillsOwner: skillsOwner,
   loadRegistry: loadRegistry,
 };

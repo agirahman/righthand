@@ -106,6 +106,12 @@ function readConfig(cwd = process.cwd()) {
   return validateConfig(data, p);
 }
 
+function defaultDispatchOrThrow() {
+  const d = registry.defaultDispatchHarness();
+  if (!d) throw new Error('no dispatchable harness manifest is installed');
+  return d;
+}
+
 function orchestratorModel() {
   const paneId = process.env.HERDR_PANE_ID;
   if (!paneId) return null;
@@ -148,7 +154,7 @@ function resolvePersona(cwd, name, options) {
     harness = entry.harness;
     harnessSource = 'persona';
   } else {
-    harness = registry.defaultDispatchHarness() || 'commandcode';
+    harness = defaultDispatchOrThrow();
     harnessSource = 'orchestrator';
   }
 

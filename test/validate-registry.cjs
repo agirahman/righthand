@@ -4,6 +4,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const { spawnSync } = require('child_process');
 
 const repoRoot = path.join(__dirname, '..');
 const harnessRoot = path.join(repoRoot, 'harness');
@@ -138,7 +139,7 @@ check('SUPPORTED_DISPATCH_HARNESSES equals ["commandcode"]', () => {
 });
 
 check('each manifest hook that exists is a function', () => {
-  const hookNames = ['skillsTarget', 'userProfilesDir', 'listInstalled', 'detectInstall', 'contributesAnySetup'];
+  const hookNames = ['skillsTarget', 'userProfilesDir', 'listInstalled', 'detectInstall', 'contributesAnySetup', 'statusInfo', 'doctorSetupLines', 'doctorModLines', 'strictData'];
   for (const m of registry.listManifests()) {
     for (const name of hookNames) {
       if (Object.prototype.hasOwnProperty.call(m, name) && typeof m[name] !== 'function') {
@@ -184,6 +185,100 @@ check('fifth-harness discovery in temp copy without editing bin/', () => {
     if (keys.indexOf('fakeharness') === -1) throw new Error('fakeharness key missing');
     const manifests = loaded.manifests.map((m) => m.key);
     if (manifests.indexOf('fakeharness') === -1) throw new Error('fakeharness manifest missing');
+  } finally {
+    rmTmp(tmp);
+  }
+});
+
+function copyTree(src, dst) {
+  const st = fs.statSync(src);
+  if (st.isDirectory()) {
+    fs.mkdirSync(dst, { recursive: true });
+    for (const name of fs.readdirSync(src)) {
+      copyTree(path.join(src, name), path.join(dst, name));
+    }
+  } else if (st.isFile()) {
+    fs.mkdirSync(path.dirname(dst), { recursive: true });
+    fs.copyFileSync(src, dst);
+  }
+}
+
+const FIFTH_LABEL = 'Fifty Fifth Harness';
+const FIFTH_BIN = 't72-fifth-probe-bin';
+
+function makeCliCopy() {
+  const tmp = mkTmp();
+  for (const name of ['bin', 'harness', 'profiles', 'skills']) {
+    copyTree(path.join(repoRoot, name), path.join(tmp, name));
+  }
+  for (const name of ['package.json', 'plugin.json']) {
+    fs.copyFileSync(path.join(repoRoot, name), path.join(tmp, name));
+  }
+  const fifthDir = path.join(tmp, 'harness', 'fifth');
+  fs.mkdirSync(fifthDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(fifthDir, 'manifest.js'),
+    'module.exports = {\n' +
+    "  key: 'fifth',\n" +
+    "  type: 'spawn',\n" +
+    `  bin: '${FIFTH_BIN}',\n` +
+    "  args: ['install', 'fifth'],\n" +
+    '  aliases: [],\n' +
+    `  label: '${FIFTH_LABEL}',\n` +
+    `  pathCheck: ['${FIFTH_BIN}'],\n` +
+    '};\n',
+    'utf8'
+  );
+  return tmp;
+}
+
+function runCli(tmp, args) {
+  const r = spawnSync(process.execPath, [path.join(tmp, 'bin', 'righthand.js'), ...args], {
+    cwd: tmp,
+    encoding: 'utf8',
+    timeout: 60000,
+  });
+  return { status: r.status, stdout: r.stdout || '', stderr: r.stderr || '' };
+}
+
+check('fifth spawn harness appears in CLI status output', () => {
+  const tmp = makeCliCopy();
+  try {
+    const r = runCli(tmp, ['status']);
+    if (r.status !== 0) throw new Error(`status exited ${r.status}: ${r.stderr.trim()}`);
+    if (!/^ {2}[\u2713-] fifth: /m.test(r.stdout)) {
+      throw new Error('status did not list the fifth harness:\n' + r.stdout);
+    }
+  } finally {
+    rmTmp(tmp);
+  }
+});
+
+check('fifth spawn harness appears in CLI doctor output', () => {
+  const tmp = makeCliCopy();
+  try {
+    const r = runCli(tmp, ['doctor']);
+    if (r.status === null) throw new Error('doctor failed to run');
+    const pathLine = new RegExp('^ {2}[\\u2713\\u2717] ' + FIFTH_BIN + ' ', 'm');
+    if (!pathLine.test(r.stdout)) {
+      throw new Error('doctor PATH section did not include the fifth harness bin:\n' + r.stdout);
+    }
+    if (!/^ {2}[\u2713\u2717] fifth\s+\S/m.test(r.stdout)) {
+      throw new Error('doctor Setup Status did not list the fifth harness:\n' + r.stdout);
+    }
+  } finally {
+    rmTmp(tmp);
+  }
+});
+
+check('CLI setup accepts the fifth spawn harness with --dry-run', () => {
+  const tmp = makeCliCopy();
+  try {
+    const r = runCli(tmp, ['setup', 'fifth', '--dry-run']);
+    if (r.status !== 0) throw new Error(`setup exited ${r.status}: ${r.stderr.trim()}`);
+    if (r.stdout.indexOf(`[${FIFTH_LABEL}]`) === -1) {
+      throw new Error('setup did not print the fifth harness label:\n' + r.stdout);
+    }
   } finally {
     rmTmp(tmp);
   }

@@ -5,11 +5,11 @@ const os = require('os');
 const path = require('path');
 
 const registry = require('../harness/registry');
+const { isInPath } = require('../harness/lib/path');
 
 const root = path.resolve(__dirname, '..');
 const skillsDir = path.join(root, 'skills');
 
-const IS_WIN = process.platform === 'win32';
 const HARNESSES = registry.HARNESSES;
 
 function resolveHarness(name) {
@@ -31,13 +31,6 @@ function resolveDestPath(h, dest) {
   return path.join(resolveDestBase(h), dest);
 }
 
-function isInPath(bin) {
-  const { spawnSync } = require('child_process');
-  const cmd = IS_WIN ? `where ${bin}` : `which ${bin}`;
-  const r = spawnSync(cmd, { shell: true, encoding: 'utf8' });
-  return r.status === 0 && r.stdout.trim().length > 0;
-}
-
 function listSkillNames() {
   if (!fs.existsSync(skillsDir)) return [];
   return fs.readdirSync(skillsDir)
@@ -47,23 +40,19 @@ function listSkillNames() {
     .sort();
 }
 
-function defaultSkillsTarget(opts) {
-  opts = opts || {};
-  const candidates = [opts.dest, opts.destination, opts.target, opts.targetDir, opts.destDir];
-  for (const c of candidates) {
-    if (c) return c;
+function skillsOwnerManifest() {
+  const m = registry.skillsOwner();
+  if (!m || typeof m.skillsTarget !== 'function') {
+    throw new Error('no harness manifest declares a skillsTarget hook');
   }
-  const home = opts.home || os.homedir();
-  return path.join(home, '.commandcode', 'skills');
+  return m;
 }
 
 function resolveSkillTarget(harness, opts) {
   opts = opts || {};
-  // Preserve historical behaviour: ignores harness argument and always resolves
-  // the cmdc skills target (from the cmdc manifest declaration).
-  const m = registry.getManifest('cmdc');
-  if (m && typeof m.skillsTarget === 'function') return m.skillsTarget(opts);
-  return defaultSkillsTarget(opts);
+  // Preserve historical behaviour: ignores the harness argument and always
+  // resolves the skills-owning manifest's target.
+  return skillsOwnerManifest().skillsTarget(opts);
 }
 
 function walkFiles(dir, base) {
@@ -145,8 +134,8 @@ function syncSkills(harness, opts) {
 
 function checkSkills(opts) {
   opts = opts || {};
-  // Check the cmdc skills target (reported by doctor today), derived from registry.
-  const targetRoot = resolveSkillTarget('cmdc', opts);
+  // Check the skills-owning manifest's target (reported by doctor today).
+  const targetRoot = resolveSkillTarget(null, opts);
   const names = listSkillNames();
   const missingOrStale = [];
   let installed = 0;
