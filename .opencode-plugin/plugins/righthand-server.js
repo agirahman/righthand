@@ -1566,6 +1566,11 @@ function saveSessionState(state) {
         throw error;
     }
 }
+const resolveProjectDirectory = (context) => {
+    const location = context && typeof context === "object" ? context.location : undefined;
+    const directory = location && typeof location === "object" ? location.directory : undefined;
+    return typeof directory === "string" && directory.trim() !== "" ? directory : process.cwd();
+};
 const packageProfilesDir = join(getRepoRoot(), "profiles");
 const loadOpenCodePersonas = (cwd) => loadAllPersonas(cwd, {
     packageDir: packageProfilesDir,
@@ -1574,7 +1579,7 @@ const loadOpenCodePersonas = (cwd) => loadAllPersonas(cwd, {
 const righthandOpenCodePlugin = Plugin.define({
     id: "user.righthand.server",
     async setup(context) {
-        const cwd = process.cwd();
+        const cwd = resolveProjectDirectory(context);
         const sessionRegistration = await context.session.hook("context", async (event) => {
             const info = await context.session.get({ sessionID: event.sessionID });
             if (info.parentID)

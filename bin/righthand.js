@@ -355,6 +355,7 @@ function cmdLaunch(personaName, opts) {
   }
 
   let explicitHarnessKey = null;
+  let explicitHarnessName = null;
   if (opts.harness) {
     explicitHarnessKey = resolveHarness(opts.harness);
     if (!explicitHarnessKey) {
@@ -362,6 +363,8 @@ function cmdLaunch(personaName, opts) {
       console.error(`Available: ${Object.keys(HARNESSES).join(', ')}`);
       process.exit(1);
     }
+    const explicitManifest = getHarnessManifest(explicitHarnessKey);
+    explicitHarnessName = (explicitManifest && (explicitManifest.dispatchAlias || explicitManifest.key)) || explicitHarnessKey;
   }
 
   // --cwd validation
@@ -405,24 +408,20 @@ function cmdLaunch(personaName, opts) {
 
   let resolution;
   try {
-    resolution = resolvePersona(cwd, personaName, { orchestratorModel: om, config: config });
+    // An explicit harness position pins the harness for this launch only; the
+    // config file is left untouched. resolvePersona drops a model that belongs
+    // to another harness and only forwards a per-harness `models` entry.
+    resolution = resolvePersona(cwd, personaName, {
+      orchestratorModel: om,
+      config: config,
+      targetHarness: explicitHarnessName,
+    });
   } catch (e) {
     if (e instanceof ConfigError) {
       console.error(`Error: ${e.message}`);
       process.exit(2);
     }
     throw e;
-  }
-
-  // An explicit harness position overrides the configured harness for this
-  // launch only; the config file is left untouched.
-  if (explicitHarnessKey) {
-    const explicitManifest = getHarnessManifest(explicitHarnessKey);
-    resolution = Object.assign({}, resolution, {
-      harness: (explicitManifest && (explicitManifest.dispatchAlias || explicitManifest.key)) || explicitHarnessKey,
-      harness_source: 'argument',
-      harnessSource: 'argument',
-    });
   }
 
   if (!SUPPORTED_DISPATCH_HARNESSES.includes(resolution.harness)) {

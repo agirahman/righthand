@@ -227,6 +227,127 @@ check('formatResolution empty model', () => {
   if (line !== 'persona=x harness=commandcode harness_source=orchestrator model= model_source=harness-default') throw new Error(line);
 });
 
+// ---------------------------------------------------------------------------
+// Per-harness models map
+// ---------------------------------------------------------------------------
+function writeConfig(d, personas) {
+  const dir = path.join(d, '.righthand');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'persona.json'), JSON.stringify({ personas }));
+}
+
+const CROSS_HARNESS_CONFIG = {
+  worker: {
+    harness: 'commandcode',
+    model: '9router-bili/cmc/deepseek/deepseek-v4.1-flash',
+    models: { pi: '9router/agness/agnes-2.5-flash' },
+  },
+};
+
+// 16. valid models map accepted
+check('valid models map is accepted', () => {
+  const d = mkTmp();
+  try {
+    writeConfig(d, CROSS_HARNESS_CONFIG);
+    const r = pc.resolvePersona(d, 'worker', { orchestratorModel: null });
+    if (r.model !== '9router-bili/cmc/deepseek/deepseek-v4.1-flash') throw new Error('model');
+    if (r.model_source !== 'persona') throw new Error('model_source');
+  } finally { rmTmp(d); }
+});
+
+// 17. explicit target harness picks the models entry
+check('explicit target harness uses the models entry', () => {
+  const d = mkTmp();
+  try {
+    writeConfig(d, CROSS_HARNESS_CONFIG);
+    const r = pc.resolvePersona(d, 'worker', { orchestratorModel: null, targetHarness: 'pi' });
+    if (r.harness !== 'pi') throw new Error(`harness=${r.harness}`);
+    if (r.harness_source !== 'argument') throw new Error(`harness_source=${r.harness_source}`);
+    if (r.model !== '9router/agness/agnes-2.5-flash') throw new Error(`model=${r.model}`);
+    if (r.model_source !== 'persona-models') throw new Error(`model_source=${r.model_source}`);
+  } finally { rmTmp(d); }
+});
+
+// 18. explicit harness equal to the configured harness keeps today's behaviour
+check('explicit target harness equal to the configured harness is unchanged', () => {
+  const d = mkTmp();
+  try {
+    writeConfig(d, CROSS_HARNESS_CONFIG);
+    const r = pc.resolvePersona(d, 'worker', { orchestratorModel: null, targetHarness: 'commandcode' });
+    if (r.harness !== 'commandcode') throw new Error(`harness=${r.harness}`);
+    if (r.model !== '9router-bili/cmc/deepseek/deepseek-v4.1-flash') throw new Error(`model=${r.model}`);
+    if (r.model_source !== 'persona') throw new Error(`model_source=${r.model_source}`);
+  } finally { rmTmp(d); }
+});
+
+// 19. cross-harness without a models entry omits the model entirely
+check('cross-harness without a models entry omits the model', () => {
+  const d = mkTmp();
+  try {
+    writeConfig(d, { worker: { harness: 'commandcode', model: 'cmdc-only-model' } });
+    const r = pc.resolvePersona(d, 'worker', { orchestratorModel: 'orch/model', targetHarness: 'pi' });
+    if (r.harness !== 'pi') throw new Error(`harness=${r.harness}`);
+    if (r.model !== '') throw new Error(`model=${r.model}`);
+    if (r.model_source !== 'harness-default') throw new Error(`model_source=${r.model_source}`);
+  } finally { rmTmp(d); }
+});
+
+// 20. persona without a harness field compares against the default dispatch harness
+check('harness-less persona honours the default dispatch harness for cross-harness launches', () => {
+  const d = mkTmp();
+  try {
+    writeConfig(d, { worker: { model: 'cmdc-only-model', models: { pi: 'pi/model' } } });
+    const same = pc.resolvePersona(d, 'worker', { orchestratorModel: null });
+    if (same.harness !== 'commandcode' || same.model !== 'cmdc-only-model' || same.model_source !== 'persona') {
+      throw new Error(`same=${pc.formatResolution(same)}`);
+    }
+    const cross = pc.resolvePersona(d, 'worker', { orchestratorModel: null, targetHarness: 'pi' });
+    if (cross.model !== 'pi/model' || cross.model_source !== 'persona-models') throw new Error(`cross=${pc.formatResolution(cross)}`);
+    const other = pc.resolvePersona(d, 'worker', { orchestratorModel: null, targetHarness: 'commandcode' });
+    if (other.model !== 'cmdc-only-model' || other.model_source !== 'persona') throw new Error(`other=${pc.formatResolution(other)}`);
+  } finally { rmTmp(d); }
+});
+
+// 21. models must be a plain object
+expectThrow('non-object models throws ConfigError', '"models" must be an object', () => {
+  const d = mkTmp();
+  try {
+    writeConfig(d, { worker: { models: ['pi/model'] } });
+    pc.resolvePersona(d, 'worker', { orchestratorModel: 'm' });
+  } finally { rmTmp(d); }
+});
+
+// 22. models keys must be dispatchable harnesses
+expectThrow('unknown harness key in models throws ConfigError', 'is not supported for dispatch', () => {
+  const d = mkTmp();
+  try {
+    writeConfig(d, { worker: { models: { omp: 'model' } } });
+    pc.resolvePersona(d, 'worker', { orchestratorModel: 'm' });
+  } finally { rmTmp(d); }
+});
+
+// 23. models values must be non-empty strings
+expectThrow('empty model in models throws ConfigError', 'must be a non-empty string', () => {
+  const d = mkTmp();
+  try {
+    writeConfig(d, { worker: { models: { pi: '  ' } } });
+    pc.resolvePersona(d, 'worker', { orchestratorModel: 'm' });
+  } finally { rmTmp(d); }
+});
+
+// 24. BITE PROOF: the cross-harness assertion is sensitive to the models entry
+check('BITE PROOF: dropping the models entry changes the cross-harness resolution', () => {
+  const d = mkTmp();
+  try {
+    writeConfig(d, CROSS_HARNESS_CONFIG);
+    const withModels = pc.resolvePersona(d, 'worker', { orchestratorModel: null, targetHarness: 'pi' });
+    writeConfig(d, { worker: { harness: 'commandcode', model: '9router-bili/cmc/deepseek/deepseek-v4.1-flash' } });
+    const withoutModels = pc.resolvePersona(d, 'worker', { orchestratorModel: null, targetHarness: 'pi' });
+    if (withModels.model !== '9router/agness/agnes-2.5-flash') throw new Error(`with=${withModels.model}`);
+    if (withoutModels.model !== '') throw new Error(`without=${withoutModels.model}`);
+  } finally { rmTmp(d); }
+});
+
 if (failed > 0) {
   console.error(`\nPersona config validation FAILED with ${failed} errors.`);
   process.exit(1);

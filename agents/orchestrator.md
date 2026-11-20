@@ -116,7 +116,7 @@ Harness id, launch command, persona injection, model selection, prompt submissio
 | Harness id | Launch command | Persona injection | Model selection | Prompt submission | Caveat |
 |---|---|---|---|---|---|
 | commandcode | `righthand launch <persona> --cwd <lane>` | `--mod-option default=<persona>` | `-m <model>` (value from `righthand config <persona>`; omitted when `model=` is empty) | `herdr pane send-text <pane> "<prompt>"` then `herdr pane send-keys <pane> enter` | See verified mechanics below. |
-| pi | `righthand launch pi <persona> --cwd <lane>` | `RIGHTHAND_PERSONA=<persona>` in the spawned process env; `/righthand <persona>` inside Pi | `--model <model>` (value from `righthand config <persona>`; omitted when `model=` is empty; flag is verified against `pi --help`, unverified: no Pi model call exercised) | `herdr pane send-text <pane> "<prompt>"` then `herdr pane send-keys <pane> enter` (unverified: not exercised against a live Pi session) | See Pi verified mechanics below. |
+| pi | `righthand launch pi <persona> --cwd <lane>` | `RIGHTHAND_PERSONA=<persona>` in the spawned process env; `/righthand <persona>` inside Pi | `--model <model>` from the persona's `models.pi` entry; when pinned to Pi without that entry the flag is omitted and Pi uses its own default, so a commandcode model id is never forwarded (emitted argv is asserted by `validate-launch`; that a resolved model drives a Pi session is unverified) | `herdr pane send-text <pane> "<prompt>"` then `herdr pane send-keys <pane> enter` (unverified: not exercised against a live Pi session) | See Pi verified mechanics below. |
 | omp | unverified | unverified | unverified | unverified | unverified |
 | opencode | unverified | unverified | unverified | unverified | unverified |
 | claude-code | unverified | unverified | unverified | unverified | unverified |
@@ -146,7 +146,7 @@ Lane creation follows the `worktree-lanes` skill. Reporting and board events fol
 - Active persona state is stored at `<cwd>/.righthand/state/active-persona.json` (`.pi-plugin/extensions/righthand.ts:86-88`, `getStatePath`).
 - Injection is automatic: the `before_agent_start` handler assigns the persona to `systemPromptOptions.sections.righthand` (`.pi-plugin/extensions/righthand.ts:155-175`, `before_agent_start`).
 - Since #50, `readonly` persona tool calls are blocked by the guard/engine; before #50 Pi had no enforcement (`4cbba4e`, `.pi-plugin/extensions/righthand.ts:134-153`, `tool_call` handler).
-- Pi is a dispatch target: `harness/pi/manifest.js` sets `dispatchable: true` and exposes `buildLaunch`, so `righthand launch pi <persona>` spawns `pi --approve` plus `--model <model>` when the resolved model is non-empty, with `RIGHTHAND_PERSONA=<persona>` in the child process environment. The argv shape is verified by `--print` and the validators; that a resolved model actually drives a Pi session is unverified, since no Pi model call has been exercised.
+- Pi is a dispatch target: `harness/pi/manifest.js` sets `dispatchable: true` and exposes `buildLaunch`, so `righthand launch pi <persona>` spawns `pi --approve` plus `--model <model>` when a Pi model is resolved, with `RIGHTHAND_PERSONA=<persona>` in the child process environment. The model comes from the persona's `models.pi` entry; a persona whose configured harness is commandcode contributes no Pi model, so the flag is omitted instead of forwarding a commandcode id. The argv shape is asserted by `righthand launch pi <persona> --print` and `test/validate-launch.cjs`; that a resolved model actually drives a Pi session is unverified, since no Pi model call has been exercised.
 - The `RIGHTHAND_PERSONA` environment variable is read before the state file by `harness/common/state.ts` `readActivePersona`, so a dispatched Pi process uses the persona the dispatcher chose even while the state file names another persona. It is trimmed and lowercased; a blank value falls through to the file. `righthand launch pi <persona> --print` prints the command line then one `env: RIGHTHAND_PERSONA=<persona>` line.
 
 ## Model and harness
@@ -156,8 +156,8 @@ Per-persona dispatch settings live in `<main checkout>/.righthand/persona.json` 
 ```json
 {
   "personas": {
-    "code-reviewer": { "model": "opus 5.5", "harness": "pi" },
-    "worker": { "model": "my-fast-model" }
+    "code-reviewer": { "model": "opus 5.5", "harness": "pi", "models": { "commandcode": "opus-5.5-cmdc" } },
+    "worker": { "model": "my-fast-model", "models": { "pi": "pi-fast-model" } }
   }
 }
 ```
@@ -165,9 +165,11 @@ Per-persona dispatch settings live in `<main checkout>/.righthand/persona.json` 
 Resolution order, field by field:
 
 - `harness`: value from the persona entry; otherwise `commandcode` (the orchestrator's own harness). Source is `persona` or `orchestrator`.
-- `model`: value from the persona entry; otherwise the orchestrator's live model; otherwise empty. Source is `persona`, `orchestrator`, or `harness-default`. Empty model means omit `-m` and use the harness default.
+- `model`, no explicit harness launch: value from the persona entry; otherwise the orchestrator's live model; otherwise empty. Source is `persona`, `orchestrator`, or `harness-default`. Empty model means omit the model flag and use the harness default.
+- `model`, explicit harness launch that matches the configured harness: unchanged from the no-explicit-harness case.
+- `model`, explicit harness launch that differs from the configured harness (the configured harness defaults to `commandcode` when the entry has no `harness`): the persona's `models[<explicit harness>]`; otherwise empty. Source is `persona-models` or `harness-default`. The persona's own model and the orchestrator model are never forwarded cross-harness, because a model id one harness accepts is usually rejected by another.
 
-Missing file, missing `personas`, or a persona not present all mean full inheritance; the file is a delta, not a full table. Dispatchable harnesses are `commandcode` and `pi`. This configuration only affects agents launched by the orchestrator. A user working directly in a harness picks the model with `/model`, and RightHand must never override it. The model value is passed through untouched, so it must be an id the target harness accepts. `righthand launch <harness> <persona>` overrides the configured harness for that single launch without editing the file; `omp` and `opencode` are valid harness ids but are not dispatch targets and are refused with the supported list. Discover available ids with `cmdc --list-models`.
+Missing file, missing `personas`, or a persona not present all mean full inheritance; the file is a delta, not a full table. Dispatchable harnesses are `commandcode` and `pi`, and they are also the only valid keys in `models`. This configuration only affects agents launched by the orchestrator. A user working directly in a harness picks the model with `/model`, and RightHand must never override it. The model value is passed through untouched, so it must be an id the target harness accepts. `righthand launch <harness> <persona>` overrides the configured harness for that single launch without editing the file; `omp` and `opencode` are valid harness ids but are not dispatch targets and are refused with the supported list. Discover available ids with `cmdc --list-models`.
 
 ## Procedure
 

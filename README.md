@@ -203,7 +203,7 @@ Helper scripts automate creating Herdr workspace tabs and provisioning ticket wo
 
 ### Per-persona dispatch model and harness
 
-Dispatch harness and model are resolved per persona from `<main checkout>/.righthand/persona.json` (optional, local only). Inspect with `righthand config [persona]`. Dispatchable harnesses are `commandcode` and `pi`; `righthand launch <harness> <persona>` pins one for a single launch without touching the file, and `omp`/`opencode` are valid ids that are not dispatch targets. The model value is passed through untouched, so it must be an id the target harness accepts; discover available ids with `cmdc --list-models`.
+Dispatch harness and model are resolved per persona from `<main checkout>/.righthand/persona.json` (optional, local only). Inspect with `righthand config [persona]`. Dispatchable harnesses are `commandcode` and `pi`; `righthand launch <harness> <persona>` pins one for a single launch without touching the file, and `omp`/`opencode` are valid ids that are not dispatch targets. A persona entry may carry an optional `models` map keyed by dispatch harness (`{"worker":{"harness":"commandcode","model":"<cmdc id>","models":{"pi":"<pi id>"}}}`); a launch pinned to a harness other than the configured one uses that harness's entry, or omits the model flag when none is present, and never forwards the configured harness's model cross-harness. The resolved model is passed through untouched, so it must be an id the target harness accepts; discover available ids with `cmdc --list-models`.
 
 ---
 
