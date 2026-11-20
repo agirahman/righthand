@@ -57,7 +57,21 @@ On Windows use `Copy-Item -Recurse`.
 
 ## Per-persona dispatch model and harness
 
-Dispatch harness and model are resolved per persona from `<main checkout>/.righthand/persona.json` (optional, local only). Use `righthand config [persona]` to inspect the resolved values. Dispatchable harnesses are `commandcode` and `pi`. The model value is passed through untouched, so it must be an id the target harness accepts; discover available ids with `cmdc --list-models`.
+Dispatch harness and model are resolved per persona from `<main checkout>/.righthand/persona.json` (optional, local only). Use `righthand config [persona]` to inspect the resolved values. Dispatchable harnesses are `commandcode` and `pi`. A persona entry may also carry an optional `models` map keyed by dispatch harness, so a launch pinned to a different harness uses that harness's own model id instead of the commandcode-only one:
+
+```json
+{
+  "personas": {
+    "worker": {
+      "harness": "commandcode",
+      "model": "9router-bili/cmc/deepseek/deepseek-v4.1-flash",
+      "models": { "pi": "9router/agness/agnes-2.5-flash" }
+    }
+  }
+}
+```
+
+`models` keys must be dispatchable harnesses and values must be non-empty model ids. The resolved model is passed through untouched, so it must be an id the target harness accepts; discover available ids with `cmdc --list-models`.
 
 ### Launching a persona
 
@@ -73,7 +87,7 @@ Pin a harness for a single launch without editing `persona.json`:
 
     righthand launch pi worker --cwd <lane>
 
-A Pi launch spawns `pi --approve` plus `--model <model>` when a model is resolved, and injects the persona through `RIGHTHAND_PERSONA` in the child process environment. Pi reads that variable before the state file, so a dispatched process keeps the persona the dispatcher chose. The `--model` flag is verified against `pi --help`, but that a resolved model actually drives a Pi session is unverified: no Pi model call has been exercised. `righthand launch pi worker --print` prints the command line followed by an `env: RIGHTHAND_PERSONA=worker` line.
+A Pi launch spawns `pi --approve` plus `--model <model>` only when the resolved model is non-empty, and injects the persona through `RIGHTHAND_PERSONA` in the child process environment. Pi reads that variable before the state file, so a dispatched process keeps the persona the dispatcher chose. When the launch is pinned to a harness other than the persona's configured one, the model comes from `models[<harness>]` if present, otherwise the flag is omitted and Pi uses its own default; a commandcode model id is never forwarded to Pi. `righthand launch pi worker --print` prints the command line followed by an `env: RIGHTHAND_PERSONA=worker` line.
 
 ## Readonly enforcement
 

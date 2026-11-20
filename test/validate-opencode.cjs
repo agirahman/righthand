@@ -171,6 +171,76 @@ async function main() {
     await disposeTeardown();
     check('async tool registration is disposed during teardown', disposeServer.disposeCalls === 1);
 
+    const commonActiveFile = path.join(repoDir, '.righthand', 'state', 'active-persona.json');
+
+    // F1: the plugin must resolve the project root from the host context, never
+    // from the opencode service process cwd. The session state is deliberately
+    // empty so only the project state file can name the persona.
+    const serviceCwd = path.join(tempDir, 'service-cwd');
+    fs.mkdirSync(serviceCwd, { recursive: true });
+    fs.mkdirSync(path.dirname(stateFile), { recursive: true });
+    fs.writeFileSync(stateFile, JSON.stringify({ version: 1, sessions: {} }));
+    fs.writeFileSync(commonActiveFile, JSON.stringify({ active: 'security-auditor' }));
+    const scopedServer = makeHarness(serverPath);
+    const scopedContextFor = (harness) => ({
+      location: { directory: repoDir },
+      session: {
+        async hook(name, handler) {
+          harness.hooks.push({ group: 'session', name, handler });
+          return { dispose() {} };
+        },
+        async get() { return {}; },
+      },
+      tool: {
+        async hook(name, handler) {
+          harness.hooks.push({ group: 'tool', name, handler });
+          return { async dispose() {} };
+        },
+      },
+      permission: {
+        hook(name, handler) { harness.hooks.push({ group: 'permission', name, handler }); },
+      },
+    });
+    const probeScoped = async (harness) => {
+      process.chdir(serviceCwd);
+      await harness.definition.setup(harness.context);
+      const system = [];
+      await harness.hooks.find((hook) => hook.group === 'session' && hook.name === 'context').handler({ sessionID: sessionId, system });
+      let writeError = '';
+      try {
+        await harness.hooks.find((hook) => hook.name === 'execute.before').handler({
+          tool: 'write', sessionID: sessionId, agent: 'test', messageID: 'scoped', id: 'scoped',
+          input: { filePath: 'src/file.ts', content: 'x' },
+        });
+      } catch (error) { writeError = error.message; }
+      process.chdir(repoDir);
+      return { system, writeError };
+    };
+    scopedServer.context = scopedContextFor(scopedServer);
+    const scoped = await probeScoped(scopedServer);
+    check('project root comes from context.location.directory, not the service cwd',
+      scoped.system[0]?.text.includes('## Active RightHand Persona: security-auditor') === true);
+    check('readonly enforcement takes its cwd from context.location.directory',
+      scoped.writeError.startsWith('security-auditor is readonly: writes are limited to .righthand/ and the scratchpad.'));
+    console.log(`PROJECT ROOT PROBE: service cwd=${path.basename(serviceCwd)}; project=${path.basename(repoDir)}; prompt=${Boolean(scoped.system[0])}; write refusal="${scoped.writeError.slice(0, 60)}..."`);
+
+    const projectRootMutation = server.source.replace(
+      'const cwd = resolveProjectDirectory(context);',
+      'const cwd = process.cwd();',
+    );
+    check('project root mutation changes the tracked bundle', projectRootMutation !== server.source);
+    const projectRootMutationPath = path.join(tempDir, 'mutation-project-root-server.js');
+    fs.writeFileSync(projectRootMutationPath, projectRootMutation);
+    const projectRootMutationServer = makeHarness(projectRootMutationPath);
+    projectRootMutationServer.context = scopedContextFor(projectRootMutationServer);
+    const mutatedScoped = await probeScoped(projectRootMutationServer);
+    await expectMutationFailure('project root from host context', async () => {
+      assert.equal(mutatedScoped.system[0]?.text.includes('## Active RightHand Persona: security-auditor'), true);
+      assert.equal(mutatedScoped.writeError.startsWith('security-auditor is readonly: writes are limited to .righthand/ and the scratchpad.'), true);
+    });
+    console.log(`BITE MUTATION project root: prompt=${Boolean(mutatedScoped.system[0])}; write refusal="${mutatedScoped.writeError.slice(0, 60)}..."`);
+    fs.writeFileSync(stateFile, JSON.stringify({ version: 1, sessions: {} }));
+
     const tui = makeHarness(tuiPath);
     let tuiList = '';
     const tuiToasts = [];
@@ -214,7 +284,6 @@ async function main() {
         return true;
       }
     };
-    const commonActiveFile = path.join(repoDir, '.righthand', 'state', 'active-persona.json');
     fs.writeFileSync(commonActiveFile, JSON.stringify({ active: 'code-reviewer' }));
     await runTui('list');
     check('TUI discovers .opencode profiles and marks common fallback active',
