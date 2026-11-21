@@ -63,7 +63,7 @@ function validateConfig(input, file) {
         throw new ConfigError(`${displayLabel}: persona "${name}" entry must be an object`);
       }
       for (const field of Object.keys(entry)) {
-        if (field !== 'model' && field !== 'harness') {
+        if (field !== 'model' && field !== 'harness' && field !== 'models') {
           throw new ConfigError(`${displayLabel}: unknown field "${field}" in persona "${name}"`);
         }
       }
@@ -80,6 +80,20 @@ function validateConfig(input, file) {
         }
         if (!SUPPORTED_DISPATCH_HARNESSES.includes(h)) {
           throw new ConfigError(`${displayLabel}: harness "${h}" for persona "${name}" is not supported for dispatch; supported harnesses: ${SUPPORTED_DISPATCH_HARNESSES.join(', ')}`);
+        }
+      }
+      if (Object.prototype.hasOwnProperty.call(entry, 'models')) {
+        const models = entry.models;
+        if (typeof models !== 'object' || models === null || Array.isArray(models)) {
+          throw new ConfigError(`${displayLabel}: "models" must be an object for persona "${name}"`);
+        }
+        for (const [target, model] of Object.entries(models)) {
+          if (!SUPPORTED_DISPATCH_HARNESSES.includes(target)) {
+            throw new ConfigError(`${displayLabel}: models key "${target}" for persona "${name}" is not supported for dispatch; supported harnesses: ${SUPPORTED_DISPATCH_HARNESSES.join(', ')}`);
+          }
+          if (typeof model !== 'string' || model.trim() === '') {
+            throw new ConfigError(`${displayLabel}: models["${target}"] must be a non-empty string for persona "${name}"`);
+          }
         }
       }
     }
@@ -158,9 +172,31 @@ function resolvePersona(cwd, name, options) {
     harnessSource = 'orchestrator';
   }
 
+  const targetHarness = typeof options.targetHarness === 'string' && options.targetHarness !== ''
+    ? options.targetHarness
+    : null;
+
   let model;
   let modelSource;
-  if (entry && typeof entry.model === 'string' && entry.model !== '') {
+  if (targetHarness && targetHarness !== harness) {
+    // Cross-harness launch: a model configured for one harness is not valid
+    // for another, so only an explicit per-harness entry is forwarded.
+    harness = targetHarness;
+    harnessSource = 'argument';
+    const models = entry && typeof entry.models === 'object' && entry.models !== null && !Array.isArray(entry.models)
+      ? entry.models
+      : null;
+    const crossModel = models && Object.prototype.hasOwnProperty.call(models, targetHarness)
+      ? models[targetHarness]
+      : null;
+    if (typeof crossModel === 'string' && crossModel.trim() !== '') {
+      model = crossModel;
+      modelSource = 'persona-models';
+    } else {
+      model = '';
+      modelSource = 'harness-default';
+    }
+  } else if (entry && typeof entry.model === 'string' && entry.model !== '') {
     model = entry.model;
     modelSource = 'persona';
   } else {

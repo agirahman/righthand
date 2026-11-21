@@ -6,6 +6,12 @@ import { join } from "node:path";
 import { openCodeGuardMap } from "./guard-map.js";
 import { activePersonaForSession } from "./state.js";
 
+const resolveProjectDirectory = (context?: any): string => {
+  const location = context && typeof context === "object" ? context.location : undefined;
+  const directory = location && typeof location === "object" ? location.directory : undefined;
+  return typeof directory === "string" && directory.trim() !== "" ? directory : process.cwd();
+};
+
 const packageProfilesDir = join(getRepoRoot(), "profiles");
 const loadOpenCodePersonas = (cwd: string): Map<string, PersonaMetadata> =>
   loadAllPersonas(cwd, {
@@ -17,7 +23,7 @@ export const righthandOpenCodePlugin = Plugin.define({
   id: "user.righthand.server",
 
   async setup(context: any) {
-    const cwd = process.cwd();
+    const cwd = resolveProjectDirectory(context);
     const sessionRegistration = await context.session.hook("context", async (event: any) => {
       const info = await context.session.get({ sessionID: event.sessionID });
       if (info.parentID) return;
