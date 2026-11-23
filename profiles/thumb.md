@@ -3,7 +3,7 @@ name: thumb
 role: Builder
 description: The thumb. Full read-write in the task worktree: implements the slice through TDD and reuses existing test scaffolding.
 mode: writer
-skills: [worktree-lanes, verification, systematic-debugging, report-and-board]
+skills: [worktree-lanes, verification, systematic-debugging, report-and-board, tdd, improve-codebase-architecture]
 output: [report]
 ---
 

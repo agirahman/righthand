@@ -173,6 +173,22 @@ if (fs.existsSync(skillsRoot)) {
   }
 }
 
+// two-layer model: every skill declares a tier (baseline | sdlc)
+if (fs.existsSync(skillsRoot)) {
+  for (const dir of fs.readdirSync(skillsRoot)) {
+    const dirPath = path.join(skillsRoot, dir);
+    if (!fs.statSync(dirPath).isDirectory()) continue;
+    const skillFile = path.join(dirPath, 'SKILL.md');
+    if (!fs.existsSync(skillFile)) continue;
+    const fm = /^---\r?\n([\s\S]*?)\r?\n---/.exec(fs.readFileSync(skillFile, 'utf8'))?.[1] ?? '';
+    const fmLines = fm.split(/\r?\n/);
+    if (!fmLines.some((l) => /^tier:\s*(baseline|sdlc)\s*$/.test(l))) {
+      console.error(`FAIL: [skill] ${dir}/SKILL.md does not declare a tier (baseline|sdlc)`);
+      failed++;
+    }
+  }
+}
+
 if (failed > 0) {
   console.error(`\nValidation FAILED with ${failed} errors.`);
   process.exit(1);

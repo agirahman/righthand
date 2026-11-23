@@ -186,6 +186,7 @@ Persona Commands:
   switch <persona>         Activate a persona
   off                      Deactivate current persona
   inject                   Print active persona prompt to stdout
+  blast-radius [scope]     Map blast radius + triage (activates pinky)
   status                   Show active persona and setup harnesses
 
 Setup Commands:
@@ -244,6 +245,19 @@ function cmdSwitch(name) {
 function cmdOff() {
   writeState({ active: null, updatedAt: new Date().toISOString() }, process.cwd());
   console.log('Persona deactivated');
+}
+
+function cmdBlastRadius(scope) {
+  const cwd = process.cwd();
+  writeState({ active: 'pinky', updatedAt: new Date().toISOString() }, cwd);
+  const raw = loadProfile('pinky');
+  const m = raw ? /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/.exec(raw) : null;
+  const body = m ? m[2].trim() : '';
+  console.log('Active persona set to: pinky (scan)');
+  if (scope) console.log('Scope: ' + scope);
+  console.log('\nBlast-radius directive (read-only; run the triage-issue skill):\n');
+  if (body) console.log(body + '\n');
+  console.log('Write the triage to .righthand/triage/<issue>.md.');
 }
 
 function cmdInject() {
@@ -760,6 +774,8 @@ if (!cmd || cmd === 'list') {
   cmdSwitch(arg);
 } else if (cmd === 'off') {
   cmdOff();
+} else if (cmd === 'blast-radius') {
+  cmdBlastRadius(arg);
 } else if (cmd === 'inject') {
   cmdInject();
 } else if (cmd === 'status') {

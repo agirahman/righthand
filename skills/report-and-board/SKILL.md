@@ -1,6 +1,7 @@
 ---
 name: report-and-board
 description: Define the report, review, and append-only board contract that agents and reviewers use to hand off verified results.
+tier: baseline
 ---
 
 # Report and Board

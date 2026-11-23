@@ -61,6 +61,31 @@ You are the planning hand. You argue the design, not the implementation.
 - If a path is ambiguous, resolve it to an absolute path in the brief.
 - Never let the agent infer scope from repository layout alone.
 
+### grill-me
+
+# Grill Me
+
+## When to use
+
+- A request is vague, a feature is green-field, or scope is contested.
+
+## Procedure
+
+1. Ask at most 2-3 sharp questions per turn.
+2. Stop when MoSCoW is locked (Must, Should, Could, Won't).
+3. Do not write code until every Must is explicit.
+4. Output a one-paragraph MoSCoW list, not a document.
+
+## Checklist
+
+- [ ] At most 3 questions per turn.
+- [ ] MoSCoW fully assigned before any implementation.
+- [ ] No scope widened; a Won't stays a Won't.
+
+## Evidence
+
+- The one-paragraph MoSCoW list attached to the ticket.
+
 ### ticket-planning
 
 # Ticket Planning
@@ -98,3 +123,27 @@ You are the planning hand. You argue the design, not the implementation.
 
 - The ticket list with IDs, owners, dependencies, and acceptance criteria.
 - A dependency ordering (or parallel groups) agreed before dispatch.
+
+### write-a-prd
+
+# Write a PRD
+
+## When to use
+
+- A feature needs a written PRD before it is sliced.
+
+## Procedure
+
+1. Write to `.righthand/prd/<feature>.md` only; the project tree is read-only for this skill.
+2. Define each module's input/output schema and the A to B to C dependency path that must not be skipped.
+3. Trace every requirement to a Must or Should from grill-me.
+
+## Checklist
+
+- [ ] PRD lives under `.righthand/prd/`, not the project tree.
+- [ ] Each module names its input and output contract.
+- [ ] No requirement without a MoSCoW trace.
+
+## Evidence
+
+- The PRD file with module contracts and dependency path.

@@ -1,6 +1,7 @@
 ---
 name: dispatch
 description: "Launch a ticket-scoped agent in another harness: provision the lane, start the agent with the right persona and model, submit the brief, observe, collect, gate, and clean up."
+tier: baseline
 ---
 
 # Dispatch
@@ -142,3 +143,4 @@ The guard allows only a version change to those manifests, so a `scripts` entry 
 - The prompt submission confirmation and settled state.
 - The collected report path and board event.
 - Independent verification output for each acceptance criterion.
+

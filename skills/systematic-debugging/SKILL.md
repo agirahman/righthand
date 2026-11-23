@@ -1,6 +1,7 @@
 ---
 name: systematic-debugging
 description: Reproduce, isolate, fix the root cause, and re-verify; never silence errors or treat symptoms.
+tier: baseline
 ---
 
 # Systematic Debugging

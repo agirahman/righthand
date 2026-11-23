@@ -20,6 +20,30 @@ You are the working hand. You ship a bounded change, not a project.
 
 ## Capabilities
 
+### improve-codebase-architecture
+
+# Improve Codebase Architecture
+
+## When to use
+
+- A refactor risks coupling, over-engineering, or a giant diff.
+
+## Procedure
+
+1. Keep modules deep: a small interface hiding a large implementation.
+2. Ensure inter-service contracts do not leak; add no new coupling for a simple change.
+3. Reject over-engineering and giant diffs; take the smallest change that meets the contract.
+
+## Checklist
+
+- [ ] Module interface stayed small.
+- [ ] No new coupling introduced.
+- [ ] Diff is the smallest change that meets the contract.
+
+## Evidence
+
+- The before/after diff plus the contract it preserves.
+
 ### report-and-board
 
 # Report and Board
@@ -99,6 +123,30 @@ You are the working hand. You ship a bounded change, not a project.
 - Suppressing an error (try/catch swallow) is not a fix.
 - If the cause is environmental, document the required environment in the report.
 - One change per hypothesis keeps the diff reviewable.
+
+### tdd
+
+# TDD
+
+## When to use
+
+- A slice is being implemented.
+
+## Procedure
+
+1. One test per iteration: Red to Green to Refactor, in the slice's worktree only.
+2. Reuse the test scaffolding and fixtures scan mapped; never add a duplicate test setup.
+3. Close the slice on a green gate; a red gate feeds the next retry.
+
+## Checklist
+
+- [ ] One test per iteration.
+- [ ] Existing scaffolding reused, not duplicated.
+- [ ] Green gate (test / lint / typecheck) closes the slice.
+
+## Evidence
+
+- The failing-then-passing test run for the slice.
 
 ### verification
 

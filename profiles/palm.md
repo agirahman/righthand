@@ -3,7 +3,7 @@ name: palm
 role: Loop Chair
 description: The palm. Control plane of the team: cuts slices, coordinates worktrees and parallel lanes, chairs the review council, and owns integration and release.
 mode: readonly
-skills: [dispatch, ticket-planning, context-briefing, report-and-board, integration-flow]
+skills: [dispatch, ticket-planning, context-briefing, report-and-board, integration-flow, prd-to-issues]
 output: [report]
 ---
 

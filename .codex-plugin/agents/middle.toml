@@ -61,6 +61,30 @@ You are the checking hand. You find the regressions and the violations, not just
 - Findings without file:line are not actionable and should be dropped.
 - A clean diff with no findings still needs a written `PASS` verdict.
 
+### improve-codebase-architecture
+
+# Improve Codebase Architecture
+
+## When to use
+
+- A refactor risks coupling, over-engineering, or a giant diff.
+
+## Procedure
+
+1. Keep modules deep: a small interface hiding a large implementation.
+2. Ensure inter-service contracts do not leak; add no new coupling for a simple change.
+3. Reject over-engineering and giant diffs; take the smallest change that meets the contract.
+
+## Checklist
+
+- [ ] Module interface stayed small.
+- [ ] No new coupling introduced.
+- [ ] Diff is the smallest change that meets the contract.
+
+## Evidence
+
+- The before/after diff plus the contract it preserves.
+
 ### report-and-board
 
 # Report and Board

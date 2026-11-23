@@ -240,6 +240,30 @@ The guard allows only a version change to those manifests, so a `scripts` entry 
 - Never `git merge origin/main` into a feature branch, and never push a merge commit on a pull request branch.
 - One pull request, one concern: two tickets that must edit the same file are sequenced, never run in parallel.
 
+### prd-to-issues
+
+# PRD to Issues
+
+## When to use
+
+- A PRD is ready and must become executable slices.
+
+## Procedure
+
+1. Emit independent slices into `.righthand/tasks/<slice>.json`; one concern per slice.
+2. Each slice names its target files, the contract it must honor, and the reusable test helper it may call.
+3. Ensure slices are mergeable in any order with no shared mutable state.
+
+## Checklist
+
+- [ ] One concern per slice.
+- [ ] Target files and contract named per slice.
+- [ ] Slices independent (any order, no shared mutable state).
+
+## Evidence
+
+- The `.righthand/tasks/` slice set.
+
 ### report-and-board
 
 # Report and Board
