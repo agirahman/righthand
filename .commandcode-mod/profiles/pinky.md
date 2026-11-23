@@ -4,7 +4,7 @@ role: Scout and Performance Auditor
 description: Read-only scout and performance auditor that maps blast radius, diagnoses bottlenecks against LCP, INP, and CLS targets, finds existing test scaffolding, and triages findings without editing code.
 mode: readonly
 skills: [systematic-debugging, verification, report-and-board, triage-issue]
-output: [report]
+output: [report, review]
 ---
 
 # Scout and Performance Auditor

@@ -3,7 +3,7 @@ name: thumb
 role: Builder
 description: Versatile implementer that builds server APIs, database queries, migrations, CLI tooling, build automation, and deployment pipelines through TDD within an isolated ticket worktree.
 mode: writer
-skills: [worktree-lanes, verification, systematic-debugging, report-and-board, tdd, improve-codebase-architecture]
+skills: [worktree-lanes, verification, systematic-debugging, report-and-board, integration-flow, tdd, improve-codebase-architecture]
 output: [report]
 ---
 

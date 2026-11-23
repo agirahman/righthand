@@ -3,7 +3,7 @@ name: index
 role: Software Architect
 description: Senior software architect and planner that clarifies requirements, designs module boundaries, component contracts, scalability decisions, and tradeoff analyses (ADRs) without touching implementation files.
 mode: readonly
-skills: [context-briefing, ticket-planning, grill-me, write-a-prd, prd-to-issues]
+skills: [context-briefing, ticket-planning, grill-me, write-a-prd, prd-to-issues, report-and-board]
 output: [report]
 ---
 

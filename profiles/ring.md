@@ -3,7 +3,7 @@ name: ring
 role: Frontend Engineer
 description: Senior frontend engineer that builds semantic, accessible, responsive UI components and state architecture against an agreed API and props contract within an isolated ticket worktree.
 mode: writer
-skills: [worktree-lanes, verification, report-and-board]
+skills: [worktree-lanes, verification, report-and-board, integration-flow]
 output: [report]
 ---
 
