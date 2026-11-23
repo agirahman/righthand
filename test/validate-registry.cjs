@@ -129,11 +129,12 @@ check('resolveHarness alias and case behaviour', () => {
   }
 });
 
-check('SUPPORTED_DISPATCH_HARNESSES equals ["commandcode","pi"]', () => {
-  if (!deepEqual(pc.SUPPORTED_DISPATCH_HARNESSES, ['commandcode', 'pi'])) {
+check('SUPPORTED_DISPATCH_HARNESSES equals all four supported harnesses', () => {
+  const expected = ['commandcode', 'pi', 'omp', 'opencode'];
+  if (!deepEqual(pc.SUPPORTED_DISPATCH_HARNESSES, expected)) {
     throw new Error('SUPPORTED_DISPATCH_HARNESSES=' + JSON.stringify(pc.SUPPORTED_DISPATCH_HARNESSES));
   }
-  if (!deepEqual(registry.dispatchable(), ['commandcode', 'pi'])) {
+  if (!deepEqual(registry.dispatchable(), expected)) {
     throw new Error('registry.dispatchable()=' + JSON.stringify(registry.dispatchable()));
   }
 });

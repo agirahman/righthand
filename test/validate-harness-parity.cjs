@@ -210,9 +210,28 @@ check('every dispatchable manifest exposes a working buildLaunch contract',
       built.env && typeof built.env === 'object' && !Array.isArray(built.env) &&
       Object.values(built.env).every((v) => typeof v === 'string');
   }));
-const nonDispatchable = registry.listManifests().filter((m) => m.key === 'omp' || m.key === 'opencode');
-check('non-dispatchable harnesses expose no launch builder',
-  nonDispatchable.length === 2 && nonDispatchable.every((m) => typeof m.buildLaunch !== 'function'));
+const ompManifest = registry.getManifest('omp');
+const ompBuilt = ompManifest.buildLaunch('thumb', {});
+check('omp launch loads the repo extension explicitly and carries the persona env',
+  ompBuilt.bin === 'omp' &&
+  ompBuilt.args[0] === '-e' &&
+  ompBuilt.args[1].endsWith(`.omp${path.sep}extensions${path.sep}righthand.ts`) &&
+  ompBuilt.env.RIGHTHAND_PERSONA === 'thumb');
+check('omp launch forwards a model as one argv token',
+  JSON.stringify(ompManifest.buildLaunch('thumb', { model: ' reflection/beam:free ' }).args.slice(2)) ===
+  JSON.stringify(['--model=reflection/beam:free']));
+
+const opencodeManifest = registry.getManifest('opencode');
+const opencodeBare = opencodeManifest.buildLaunch('middle', {});
+check('opencode launch stays the interactive TUI when no model or prompt is forwarded',
+  opencodeBare.bin === 'opencode' && opencodeBare.args.length === 0 &&
+  opencodeBare.env.RIGHTHAND_PERSONA === 'middle');
+check('opencode launch uses the run subcommand when a model is forwarded',
+  JSON.stringify(opencodeManifest.buildLaunch('middle', { model: ' reflection/beam:free ' }).args) ===
+  JSON.stringify(['run', '-m', 'reflection/beam:free', '--auto']));
+check('opencode launch passes a prompt through the run subcommand',
+  JSON.stringify(opencodeManifest.buildLaunch('middle', { prompt: ' fix the slice ' }).args) ===
+  JSON.stringify(['run', '--auto', 'fix the slice']));
 
 if (failed > 0) {
   console.error(`\nHarness parity validation FAILED with ${failed} errors.`);

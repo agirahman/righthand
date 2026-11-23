@@ -64,6 +64,8 @@ const { spawnSync } = require('node:child_process');
 const PERSONA = 'thumb';
 const CMDC_MODEL = '9router-bili/cmc/deepseek/deepseek-v4.1-flash';
 const PI_MODEL = '9router/agness/agnes-2.5-flash';
+const OMP_MODEL = 'omp-probe-model';
+const OC_MODEL = 'probe-prov/oc-probe-model';
 
 check('CLI-level checks derive the bin from launch.CMDC_BIN', () => {
   if (launch.CMDC_BIN !== 'cmdc' && launch.CMDC_BIN !== 'cmd') {
@@ -138,6 +140,44 @@ check('launch thumb --print keeps the commandcode model when models is present',
   try {
     const out = launchPrint(dir, [PERSONA]);
     if (out !== `${launch.CMDC_BIN} -t --yolo -m ${CMDC_MODEL} --mod-option default=thumb`) throw new Error(out);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+check('launch omp thumb --print loads the repo extension with an absolute -e path', () => {
+  const dir = mkProject({ [PERSONA]: { harness: 'commandcode', model: CMDC_MODEL } });
+  try {
+    const out = launchPrint(dir, ['omp', PERSONA]);
+    if (out.includes(CMDC_MODEL)) throw new Error(`forwarded cmdc model: ${out}`);
+    const lines = out.split('\n');
+    if (!/^omp -e ".*righthand\.ts"$/.test(lines[0])) throw new Error(out);
+    if (lines[1] !== `env: RIGHTHAND_PERSONA=${PERSONA}`) throw new Error(out);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+check('launch omp thumb --print emits exactly the omp models entry', () => {
+  const dir = mkProject({ [PERSONA]: { harness: 'commandcode', model: CMDC_MODEL, models: { omp: OMP_MODEL } } });
+  try {
+    const out = launchPrint(dir, ['omp', PERSONA]);
+    const first = out.split('\n')[0];
+    if (!first.endsWith(` --model=${OMP_MODEL}`)) throw new Error(out);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+check('launch opencode thumb --print forwards the opencode model through run', () => {
+  const dir = mkProject({ [PERSONA]: { harness: 'commandcode', model: CMDC_MODEL, models: { opencode: OC_MODEL } } });
+  try {
+    const out = launchPrint(dir, ['opencode', PERSONA]);
+    if (out.includes(CMDC_MODEL)) throw new Error(`forwarded cmdc model: ${out}`);
+    if (out !== `opencode run -m ${OC_MODEL} --auto\nenv: RIGHTHAND_PERSONA=${PERSONA}`) throw new Error(out);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+check('launch opencode thumb --print stays the bare TUI without a model', () => {
+  const dir = mkProject({ [PERSONA]: { harness: 'commandcode', model: CMDC_MODEL } });
+  try {
+    const out = launchPrint(dir, ['opencode', PERSONA]);
+    if (out.includes('run')) throw new Error(`unexpected run subcommand: ${out}`);
+    if (out !== `opencode\nenv: RIGHTHAND_PERSONA=${PERSONA}`) throw new Error(out);
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 

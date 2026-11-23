@@ -97,7 +97,7 @@ righthand init                   # Provision .righthand/ in the current project
 righthand status                 # One-liner: active persona + setup harnesses
 righthand config [persona]       # Resolve dispatch harness and model for a persona
 righthand launch <persona>       # Launch an agent for a persona (--print to dry-run)
-righthand launch <harness> <persona>  # Pin the harness for one launch (commandcode, pi)
+righthand launch <harness> <persona>  # Pin the harness for one launch (commandcode, pi, omp, opencode)
 righthand blast-radius [scope]   # Map blast radius + triage (activates pinky)
 righthand council [flags]        # Multi-model council review of a diff (--print to dry-run)
 # --- Setup & Maintenance ---
@@ -215,7 +215,7 @@ Helper scripts automate creating Herdr workspace tabs and provisioning ticket wo
 
 ### Per-persona dispatch model and harness
 
-Dispatch harness and model are resolved per persona from `<main checkout>/.righthand/persona.json` (optional, local only). Inspect with `righthand config [persona]`. Dispatchable harnesses are `commandcode` and `pi`; `righthand launch <harness> <persona>` pins one for a single launch without touching the file, and `omp`/`opencode` are valid ids that are not dispatch targets. A persona entry may carry an optional `models` map keyed by dispatch harness (`{"thumb":{"harness":"commandcode","model":"<cmdc id>","models":{"pi":"<pi id>"}}}`); a launch pinned to a harness other than the configured one uses that harness's entry, or omits the model flag when none is present, and never forwards the configured harness's model cross-harness. The resolved model is passed through untouched, so it must be an id the target harness accepts; discover available ids with `cmdc --list-models`.
+Dispatch harness and model are resolved per persona from `<main checkout>/.righthand/persona.json` (optional, local only). Inspect with `righthand config [persona]`. All four supported harnesses are dispatch targets: `commandcode`, `pi`, `omp`, and `opencode`. `righthand launch <harness> <persona>` pins one for a single launch without touching the file, and `righthand launch <persona> --print` shows the exact argv it would run. A persona entry may carry an optional `models` map keyed by dispatch harness (`{"thumb":{"harness":"commandcode","model":"<cmdc id>","models":{"pi":"<pi id>"}}}`); a launch pinned to a harness other than the configured one uses that harness's entry, or omits the model flag when none is present, and never forwards the configured harness's model cross-harness. The resolved model is passed through untouched, so it must be an id the target harness accepts; discover available ids with `cmdc --list-models`.
 
 ---
 

@@ -51,7 +51,7 @@ On Windows use `Copy-Item -Recurse`.
 
 ## Per-persona dispatch model and harness
 
-Dispatch harness and model are resolved per persona from `<main checkout>/.righthand/persona.json` (optional, local only). Use `righthand config [persona]` to inspect the resolved values. Dispatchable harnesses are `commandcode` and `pi`. A persona entry may also carry an optional `models` map keyed by dispatch harness, so a launch pinned to a different harness uses that harness's own model id instead of the commandcode-only one:
+Dispatch harness and model are resolved per persona from `<main checkout>/.righthand/persona.json` (optional, local only). Use `righthand config [persona]` to inspect the resolved values. All four supported harnesses (`commandcode`, `pi`, `omp`, `opencode`) are dispatchable. A persona entry may also carry an optional `models` map keyed by dispatch harness, so a launch pinned to a different harness uses that harness's own model id instead of the commandcode-only one:
 
 ```json
 {
@@ -65,7 +65,7 @@ Dispatch harness and model are resolved per persona from `<main checkout>/.right
 }
 ```
 
-`models` keys must be dispatchable harnesses and values must be non-empty model ids. The resolved model is passed through untouched, so it must be an id the target harness accepts; discover available ids with `cmdc --list-models`.
+`models` keys must be one of the four supported harnesses and values must be non-empty model ids. The resolved model is passed through untouched, so it must be an id the target harness accepts; discover available ids with `cmdc --list-models`.
 
 ### Launching a persona
 
@@ -77,11 +77,13 @@ Then run it for real in a lane:
 
     righthand launch thumb --cwd <lane>
 
-Pin a harness for a single launch without editing `persona.json`:
+Pin a harness for a single launch without editing `persona.json`. All four supported harnesses are launch targets:
 
     righthand launch pi thumb --cwd <lane>
+    righthand launch omp thumb --cwd <lane>
+    righthand launch opencode thumb --cwd <lane>
 
-A Pi launch spawns `pi --approve` plus `--model <model>` only when the resolved model is non-empty, and injects the persona through `RIGHTHAND_PERSONA` in the child process environment. Pi reads that variable before the state file, so a dispatched process keeps the persona the dispatcher chose. When the launch is pinned to a harness other than the persona's configured one, the model comes from `models[<harness>]` if present, otherwise the flag is omitted and Pi uses its own default; a commandcode model id is never forwarded to Pi. `righthand launch pi thumb --print` prints the command line followed by an `env: RIGHTHAND_PERSONA=thumb` line.
+A Pi launch spawns `pi --approve` plus `--model <model>` only when the resolved model is non-empty, and injects the persona through `RIGHTHAND_PERSONA` in the child process environment. An OMP launch spawns `omp -e <absolute path to .omp/extensions/righthand.ts>` with the same env var and adds `--model=<id>` when an OMP model resolves. An OpenCode launch spawns the bare `opencode` TUI when nothing is forwarded, and `opencode run -m <model> --auto` when a model resolves, because OpenCode accepts a model only on its `run` subcommand. Pi reads that variable before the state file, so a dispatched process keeps the persona the dispatcher chose. When the launch is pinned to a harness other than the persona's configured one, the model comes from `models[<harness>]` if present, otherwise the flag is omitted and Pi uses its own default; a commandcode model id is never forwarded to Pi. `righthand launch pi thumb --print` prints the command line followed by an `env: RIGHTHAND_PERSONA=thumb` line.
 
 ## Readonly enforcement
 

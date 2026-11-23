@@ -25,23 +25,28 @@ function assert(cond, msg) { if (!cond) throw new Error(msg); }
 function mkTmp(p) { return fs.mkdtempSync(path.join(os.tmpdir(), p)); }
 function rmTmp(d) { try { fs.rmSync(d, { recursive: true, force: true }); } catch (e) {} }
 
-check('runSlice throws NOT_DISPATCHABLE on a non-dispatchable harness (omp)', () => {
+// Every built-in harness is dispatchable now, so the capability gate is
+// exercised with a synthetic manifest that declares no launch capability.
+const plainManifest = { key: 'plain', aliases: [], type: 'copy', dispatchable: false };
+const buildlessManifest = { key: 'buildless', aliases: [], type: 'copy', dispatchable: true };
+
+check('runSlice throws NOT_DISPATCHABLE on a harness without the capability flag', () => {
   let threw = null;
   try {
-    engine.runSlice({ harness: 'omp', sliceId: 's', persona: 'thumb', launch: () => ({ bin: 'noop' }), gate: () => true, guard: () => true });
+    engine.runSlice({ manifests: [plainManifest], harness: 'plain', sliceId: 's', persona: 'thumb', launch: () => ({ bin: 'noop' }), gate: () => true, guard: () => true });
   } catch (e) { threw = e; }
   assert(threw && threw.code === 'NOT_DISPATCHABLE', 'expected NOT_DISPATCHABLE, got ' + (threw && threw.code));
 });
 
-check('runSlice throws NOT_DISPATCHABLE on a non-dispatchable harness (opencode)', () => {
+check('runSlice throws NO_BUILD_LAUNCH when a dispatchable manifest omits buildLaunch', () => {
   let threw = null;
   try {
-    engine.runSlice({ harness: 'opencode', sliceId: 's', persona: 'thumb', launch: () => ({ bin: 'noop' }), gate: () => true, guard: () => true });
+    engine.runSlice({ manifests: [buildlessManifest], harness: 'buildless', sliceId: 's', persona: 'thumb', launch: () => ({ bin: 'noop' }), gate: () => true, guard: () => true });
   } catch (e) { threw = e; }
-  assert(threw && threw.code === 'NOT_DISPATCHABLE', 'expected NOT_DISPATCHABLE, got ' + (threw && threw.code));
+  assert(threw && threw.code === 'NO_BUILD_LAUNCH', 'expected NO_BUILD_LAUNCH, got ' + (threw && threw.code));
 });
 
-check('councilReview is a review-only path that works on a non-dispatchable harness', () => {
+check('councilReview is a review-only path that works on any harness', () => {
   const reviewers = [{
     review: () => ({
       regressions: [{ file: 'src/a.ts', line: 3, note: 'breaks existing behavior', kind: 'regression' }],
@@ -49,7 +54,7 @@ check('councilReview is a review-only path that works on a non-dispatchable harn
     }),
   }];
   const r = engine.councilReview({ harness: 'omp', diff: '+ a\n- b\n', reviewers: reviewers });
-  assert(r.harness === 'omp', 'harness is omp (non-dispatchable), got ' + r.harness);
+  assert(r.harness === 'omp', 'harness is omp, got ' + r.harness);
   assert(Array.isArray(r.findings.regressions) && r.findings.regressions.length === 1, 'one regression finding');
   assert(Array.isArray(r.findings.contractViolations) && r.findings.contractViolations.length === 1, 'one contract-violation finding');
   assert(r.findings.regressions[0].file === 'src/a.ts' && r.findings.regressions[0].line === 3, 'finding keeps file + line refs');
@@ -135,8 +140,8 @@ check('a 5th dispatchable harness (folder add) is discovered and driven with no 
   } finally { rmTmp(tmp); }
 });
 
-check('built-in dispatchable set is unchanged (pi + cmdc)', () => {
-  assert(JSON.stringify(registry.dispatchable()) === JSON.stringify(['commandcode', 'pi']),
+check('all four supported harnesses are dispatchable', () => {
+  assert(JSON.stringify(registry.dispatchable()) === JSON.stringify(['commandcode', 'pi', 'omp', 'opencode']),
     'dispatchable=' + registry.dispatchable());
 });
 
