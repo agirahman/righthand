@@ -1233,7 +1233,7 @@ const PERSONA_ALIASES: Record<string, string> = {
   explorer: 'pinky',
   researcher: 'pinky',
   debugger: 'pinky',
-  'web-performance-auditor': 'pinky',
+  'web-performance-auditor': 'middle',
   scan: 'pinky',
   // thumb (writes)
   backend: 'thumb',

@@ -39,7 +39,7 @@ const PERSONA_ALIASES = {
   explorer: 'pinky',
   researcher: 'pinky',
   debugger: 'pinky',
-  'web-performance-auditor': 'pinky',
+  'web-performance-auditor': 'middle',
   scan: 'pinky',
   backend: 'thumb',
   devops: 'thumb',

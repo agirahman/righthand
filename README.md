@@ -40,12 +40,12 @@ Six personas, named by hand anatomy, covering the whole delivery loop (4 `readon
 
 | Profile | Mode | Role Title | Core Focus | Output Framework / Deliverable |
 |---|---|---|---|---|
-| `palm` | `readonly` | Team Orchestrator | Steering the loop: clarifying and scoping, decomposing work into tickets (`T1`, `T2`), worktree lane assignment, Herdr dispatch, integration and release gate | Ticket contract matrix, product spec, worktree plan, merge checklist |
+| `palm` | `readonly` | Team Orchestrator | Steering the loop: clarifying and scoping, decomposing work into tickets (`T1`, `T2`), worktree lane assignment, Herdr dispatch, council verdict, integration and release gate | Ticket contract matrix, product spec, worktree plan, council verdict, merge checklist |
 | `index` | `readonly` | Software Architect | Pointing the direction: requirements, module boundaries, subsystem contracts, tradeoff analysis | Architecture Decision Record (ADR), A->B->C contract path, PRD and issues |
-| `pinky` | `readonly` | Scout and Performance Auditor | Reading the code and the runtime: blast radius, root-cause tracing, triage, Core Web Vitals (LCP, INP, CLS), asset budgets | Blast-radius map, triage note, performance scorecard (Quick/Deep mode) |
+| `pinky` | `readonly` | Scout and Blast-Radius Investigator | Reading the system before it is written: blast radius, root-cause tracing, existing test scaffolding, defect triage | Blast-radius map with `file:line`, root-cause note, scaffolding inventory, triage entry |
 | `thumb` | `writer` | Builder | Building it: API contracts, database queries and migrations, CI/CD determinism, containers, secrets hygiene, general implementation | Status report, minimal file diff, pipeline impact and rollback plan, verification proof |
 | `ring` | `writer` | Frontend Engineer | Shaping the interface: semantic HTML, CSS-first layout, state colocation, responsive UX, accessibility (a11y) | Component diff, keyboard/screen-reader audit, visual check proof |
-| `middle` | `readonly` | Senior Code Reviewer | Guarding the gate: 5-axis code review, security audit (OWASP Top 10), testing strategy, edge-case matrices | Review report (P1-P4 severity) anchored to `file:line`, threat matrix, test matrix |
+| `middle` | `readonly` | Senior Code Reviewer | Guarding the gate: slice-contract validation, 5-axis code review, security audit (OWASP Top 10), web performance budgets, testing strategy, multi-model review council | Review report (P1-P4 severity) anchored to `file:line`, threat matrix, test matrix, council findings |
 
 ### Legacy names
 
@@ -57,10 +57,9 @@ files keep working:
 |---|---|
 | `orchestrator`, `product-manager` | `palm` |
 | `architect` | `index` |
-| `web-performance-auditor` | `pinky` |
 | `worker`, `backend`, `devops` | `thumb` |
 | `frontend` | `ring` |
-| `code-reviewer`, `security-auditor`, `test-engineer` | `middle` |
+| `code-reviewer`, `security-auditor`, `test-engineer`, `web-performance-auditor` | `middle` |
 
 ---
 
