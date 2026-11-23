@@ -6,6 +6,7 @@ const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const { readState, writeState } = require('./state');
+const { resolvePersonaName } = require('./persona-aliases');
 const { readConfig, resolvePersona, formatResolution, ConfigError, SUPPORTED_DISPATCH_HARNESSES } = require('./persona-config');
 const { formatCommand } = require('./launch');
 const pkg = require('../package.json');
@@ -34,6 +35,13 @@ const RETIRED_PERSONAS = ['editor','architect','backend','code-reviewer','devops
 // ---------------------------------------------------------------------------
 // Persona helpers
 // ---------------------------------------------------------------------------
+// Legacy and role-word names resolve onto the canonical six, so a persona
+// retired by the v2 compaction keeps working from a habit, a script, or a
+// config written before the merge.
+function canonicalPersona(name) {
+  return resolvePersonaName(name).canonical;
+}
+
 function listProfiles() {
   if (!fs.existsSync(profilesDir)) return [];
   return fs.readdirSync(profilesDir)
@@ -221,9 +229,10 @@ Examples:
 function cmdList() {
   const names = listProfiles();
   const state = readState(process.cwd());
+  const active = state.active ? canonicalPersona(state.active) : null;
   console.log('RightHand personas:');
   for (const n of names) {
-    const mark = state.active === n ? ' [ACTIVE]' : '';
+    const mark = active === n ? ' [ACTIVE]' : '';
     console.log(`  - ${n}${mark}`);
   }
   console.log('\nUsage: righthand switch <name> | righthand off | righthand inject');
@@ -235,13 +244,14 @@ function cmdSwitch(name) {
     process.exit(1);
   }
   const names = listProfiles();
-  if (!names.includes(name)) {
+  const canonical = canonicalPersona(name);
+  if (!names.includes(canonical)) {
     console.error(`Unknown persona: ${name}`);
     console.error(`Available: ${names.join(', ')}`);
     process.exit(1);
   }
-  writeState({ active: name, updatedAt: new Date().toISOString() }, process.cwd());
-  console.log(`Active persona set to: ${name}`);
+  writeState({ active: canonical, updatedAt: new Date().toISOString() }, process.cwd());
+  console.log(`Active persona set to: ${canonical}`);
 }
 
 function cmdOff() {
@@ -265,11 +275,12 @@ function cmdBlastRadius(scope) {
 function cmdInject() {
   const state = readState(process.cwd());
   if (!state.active) return;
-  const raw = loadProfile(state.active);
+  const active = canonicalPersona(state.active);
+  const raw = loadProfile(active);
   if (!raw) return;
   const m = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/.exec(raw);
   const body = m ? m[2] : raw;
-  console.log(`## Active RightHand persona: ${state.active}\n\n${body.trim()}\n`);
+  console.log(`## Active RightHand persona: ${active}\n\n${body.trim()}\n`);
 }
 
 function cmdStatus() {
@@ -277,7 +288,7 @@ function cmdStatus() {
   const state = readState(cwd);
 
   if (state.active) {
-    console.log(`Active persona : ${state.active}`);
+    console.log(`Active persona : ${canonicalPersona(state.active)}`);
     if (state.updatedAt) console.log(`Last updated   : ${state.updatedAt}`);
   } else {
     console.log('Active persona : none');
@@ -305,6 +316,7 @@ function cmdStatus() {
 function cmdConfig(personaArg) {
   const cwd = process.cwd();
   const names = listProfiles();
+  const canonicalArg = personaArg ? canonicalPersona(personaArg) : null;
   let config;
   try {
     config = readConfig(cwd);
@@ -318,7 +330,7 @@ function cmdConfig(personaArg) {
 
   const configPersonas = (config && config.personas) || {};
   for (const key of Object.keys(configPersonas)) {
-    if (!names.includes(key)) {
+    if (!names.includes(key) && !names.includes(canonicalPersona(key))) {
       console.error(`Warning: .righthand/persona.json configures unknown persona "${key}"`);
     }
   }
@@ -333,7 +345,7 @@ function cmdConfig(personaArg) {
   })();
 
   if (personaArg) {
-    if (!names.includes(personaArg)) {
+    if (!names.includes(canonicalArg)) {
       console.error(`Unknown persona: ${personaArg}`);
       console.error(`Available: ${names.join(', ')}`);
       process.exit(1);
@@ -396,7 +408,7 @@ function cmdLaunch(personaName, opts) {
   }
 
   const names = listProfiles();
-  if (!names.includes(personaName)) {
+  if (!names.includes(canonicalPersona(personaName))) {
     console.error(`Unknown persona: ${personaName}`);
     console.error(`Available: ${names.join(', ')}`);
     process.exit(1);

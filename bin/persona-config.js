@@ -5,6 +5,7 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 
 const registry = require('../harness/registry');
+const { resolvePersonaName } = require('./persona-aliases');
 
 const CONFIG_REL = '.righthand/persona.json';
 const SUPPORTED_DISPATCH_HARNESSES = registry.dispatchable();
@@ -160,7 +161,12 @@ function resolvePersona(cwd, name, options) {
     ? (options.config || {})
     : readConfig(cwd);
   const personas = (config && config.personas) || {};
-  const entry = Object.prototype.hasOwnProperty.call(personas, name) ? personas[name] : null;
+  // A config written before the v2 compaction may key a persona by its legacy
+  // name, so a canonical lookup falls back to the alias target and vice versa.
+  const canonical = resolvePersonaName(name).canonical;
+  const entry = Object.prototype.hasOwnProperty.call(personas, name)
+    ? personas[name]
+    : (Object.prototype.hasOwnProperty.call(personas, canonical) ? personas[canonical] : null);
 
   let harness;
   let harnessSource;
