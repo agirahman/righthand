@@ -65,26 +65,63 @@ You are the planning hand. You argue the design, not the implementation.
 
 # Grill Me
 
+Adapted from `mattpocock/skills` `grilling` (the `grill-me` entry point). The interview discipline is unchanged; the output is a RightHand scope lock.
+Source: https://github.com/mattpocock/skills/blob/main/skills/productivity/grilling/SKILL.md
+Source: https://github.com/mattpocock/skills/blob/main/skills/productivity/grill-me/SKILL.md
+
 ## When to use
 
-- A request is vague, a feature is green-field, or scope is contested.
+- A request is vague, green-field, or its scope is contested.
+- A contract must be pinned down before any slice is cut or any code is written.
+- The user says "grill me", "stress-test this", or pushes back on a plan.
 
 ## Procedure
 
-1. Ask at most 2-3 sharp questions per turn.
-2. Stop when MoSCoW is locked (Must, Should, Could, Won't).
-3. Do not write code until every Must is explicit.
-4. Output a one-paragraph MoSCoW list, not a document.
+### 1. Map the design tree
+
+Every decision branches into the decisions that hang off it. Write the tree down before the first question. The tree is the artifact; the questions only walk it.
+
+### 2. Work the frontier in rounds
+
+The **frontier** is every decision whose prerequisites are already settled: the questions you can ask now without guessing at answers you have not heard. Ask the whole frontier in one round, then wait for answers before the next round.
+
+Number each question and give your recommended answer. Word it so "yes" accepts the recommendation.
+
+```text
+Q1 - <question title>: <question body, may carry several options>
+Recommended: <your answer>
+
+---
+
+Q2 - <question title>: <question body>
+Recommended: <your answer>
+```
+
+Each round of answers pushes the frontier outward and unblocks questions that depended on them. A question whose answer depends on another still open this round belongs to the next round.
+
+### 3. Facts are your job, decisions are the user's
+
+Never ask for a fact you can look up. When a frontier question needs one from the environment, dispatch a read-only exploration (pinky, fresh context) to find it and keep asking the rest of the frontier in the meantime. Only the questions downstream of that fact wait.
+
+### 4. Collapse the tree into MoSCoW
+
+When the frontier is empty, fold every settled decision into one MoSCoW paragraph: Must, Should, Could, Won't. One paragraph, not a document. Every later slice traces back to a Must or Should, and a Won't stays a Won't.
+
+### 5. Stop at the lock
+
+Do not slice tickets, do not write code, do not open a PR until the requester confirms the shared understanding. Then hand the locked scope to write-a-prd.
 
 ## Checklist
 
-- [ ] At most 3 questions per turn.
-- [ ] MoSCoW fully assigned before any implementation.
-- [ ] No scope widened; a Won't stays a Won't.
+- [ ] Design tree written, every branch visited, nothing silently assumed.
+- [ ] One frontier per round; every question numbered with a recommended answer.
+- [ ] No question asked that a lookup could answer.
+- [ ] MoSCoW collapsed into one paragraph and confirmed by the requester.
+- [ ] No code written before the lock.
 
 ## Evidence
 
-- The one-paragraph MoSCoW list attached to the ticket.
+- The design tree, the round log, and the locked MoSCoW paragraph, recorded on the ticket (`.righthand/tickets/<ID>/`).
 
 ### ticket-planning
 
@@ -128,22 +165,75 @@ You are the planning hand. You argue the design, not the implementation.
 
 # Write a PRD
 
+Adapted from `mattpocock/skills` `to-spec`. Same synthesis discipline and template; the artifact lands under `.righthand/prd/` and each module carries a bounded contract.
+Source: https://github.com/mattpocock/skills/blob/main/skills/engineering/to-spec/SKILL.md
+
 ## When to use
 
-- A feature needs a written PRD before it is sliced.
+- The scope is locked by grill-me and needs one written source of truth.
+- A feature is big enough that slices must agree on an interface first.
 
 ## Procedure
 
-1. Write to `.righthand/prd/<feature>.md` only; the project tree is read-only for this skill.
-2. Define each module's input/output schema and the A to B to C dependency path that must not be skipped.
-3. Trace every requirement to a Must or Should from grill-me.
+### 1. Do not re-interview
+
+Synthesize what is already known. If a decision is genuinely missing, go back to grill-me for one round rather than inventing an answer in the PRD.
+
+### 2. Sketch the seams before writing
+
+A **seam** is the public boundary where behavior is observed without reaching inside. Prefer an existing seam over a new one, and take the highest seam available. Fewer seams is better; the ideal is one. Confirm the seam list with the requester before writing.
+
+### 3. Write to `.righthand/prd/<feature>.md`
+
+The project tree is read-only for this skill. One file per feature. Use the template below.
+
+```markdown
+# <Feature>
+
+## Problem Statement
+The problem from the user's perspective.
+
+## Solution
+The solution from the user's perspective.
+
+## User Stories
+A long numbered list, each: As an <actor>, I want a <feature>, so that <benefit>.
+
+## Implementation Decisions
+- Modules built or modified, and the interfaces those modules expose.
+- The A to B to C dependency path that must not be skipped.
+- Schema changes, API contracts, and the shape behind each seam.
+- Do NOT include file paths or code snippets; they go stale.
+
+## Testing Decisions
+- What makes a good test here: external behavior only, never internals.
+- Which modules are tested, at which seam.
+- Existing test scaffolding a slice can reuse (never duplicate setup).
+
+## Out of Scope
+The Won't list from grill-me, restated as things this PRD does not deliver.
+
+## Further Notes
+Anything that does not fit above.
+```
+
+### 4. Trace every requirement
+
+Each user story and each implementation decision traces to a Must or Should from the locked MoSCoW. A requirement with no trace is either scope creep or a missing grill round.
+
+### 5. Keep contracts explicit
+
+For each module, name its input shape, its output shape, and the errors it may raise. A slice that cannot satisfy a stated contract goes back for a contract change, not a silent deviation.
 
 ## Checklist
 
-- [ ] PRD lives under `.righthand/prd/`, not the project tree.
-- [ ] Each module names its input and output contract.
-- [ ] No requirement without a MoSCoW trace.
+- [ ] PRD under `.righthand/prd/`, never in the project tree.
+- [ ] Seams agreed with the requester, existing seams preferred, as few as possible.
+- [ ] Every module names its input and output contract and its position on the A to B to C path.
+- [ ] Every requirement traces to a Must or Should.
+- [ ] Out of Scope restates the Won't list.
+- [ ] No file paths or code snippets that will go stale.
 
 ## Evidence
 
-- The PRD file with module contracts and dependency path.
+- The PRD file, plus the seam list the requester approved.

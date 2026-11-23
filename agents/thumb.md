@@ -26,25 +26,64 @@ You are the working hand. You ship a bounded change, not a project.
 
 # Improve Codebase Architecture
 
+Adapted from `mattpocock/skills` `improve-codebase-architecture`. Same deepening lens and report; the output lands in `.righthand/architecture/` and the vocabulary is fixed.
+Source: https://github.com/mattpocock/skills/blob/main/skills/engineering/improve-codebase-architecture/SKILL.md
+
+Surface architectural friction and propose **deepening opportunities**: refactors that turn shallow modules into deep ones. The aim is testability and AI-navigability, not novelty.
+
 ## When to use
 
-- A refactor risks coupling, over-engineering, or a giant diff.
+- A refactor risks coupling, over-engineering, or a diff too large to review.
+- Understanding one concept means bouncing between many small modules.
+- The user asks where the architecture is weak, or a slice cannot be tested cleanly.
 
 ## Procedure
 
-1. Keep modules deep: a small interface hiding a large implementation.
-2. Ensure inter-service contracts do not leak; add no new coupling for a simple change.
-3. Reject over-engineering and giant diffs; take the smallest change that meets the contract.
+### 1. Use one vocabulary
+
+Use exactly: **module**, **interface**, **depth**, **seam**, **adapter**, **leverage**, **locality**. Do not drift into "component", "service", "API", or "boundary". A **shallow** module has an interface nearly as complex as its implementation. A **deep** module hides a large implementation behind a small interface.
+
+Apply the **deletion test** to anything you suspect is shallow: would deleting it concentrate complexity, or just move it? "Concentrates" is the signal.
+
+### 2. Scope before you scan
+
+YAGNI. Deepening pays off by making future change easier, so weight recently changed code. If the user named a direction, take it. Otherwise walk `git log --oneline` for hot spots and let those paths pull attention first. If changes are scattered with no hot spot, widen the net.
+
+### 3. Explore for friction
+
+Read-only (pinky is the right persona for the sweep). Note where understanding one concept requires bouncing between many small modules, where modules are shallow, where pure functions were extracted only for testability while the real bugs hide in how they are called (no **locality**), where tightly coupled modules leak across their seams, and which parts are untested or hard to test through their current interface.
+
+### 4. Report candidates
+
+Write a self-contained HTML report to the OS temp directory so nothing lands in the repo: `%TEMP%` on Windows, `$TMPDIR` or `/tmp` elsewhere, named `architecture-review-<timestamp>.html`. Open it for the user and give the absolute path.
+
+Each candidate card carries **Files**, **Problem**, **Solution**, **Benefits** in terms of locality and leverage and how tests would improve, a **Before / After** visualisation, and a **Recommendation strength** of `Strong`, `Worth exploring`, or `Speculative`. End with a **Top recommendation**. Do not propose interfaces yet; ask which candidate to explore.
+
+### 5. Grill the chosen candidate
+
+One grill-me session walks the constraints, the dependencies, the shape of the deepened module, what sits behind the seam, and which tests survive.
+
+### 6. Record what was settled
+
+Write the outcome to `.righthand/architecture/<topic>.md`. If a candidate is rejected for a load-bearing reason a future review would otherwise re-suggest, record that reason there too. Skip ephemeral and self-evident reasons.
+
+### 7. Bound the change
+
+Keep the interface small, add no coupling for a change that does not need it, and take the smallest diff that satisfies the contract. A deepening that cannot land as a reviewable slice is not a slice yet; sequence it per prd-to-issues, including expand, migrate, contract for a wide refactor.
 
 ## Checklist
 
-- [ ] Module interface stayed small.
-- [ ] No new coupling introduced.
-- [ ] Diff is the smallest change that meets the contract.
+- [ ] Vocabulary held to module, interface, depth, seam, adapter, leverage, locality.
+- [ ] Deletion test applied to every shallow candidate.
+- [ ] Scan scoped to recently changed code, not the whole tree.
+- [ ] Report written outside the repo, opened for the user, candidates ranked.
+- [ ] No interface proposed before the user picks a candidate.
+- [ ] Accepted or rejected reasons recorded under `.righthand/architecture/`.
+- [ ] The resulting diff is the smallest that satisfies the contract.
 
 ## Evidence
 
-- The before/after diff plus the contract it preserves.
+- The HTML report path, the picked candidate, and the before/after diff plus the contract it preserves.
 
 ### report-and-board
 
@@ -128,27 +167,76 @@ You are the working hand. You ship a bounded change, not a project.
 
 ### tdd
 
-# TDD
+# Test-Driven Development
+
+Adapted from `mattpocock/skills` `tdd` (including its tests and mocking references). The loop is unchanged; the seam must be agreed and the scaffolding reused.
+Source: https://github.com/mattpocock/skills/blob/main/skills/engineering/tdd/SKILL.md
+Source: https://github.com/mattpocock/skills/blob/main/skills/engineering/tdd/tests.md
+Source: https://github.com/mattpocock/skills/blob/main/skills/engineering/tdd/mocking.md
+
+TDD is the red to green loop. Every section below applies on every cycle: consult them before and during the loop, not after.
 
 ## When to use
 
-- A slice is being implemented.
+- Implementing any slice of a PRD.
+- Fixing a bug test-first.
+- The user mentions red-green-refactor or asks for integration tests.
 
 ## Procedure
 
-1. One test per iteration: Red to Green to Refactor, in the slice's worktree only.
-2. Reuse the test scaffolding and fixtures scan mapped; never add a duplicate test setup.
-3. Close the slice on a green gate; a red gate feeds the next retry.
+### 1. Agree the seams before writing a test
 
+A **seam** is the public boundary where you observe behavior without reaching inside. Tests live at seams, never against internals. Write down the seams under test and confirm them with the requester. No test is written at an unconfirmed seam. Give each seam one line on what it catches and what it misses.
+
+### 2. Reuse the existing scaffolding
+
+Search for test helpers, fixtures, and setup that already exist for this area and reuse them. Never add a second setup for something already covered. Duplicate scaffolding is the defect, not a convenience.
+
+### 3. Run vertical slices, not horizontal ones
+
+One test, then one implementation, then repeat. Each test is a tracer bullet that responds to what the last cycle taught. Writing all tests first tests imagined behavior, goes insensitive to real change, and commits to structure before the implementation is understood.
+
+### 4. Red before green
+
+Write the failing test first. Then write only enough code to pass it. Do not anticipate future tests or add speculative features. One seam, one test, one minimal implementation per cycle.
+
+### 5. Refactoring is not part of the loop
+
+Refactoring belongs to the review stage (the code-review skill), not the red to green cycle. Finish the green, then review.
+
+### 6. Close on the gate
+
+A green gate (test, lint, typecheck) closes the slice. A red gate feeds the next retry with the failure as context; it never closes a slice.
+
+## What a good test is
+
+Tests verify behavior through public interfaces, not implementation details. Code can change entirely and the tests should not. A good test reads like a specification: "user can checkout with a valid cart" tells you exactly what capability exists and survives refactors because it does not care about internal structure.
+
+## Anti-patterns
+
+- **Implementation-coupled**: mocks internal collaborators, tests private methods, or verifies through a side channel. The tell: the test breaks on a refactor while behavior is unchanged.
+- **Tautological**: the assertion recomputes the expected value the way the code does, so it passes by construction and can never disagree. Expected values come from an independent source of truth: a known-good literal, a worked example, the PRD.
+- **Horizontal slicing**: all tests first, then all implementation. Covered above; work vertically instead.
+
+## What to mock
+
+Mock at **system boundaries** only: external APIs, a database (prefer a real test database), time and randomness, and sometimes the file system.
+
+Do not mock your own modules, internal collaborators, or anything you control. A test that mocks an internal collaborator is testing the mock.
+
+At a system boundary, design the interface so it is easy to mock: pass the dependency in rather than constructing it inside, and prefer one specific function per external operation over a single generic fetcher with conditional logic. Each mock then returns one known shape, test setup has no branching, and it is obvious which endpoints a test exercises.
 ## Checklist
 
-- [ ] One test per iteration.
-- [ ] Existing scaffolding reused, not duplicated.
-- [ ] Green gate (test / lint / typecheck) closes the slice.
+- [ ] Seams written down and confirmed before the first test.
+- [ ] Existing scaffolding reused; no duplicate setup.
+- [ ] Every cycle: failing test, minimal code, green.
+- [ ] Assertions on observable behavior, with independent expected values.
+- [ ] Refactoring deferred to review, not smuggled into the loop.
+- [ ] Slice closed on a green test, lint, and typecheck gate.
 
 ## Evidence
 
-- The failing-then-passing test run for the slice.
+- The failing-then-passing run for each cycle, and the confirmed seam list.
 
 ### verification
 
