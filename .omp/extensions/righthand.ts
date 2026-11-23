@@ -84,6 +84,18 @@ const securityAuditorPolicy: PersonaGuardPolicy = {name: 'security-auditor', ...
 const testEngineerPolicy: PersonaGuardPolicy = {name: 'test-engineer', ...readonlyBase()};
 const webPerformanceAuditorPolicy: PersonaGuardPolicy = {name: 'web-performance-auditor', ...readonlyBase()};
 const workerPolicy: PersonaGuardPolicy = {name: 'worker', ...readonlyBase()};
+const steerPolicy: PersonaGuardPolicy = {
+  name: 'steer',
+  git: {allowIntegration: true, allowCommit: true, allowTag: true},
+  gh: {allowPrEdit: true, allowRelease: true},
+  release: {allowVersionWrite: true},
+  scripts: {allowRepoRoot: true},
+};
+const pointPolicy: PersonaGuardPolicy = {name: 'point', ...readonlyBase()};
+const scanPolicy: PersonaGuardPolicy = {name: 'scan', ...readonlyBase()};
+const buildPolicy: PersonaGuardPolicy = {name: 'build', ...readonlyBase()};
+const shapePolicy: PersonaGuardPolicy = {name: 'shape', ...readonlyBase()};
+const guardPolicy: PersonaGuardPolicy = {name: 'guard', ...readonlyBase()};
 export {readonlyBase};
 
 const PERSONA_POLICIES: Record<string, PersonaGuardPolicy> = {
@@ -98,6 +110,12 @@ const PERSONA_POLICIES: Record<string, PersonaGuardPolicy> = {
   'test-engineer': testEngineerPolicy,
   'web-performance-auditor': webPerformanceAuditorPolicy,
   worker: workerPolicy,
+  steer: steerPolicy,
+  point: pointPolicy,
+  scan: scanPolicy,
+  build: buildPolicy,
+  shape: shapePolicy,
+  guard: guardPolicy,
 };
 
 function resolvePersonaPolicy(name?: string): PersonaGuardPolicy {

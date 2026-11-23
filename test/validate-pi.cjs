@@ -100,7 +100,7 @@ try {
     process.chdir(previousCwd);
   }
   const completionNames = completions?.map((item) => item.value) || [];
-  check('completions include 11 personas, list, and off', completionNames.length === 13 && ['list', 'off'].every((name) => completionNames.includes(name)) && completionNames.filter((name) => name !== 'list' && name !== 'off').length === 11);
+  check('completions include 17 personas, list, and off', completionNames.length === 19 && ['list', 'off'].every((name) => completionNames.includes(name)) && completionNames.filter((name) => name !== 'list' && name !== 'off').length === 17);
 
   const isolatedCwd = path.join(base, 'isolated-cwd');
   fs.mkdirSync(isolatedCwd, { recursive: true });
@@ -127,7 +127,7 @@ try {
     process.chdir(packagePreviousCwd);
   }
   const packagePersonaCount = packageCompletions?.filter((item) => item.value !== 'list' && item.value !== 'off').length;
-  check('simulated package layout discovers all 11 shipped personas', packagePersonaCount === 11);
+  check('simulated package layout discovers all 17 shipped personas', packagePersonaCount === 17);
 
   let distCompletions;
   try {
@@ -137,7 +137,7 @@ try {
     process.chdir(packagePreviousCwd);
   }
   const distPersonaCount = distCompletions?.filter((item) => item.value !== 'list' && item.value !== 'off').length;
-  check('compiled dist extension walks to the repo and discovers all 11 shipped personas', distPersonaCount === 11);
+  check('compiled dist extension walks to the repo and discovers all 17 shipped personas', distPersonaCount === 17);
 
   const activePersona = 'worker';
   const workerBody = fs.readFileSync(path.join(profilesDir, 'worker.md'), 'utf8').split(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/m)[1].trim();

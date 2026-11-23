@@ -72,7 +72,7 @@ try {
   const completions = command.config.getArgumentCompletions('');
   const completionNames = completions?.map((item) => item.value) || [];
   check('completions include list, off, all shipped personas and user persona',
-    ['list', 'off', 'code-reviewer', 'worker', 'custom-user-persona'].every((name) => completionNames.includes(name)) && completionNames.length === 14);
+    ['list', 'off', 'code-reviewer', 'worker', 'custom-user-persona'].every((name) => completionNames.includes(name)) && completionNames.length === 20);
   process.chdir(previousCwd);
 
   const toolCall = (toolName, input) => handlers.get('tool_call')({ type: 'tool_call', toolCallId: 'test', toolName, input }, ctx);

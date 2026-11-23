@@ -30,6 +30,18 @@ const securityAuditorPolicy = { name: 'security-auditor', ...readonlyBase() };
 const testEngineerPolicy = { name: 'test-engineer', ...readonlyBase() };
 const webPerformanceAuditorPolicy = { name: 'web-performance-auditor', ...readonlyBase() };
 const workerPolicy = { name: 'worker', ...readonlyBase() };
+const steerPolicy = {
+    name: 'steer',
+    git: { allowIntegration: true, allowCommit: true, allowTag: true },
+    gh: { allowPrEdit: true, allowRelease: true },
+    release: { allowVersionWrite: true },
+    scripts: { allowRepoRoot: true },
+};
+const pointPolicy = { name: 'point', ...readonlyBase() };
+const scanPolicy = { name: 'scan', ...readonlyBase() };
+const buildPolicy = { name: 'build', ...readonlyBase() };
+const shapePolicy = { name: 'shape', ...readonlyBase() };
+const guardPolicy = { name: 'guard', ...readonlyBase() };
 export { readonlyBase };
 const PERSONA_POLICIES = {
     architect: architectPolicy,
@@ -43,6 +55,12 @@ const PERSONA_POLICIES = {
     'test-engineer': testEngineerPolicy,
     'web-performance-auditor': webPerformanceAuditorPolicy,
     worker: workerPolicy,
+    steer: steerPolicy,
+    point: pointPolicy,
+    scan: scanPolicy,
+    build: buildPolicy,
+    shape: shapePolicy,
+    guard: guardPolicy,
 };
 function resolvePersonaPolicy(name) {
     const normalizedName = name?.toLowerCase();

@@ -30,12 +30,13 @@ function check(name, condition) {
 }
 
 check('policy modules match shipped profile basenames', JSON.stringify(policyNames) === JSON.stringify(profileNames));
-check('registry contains exactly 11 personas', Object.keys(PERSONA_POLICIES).length === 11);
+check('registry contains exactly 17 personas', Object.keys(PERSONA_POLICIES).length === 17);
 for (const name of profileNames) {
   check(`${name} policy name matches its filename`, PERSONA_POLICIES[name]?.name === name);
 }
 check('orchestrator has all seven declared permissions', JSON.stringify(permissions(PERSONA_POLICIES.orchestrator)) === JSON.stringify(Array(7).fill(true)));
-for (const name of profileNames.filter((name) => name !== 'orchestrator')) {
+check('steer has all seven declared permissions', JSON.stringify(permissions(PERSONA_POLICIES.steer)) === JSON.stringify(Array(7).fill(true)));
+for (const name of profileNames.filter((name) => name !== 'orchestrator' && name !== 'steer')) {
   check(`${name} remains fully readonly`, JSON.stringify(permissions(PERSONA_POLICIES[name])) === JSON.stringify(Array(7).fill(false)));
 }
 check('missing persona resolves to a fully readonly policy', JSON.stringify(permissions(resolvePersonaPolicy(undefined))) === JSON.stringify(Array(7).fill(false)));

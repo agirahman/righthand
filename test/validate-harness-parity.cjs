@@ -170,7 +170,7 @@ try {
   const names = [...shippedProfiles.keys()];
   const allCandidates = common.completionCandidates(names, '');
   check('completion candidates include base commands first and all shipped personas',
-    names.length === 11 && allCandidates?.length === 13 &&
+    names.length === 17 && allCandidates?.length === 19 &&
     allCandidates[0].value === 'list' && allCandidates[1].value === 'off');
   check('completion candidates filter prefixes and return null when empty',
     JSON.stringify(common.completionCandidates(names, 'wo')?.map((item) => item.value)) === JSON.stringify(['worker']) &&
