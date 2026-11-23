@@ -6,19 +6,13 @@ RightHand personas are portable skills. Each harness has its own install path. U
 
 | Route | Best for |
 |---|---|
-| Plugin door | Claude Code, Codex, Cursor, Kimi, OMP |
+| Plugin door | Oh My Pi |
 | Pi package | Pi |
-| Shared folder copy | OpenCode |
+| Native extension copy | Command Code, OpenCode |
 | Git clone | Any harness that reads repo skills |
 
-## Plugin-door installs (Claude Code / Codex / Cursor / Kimi / OMP)
+## Plugin-door installs (Oh My Pi)
 
-Install commands mirror the upstream support table:
-
-- **Claude Code**: `/plugin marketplace add https://github.com/agirahman/righthand` then `/plugin install righthand@righthand`
-- **Codex**: `codex plugin marketplace add agirahman/righthand` then `codex plugin add righthand@righthand`
-- **Cursor**: `agent plugin marketplace add https://github.com/agirahman/righthand` then install from Customize panel
-- **Kimi Code**: `/plugins install https://github.com/agirahman/righthand`
 - **Oh My Pi**: `omp plugin marketplace add agirahman/righthand`; `omp plugin install righthand@righthand`
 
 Updates: use each harness's own update command or re-run install. Removal: use each harness's uninstall command.
@@ -47,12 +41,12 @@ On Windows use `Copy-Item -Recurse`.
 ## Git-clone deep install
 
 1. Clone the repo.
-2. Launch your harness inside repo directory (verify it reads root skils).
+2. Launch your harness inside the repo directory (verify it reads the root skills).
 
 ## Usage modes
 
 - Native `/righthand` slash commands and interactive persona switching are supported in **Command Code**, **Pi**, **Oh My Pi**, **OpenCode**, and via the **RightHand CLI** (`righthand switch <persona>`).
-- On other harnesses (Claude Code, Cursor, Codex, Kimi), activate by requesting the persona in conversation: *"Act as righthand-thumb"* or *"Use the righthand-palm skill"*. Legacy names such as backend or orchestrator still resolve to the persona that absorbed them.
+- In any of those four harnesses, a persona can also be activated by skill request: *"Act as righthand-thumb"* or *"Use the righthand-palm skill"*. Legacy names such as backend or orchestrator still resolve to the persona that absorbed them.
 - Writer personas should run in isolated lanes created by Herdr outside this repository, using `scripts/herdr-spawn.*`.
 
 ## Per-persona dispatch model and harness
@@ -109,5 +103,4 @@ Branch from a fresh `origin/main`, commit in small units, rebase before pushing,
 
 ## Known limitations
 
-- For harnesses without native extension APIs (Claude Code, Cursor, Codex), persona switching relies on standard skill activation prompts rather than UI pickers.
 - Multi-agent tab orchestration relies on Herdr workspace tabs and `herdr-spawn.*` scripts.

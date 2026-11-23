@@ -175,12 +175,12 @@ OpenCode uses the native `@opencode/plugin` and `@opencode/plugin/tui` APIs.
 - **Details**: See [`.opencode-plugin/README.md`](./.opencode-plugin/README.md).
 
 ### 5. Cross-Harness Portable Skills (`skills/`)
-For harnesses that support portable Agent Skills or custom plugins (Claude Code, Cursor, Codex, Kimi Code):
+For the four supported harnesses (Command Code, Pi, Oh My Pi, OpenCode):
 
 - Skills are available under `skills/<name>/SKILL.md` in two layers: the capability skills (`code-review`, `dispatch`, `verification`, and the rest) and the SDLC skills (`grill-me`, `write-a-prd`, `prd-to-issues`, `tdd`, `triage-issue`, `improve-codebase-architecture`).
 - Personas are defined in `profiles/<name>.md` and reference capabilities from their `skills:` field. A profile plus its skills must stay within the 400-line prompt budget enforced by `npm test`.
 - `righthand blast-radius <scope>` activates `pinky` and prints the reconnaissance directive for mapping a change's blast radius before any code is written.
-- Compatible plugin manifests are included: `.claude-plugin/`, `.cursor-plugin/`, `.codex-plugin/`, `.kimi-plugin/`, and `.agents/`.
+- Compatible plugin manifests are included: `.omp-plugin/` and `.agents/`.
 
 ---
 

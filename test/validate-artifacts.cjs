@@ -26,7 +26,6 @@ function addDiskFiles(dir, pattern) {
   }
 }
 addDiskFiles('agents', /\.md$/);
-addDiskFiles('.codex-plugin/agents', /\.toml$/);
 addDiskFiles('.commandcode-mod/profiles', /\.md$/);
 
 // Differing paths
@@ -67,42 +66,6 @@ if (fs.existsSync(agentsDir)) {
     if (hashCount !== 1) {
       console.error(`FAIL: [agent] ${f} has ${hashCount} lines matching '^# ' before '## Capabilities' (expected 1)`);
       failed++;
-    }
-  }
-}
-
-// .codex-plugin/agents/*.toml format
-const codexDir = path.join(root, '.codex-plugin', 'agents');
-if (fs.existsSync(codexDir)) {
-  for (const f of fs.readdirSync(codexDir).filter((x) => x.endsWith('.toml'))) {
-    const content = fs.readFileSync(path.join(codexDir, f), 'utf8');
-    if (!content.startsWith('name = "')) {
-      console.error(`FAIL: [toml] ${f} does not start with 'name = \"'`);
-      failed++;
-    }
-    const tomlLines = content.split(/\r?\n/);
-    if (!tomlLines.some((l) => l.startsWith('description = "'))) {
-      console.error(`FAIL: [toml] ${f} missing a line starting 'description = \"'`);
-      failed++;
-    }
-    if (!tomlLines.some((l) => l.startsWith('developer_instructions = """'))) {
-      console.error(`FAIL: [toml] ${f} missing a line starting 'developer_instructions = \"\"\"'`);
-      failed++;
-    }
-    if (!(content.endsWith('"""\n') || content.endsWith('"""\r\n'))) {
-      console.error(`FAIL: [toml] ${f} must end with '\"\"\"' followed by a newline`);
-      failed++;
-    }
-    // Reject unescaped """ inside the instructions body
-    const marker = 'developer_instructions = """';
-    const markerIdx = content.indexOf(marker);
-    if (markerIdx >= 0) {
-      const after = content.slice(markerIdx + marker.length);
-      const body = after.replace(/"""\r?\n$/, '');
-      if (body.includes('"""')) {
-        console.error(`FAIL: [toml] ${f} contains an unescaped '\"\"\"' inside the instructions body`);
-        failed++;
-      }
     }
   }
 }

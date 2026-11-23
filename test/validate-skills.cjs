@@ -6,12 +6,6 @@ const profilesDir = path.join(root, 'profiles');
 const skillsRoot = path.join(root, 'skills');
 const manifestDirs = [
   path.join(root, 'plugin.json'),
-  path.join(root, '.claude-plugin', 'plugin.json'),
-  path.join(root, '.claude-plugin', 'marketplace.json'),
-  path.join(root, '.codex-plugin', 'plugin.json'),
-  path.join(root, '.cursor-plugin', 'plugin.json'),
-  path.join(root, '.cursor-plugin', 'marketplace.json'),
-  path.join(root, '.kimi-plugin', 'plugin.json'),
   path.join(root, '.omp-plugin', 'marketplace.json'),
   path.join(root, '.agents', 'plugins', 'marketplace.json'),
 ];

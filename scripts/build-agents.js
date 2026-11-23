@@ -5,7 +5,6 @@ const ROOT = path.resolve(__dirname, '..');
 const PROFILES_DIR = path.join(ROOT, 'profiles');
 const SKILLS_DIR = path.join(ROOT, 'skills');
 const AGENTS_DIR = path.join(ROOT, 'agents');
-const CODEX_AGENTS_DIR = path.join(ROOT, '.codex-plugin', 'agents');
 const PROFILE_COPIES_DIR = path.join(ROOT, '.commandcode-mod', 'profiles');
 
 function detectEol(content) {
@@ -48,14 +47,6 @@ function parseSkill(content) {
   return body.trim();
 }
 
-function escapeTomlBasic(value) {
-  return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-}
-
-function escapeTomlMultiline(value) {
-  return value.replace(/\\/g, '\\\\').replace(/"""/g, '\\"\\"\\"');
-}
-
 function writeFileIfChanged(filePath, buffer) {
   let existing = null;
   try {
@@ -79,7 +70,6 @@ function buildPlan(rootDir) {
   const profilesDir = path.join(root, 'profiles');
   const skillsDir = path.join(root, 'skills');
   const agentsDir = path.join(root, 'agents');
-  const codexAgentsDir = path.join(root, '.codex-plugin', 'agents');
   const profileCopiesDir = path.join(root, '.commandcode-mod', 'profiles');
 
   const profileFiles = fs.readdirSync(profilesDir)
@@ -161,19 +151,6 @@ function buildPlan(rootDir) {
     ].join(eol);
 
     plan[`agents/${name}.md`] = mdContent;
-
-    const tomlBody = escapeTomlMultiline(composedBody);
-    const tomlContent = [
-      `name = "${escapeTomlBasic(name)}"`,
-      `description = "${escapeTomlBasic(description)}"`,
-      `developer_instructions = """`,
-      tomlBody,
-      `"""`,
-      '',
-    ].join(eol);
-
-    plan[`.codex-plugin/agents/${name}.toml`] = tomlContent;
-
     plan[`.commandcode-mod/profiles/${file}`] = sourceContent;
   }
 
@@ -196,10 +173,9 @@ function main() {
   const plan = buildPlan(root);
 
   let written = 0;
-  const counts = { md: 0, toml: 0, copy: 0 };
+  const counts = { md: 0, copy: 0 };
   for (const [relPath, content] of Object.entries(plan)) {
     if (relPath.startsWith('agents/')) counts.md++;
-    else if (relPath.startsWith('.codex-plugin/agents/')) counts.toml++;
     else if (relPath.startsWith('.commandcode-mod/profiles/')) counts.copy++;
 
     const fullPath = path.join(root, relPath);
@@ -213,7 +189,7 @@ function main() {
   if (written === 0) {
     console.log('Nothing written.');
   }
-  console.log(`Summary: ${counts.md} markdown agents, ${counts.toml} toml agents, ${counts.copy} profile copies (${written} files written).`);
+  console.log(`Summary: ${counts.md} markdown agents, ${counts.copy} profile copies (${written} files written).`);
 }
 
 try {

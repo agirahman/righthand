@@ -10,7 +10,7 @@ Native integration for [OpenCode](https://github.com/opencode-ai/opencode).
 
 ## Usage via CLI
 ```bash
-righthand backend
+righthand switch thumb
 righthand list
 righthand off
 ```
@@ -19,7 +19,7 @@ righthand off
 Prepend the active persona into your OpenCode prompt or workflow:
 ```bash
 # Set persona
-righthand backend
+righthand switch thumb
 
 # Run with injected persona context
 opencode run "$(righthand inject) Help me design the REST API endpoints"
