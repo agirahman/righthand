@@ -1,8 +1,6 @@
 ---
 name: grill-me
 description: "Interview the requester relentlessly, one round at a time, until scope and contract are shared understanding. Then hand a locked scope to write-a-prd."
-tier: sdlc
-persona: index
 ---
 # Grill Me
 

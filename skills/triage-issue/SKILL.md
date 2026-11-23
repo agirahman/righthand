@@ -1,10 +1,7 @@
 ---
 name: triage-issue
 description: "Move an issue or external PR through the triage state machine: recommend, verify the claim, grill if needed, then write an agent-ready brief under .righthand/triage/."
-tier: sdlc
-persona: pinky
 ---
-
 # Triage Issue
 
 Adapted from `mattpocock/skills` `triage`. Same roles, states, transitions, and brief discipline. The tracker is the local `.righthand/triage/` board, and the blast radius is mapped read-only before any fix is planned.

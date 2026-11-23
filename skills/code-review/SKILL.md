@@ -1,9 +1,7 @@
 ---
 name: code-review
 description: Perform a five-axis code review with P1-P4 severity and a PASS or CHANGES REQUIRED verdict.
-tier: baseline
 ---
-
 # Code Review
 
 ## When to use

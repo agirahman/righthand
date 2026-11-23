@@ -1,9 +1,7 @@
 ---
 name: worktree-lanes
 description: Create and manage isolated Herdr worktree lanes for ticket-scoped writes, keeping the main checkout untouched.
-tier: baseline
 ---
-
 # Worktree Lanes
 
 ## When to use

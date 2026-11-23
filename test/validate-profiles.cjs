@@ -173,7 +173,8 @@ if (fs.existsSync(skillsRoot)) {
   }
 }
 
-// two-layer model: every skill declares a tier (baseline | sdlc)
+// Skill frontmatter carries exactly name and description, nothing else.
+const skillKeys = ['name', 'description'];
 if (fs.existsSync(skillsRoot)) {
   for (const dir of fs.readdirSync(skillsRoot)) {
     const dirPath = path.join(skillsRoot, dir);
@@ -181,9 +182,12 @@ if (fs.existsSync(skillsRoot)) {
     const skillFile = path.join(dirPath, 'SKILL.md');
     if (!fs.existsSync(skillFile)) continue;
     const fm = /^---\r?\n([\s\S]*?)\r?\n---/.exec(fs.readFileSync(skillFile, 'utf8'))?.[1] ?? '';
-    const fmLines = fm.split(/\r?\n/);
-    if (!fmLines.some((l) => /^tier:\s*(baseline|sdlc)\s*$/.test(l))) {
-      console.error(`FAIL: [skill] ${dir}/SKILL.md does not declare a tier (baseline|sdlc)`);
+    const found = fm.split(/\r?\n/)
+      .map((l) => /^([a-zA-Z0-9_-]+)\s*:/.exec(l))
+      .filter(Boolean)
+      .map((m) => m[1].toLowerCase());
+    if (found.join(',') !== skillKeys.join(',')) {
+      console.error(`FAIL: [skill] ${dir}/SKILL.md frontmatter keys must be ${skillKeys.join(', ')}, got ${found.join(', ')}`);
       failed++;
     }
   }

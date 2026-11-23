@@ -1,8 +1,6 @@
 ---
 name: improve-codebase-architecture
 description: "Scan for deepening opportunities with a fixed architecture vocabulary, report candidates visually, then grill the one the user picks and bound the resulting diff."
-tier: sdlc
-persona: thumb, middle
 ---
 # Improve Codebase Architecture
 

@@ -1,8 +1,6 @@
 ---
 name: write-a-prd
 description: "Synthesize the grilled conversation into a bounded PRD with explicit seams and module contracts, written under .righthand/prd/. No new interview."
-tier: sdlc
-persona: index
 ---
 # Write a PRD
 

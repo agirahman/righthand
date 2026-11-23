@@ -1,8 +1,6 @@
 ---
 name: prd-to-issues
 description: "Break a locked PRD into tracer-bullet vertical slices with explicit blocking edges, published under .righthand/tasks/. Wide refactors expand-contract instead."
-tier: sdlc
-persona: palm
 ---
 # PRD to Issues
 

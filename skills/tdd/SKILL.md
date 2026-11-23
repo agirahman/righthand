@@ -1,10 +1,7 @@
 ---
 name: tdd
 description: "The red to green loop, with seams agreed first, vertical tracer-bullet slices, and the anti-patterns that make tests worthless."
-tier: sdlc
-persona: thumb
 ---
-
 # Test-Driven Development
 
 Adapted from `mattpocock/skills` `tdd` (including its tests and mocking references). The loop is unchanged; the seam must be agreed and the scaffolding reused.
