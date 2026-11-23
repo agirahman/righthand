@@ -40,6 +40,7 @@ export const PERSONA_ALIASES: Record<string, string> = {
   // steer (the palm)
   orchestrator: 'steer',
   'product-manager': 'steer',
+  pm: 'steer',
   // point
   architect: 'point',
   planner: 'point',
