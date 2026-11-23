@@ -13,23 +13,6 @@ function readonlyBase() {
         scripts: { allowRepoRoot: false },
     };
 }
-const architectPolicy = { name: 'architect', ...readonlyBase() };
-const backendPolicy = { name: 'backend', ...readonlyBase() };
-const codeReviewerPolicy = { name: 'code-reviewer', ...readonlyBase() };
-const devopsPolicy = { name: 'devops', ...readonlyBase() };
-const frontendPolicy = { name: 'frontend', ...readonlyBase() };
-const orchestratorPolicy = {
-    name: 'orchestrator',
-    git: { allowIntegration: true, allowCommit: true, allowTag: true },
-    gh: { allowPrEdit: true, allowRelease: true },
-    release: { allowVersionWrite: true },
-    scripts: { allowRepoRoot: true },
-};
-const productManagerPolicy = { name: 'product-manager', ...readonlyBase() };
-const securityAuditorPolicy = { name: 'security-auditor', ...readonlyBase() };
-const testEngineerPolicy = { name: 'test-engineer', ...readonlyBase() };
-const webPerformanceAuditorPolicy = { name: 'web-performance-auditor', ...readonlyBase() };
-const workerPolicy = { name: 'worker', ...readonlyBase() };
 const palmPolicy = {
     name: 'palm',
     git: { allowIntegration: true, allowCommit: true, allowTag: true },
@@ -44,17 +27,6 @@ const ringPolicy = { name: 'ring', ...readonlyBase() };
 const middlePolicy = { name: 'middle', ...readonlyBase() };
 export { readonlyBase };
 const PERSONA_POLICIES = {
-    architect: architectPolicy,
-    backend: backendPolicy,
-    'code-reviewer': codeReviewerPolicy,
-    devops: devopsPolicy,
-    frontend: frontendPolicy,
-    orchestrator: orchestratorPolicy,
-    'product-manager': productManagerPolicy,
-    'security-auditor': securityAuditorPolicy,
-    'test-engineer': testEngineerPolicy,
-    'web-performance-auditor': webPerformanceAuditorPolicy,
-    worker: workerPolicy,
     palm: palmPolicy,
     index: indexPolicy,
     pinky: pinkyPolicy,
@@ -1248,7 +1220,7 @@ function getRepoRoot() {
     catch { }
     return process.cwd();
 }
-const RETIRED_PERSONAS = ['editor'];
+const RETIRED_PERSONAS = ['editor', 'architect', 'backend', 'code-reviewer', 'devops', 'frontend', 'orchestrator', 'product-manager', 'security-auditor', 'test-engineer', 'web-performance-auditor', 'worker'];
 function parseProfileFile(filePath, fallbackName) {
     let raw;
     try {

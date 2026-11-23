@@ -18,21 +18,21 @@ function check(label, fn) {
 }
 
 check('model present: -m with exact model in right order', () => {
-  const args = launch.buildLaunchArgs('worker', { model: 'reflection/beam:free' });
-  const expected = ['-t', '--yolo', '-m', 'reflection/beam:free', '--mod-option', 'default=worker'];
+  const args = launch.buildLaunchArgs('thumb', { model: 'reflection/beam:free' });
+  const expected = ['-t', '--yolo', '-m', 'reflection/beam:free', '--mod-option', 'default=thumb'];
   if (JSON.stringify(args) !== JSON.stringify(expected)) throw new Error(JSON.stringify(args));
 });
 
 check('model absent: no -m at all', () => {
-  const args = launch.buildLaunchArgs('backend', { model: '' });
+  const args = launch.buildLaunchArgs('index', { model: '' });
   if (args.includes('-m')) throw new Error('unexpected -m');
-  const expected = ['-t', '--yolo', '--mod-option', 'default=backend'];
+  const expected = ['-t', '--yolo', '--mod-option', 'default=index'];
   if (JSON.stringify(args) !== JSON.stringify(expected)) throw new Error(JSON.stringify(args));
 });
 
 check('model absent (null resolution): no -m', () => {
-  const args = launch.buildLaunchArgs('backend', null);
-  if (JSON.stringify(args) !== JSON.stringify(['-t', '--yolo', '--mod-option', 'default=backend'])) throw new Error(JSON.stringify(args));
+  const args = launch.buildLaunchArgs('index', null);
+  if (JSON.stringify(args) !== JSON.stringify(['-t', '--yolo', '--mod-option', 'default=index'])) throw new Error(JSON.stringify(args));
 });
 
 check('persona with spaces stays single --mod-option arg', () => {
@@ -61,7 +61,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const { spawnSync } = require('node:child_process');
 
-const PERSONA = 'worker';
+const PERSONA = 'thumb';
 const CMDC_MODEL = '9router-bili/cmc/deepseek/deepseek-v4.1-flash';
 const PI_MODEL = '9router/agness/agnes-2.5-flash';
 
@@ -91,7 +91,7 @@ function mkProject(personas) {
 
 function launchPrint(dir, args) {
   const env = Object.assign({}, process.env);
-  // The orchestrator model must not leak in: these checks are about the config.
+  // The palm model must not leak in: these checks are about the config.
   delete env.HERDR_PANE_ID;
   delete env.RIGHTHAND_PERSONA;
   const r = spawnSync(process.execPath, [path.join(root, 'bin', 'righthand.js'), 'launch', ...args, '--print'], {
@@ -104,15 +104,15 @@ function launchPrint(dir, args) {
   return (r.stdout || '').replace(/\r\n/g, '\n').trim();
 }
 
-check('launch worker --print is byte-identical to the pre-change baseline', () => {
+check('launch thumb --print is byte-identical to the pre-change baseline', () => {
   const dir = mkProject(null);
   try {
     const out = launchPrint(dir, [PERSONA]);
-    if (out !== `${launch.CMDC_BIN} -t --yolo --mod-option default=worker`) throw new Error(out);
+    if (out !== `${launch.CMDC_BIN} -t --yolo --mod-option default=thumb`) throw new Error(out);
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
-check('launch pi worker --print never forwards the commandcode model', () => {
+check('launch pi thumb --print never forwards the commandcode model', () => {
   const dir = mkProject({ [PERSONA]: { harness: 'commandcode', model: CMDC_MODEL } });
   try {
     const out = launchPrint(dir, ['pi', PERSONA]);
@@ -122,7 +122,7 @@ check('launch pi worker --print never forwards the commandcode model', () => {
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
-check('launch pi worker --print emits exactly the pi models entry', () => {
+check('launch pi thumb --print emits exactly the pi models entry', () => {
   const dir = mkProject({ [PERSONA]: { harness: 'commandcode', model: CMDC_MODEL, models: { pi: PI_MODEL } } });
   try {
     const out = launchPrint(dir, ['pi', PERSONA]);
@@ -133,11 +133,11 @@ check('launch pi worker --print emits exactly the pi models entry', () => {
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
-check('launch worker --print keeps the commandcode model when models is present', () => {
+check('launch thumb --print keeps the commandcode model when models is present', () => {
   const dir = mkProject({ [PERSONA]: { harness: 'commandcode', model: CMDC_MODEL, models: { pi: PI_MODEL } } });
   try {
     const out = launchPrint(dir, [PERSONA]);
-    if (out !== `${launch.CMDC_BIN} -t --yolo -m ${CMDC_MODEL} --mod-option default=worker`) throw new Error(out);
+    if (out !== `${launch.CMDC_BIN} -t --yolo -m ${CMDC_MODEL} --mod-option default=thumb`) throw new Error(out);
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 

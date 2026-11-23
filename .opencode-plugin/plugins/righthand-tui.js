@@ -25,7 +25,7 @@ function getRepoRoot() {
     catch { }
     return process.cwd();
 }
-const RETIRED_PERSONAS = ['editor'];
+const RETIRED_PERSONAS = ['editor', 'architect', 'backend', 'code-reviewer', 'devops', 'frontend', 'orchestrator', 'product-manager', 'security-auditor', 'test-engineer', 'web-performance-auditor', 'worker'];
 function parseProfileFile(filePath, fallbackName) {
     let raw;
     try {

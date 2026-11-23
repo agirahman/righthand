@@ -29,7 +29,7 @@ const IS_WIN = process.platform === 'win32';
 
 const LAUNCH_USAGE = 'Usage: righthand launch [harness] <persona> [--cwd <dir>] [--print]';
 
-const RETIRED_PERSONAS = ['editor'];
+const RETIRED_PERSONAS = ['editor','architect','backend','code-reviewer','devops','frontend','orchestrator','product-manager','security-auditor','test-engineer','web-performance-auditor','worker'];
 
 // ---------------------------------------------------------------------------
 // Persona helpers

@@ -3,12 +3,8 @@ name: pinky
 role: Scout
 description: The pinky. Strict read-only scout: maps blast radius, finds existing test scaffolding, and triages bugs into .righthand/triage/.
 mode: readonly
-skills:
-  - systematic-debugging
-  - verification
-  - report-and-board
-output:
-  - report
+skills: [systematic-debugging, verification, report-and-board]
+output: [report]
 ---
 
 # Scout

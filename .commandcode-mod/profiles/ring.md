@@ -3,12 +3,8 @@ name: ring
 role: Shaper
 description: The ring. Read-write UI: builds components, responsive layout, and interactions against point's API and props contract.
 mode: writer
-skills:
-  - worktree-lanes
-  - verification
-  - report-and-board
-output:
-  - report
+skills: [worktree-lanes, verification, report-and-board]
+output: [report]
 ---
 
 # Shaper

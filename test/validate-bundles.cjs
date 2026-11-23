@@ -134,9 +134,9 @@ try {
     if (previousScratchpad === undefined) delete process.env.COMMANDCODE_SCRATCHPAD;
     else process.env.COMMANDCODE_SCRATCHPAD = previousScratchpad;
   }
-  check('round-trip deep-equal: bundled Pi and source adapter for all 17 personas', parity.length === 17);
-  const readonlyRecord = parity.find((item) => item.persona === 'code-reviewer');
-  const writerRecord = parity.find((item) => item.persona === 'worker');
+  check('round-trip deep-equal: bundled Pi and source adapter for all 6 personas', parity.length === 6);
+  const readonlyRecord = parity.find((item) => item.persona === 'middle');
+  const writerRecord = parity.find((item) => item.persona === 'thumb');
   check('readonly corpus blocks writes and shell mutation, allows .righthand/, and matches all six source/bundle calls', readonlyRecord?.source.decisions.map((item) => item.block).join(',') === 'true,false,true,false,true,false' && assert.deepEqual(readonlyRecord.bundled.decisions, readonlyRecord.source.decisions) === undefined);
   check('writer corpus allows all six calls and matches source/bundle', writerRecord?.source.decisions.map((item) => item.block).join(',') === 'false,false,false,false,false,false' && assert.deepEqual(writerRecord.bundled.decisions, writerRecord.source.decisions) === undefined);
   console.log(`EVIDENCE: ${JSON.stringify({ readonly: readonlyRecord, writer: writerRecord }, null, 2)}`);

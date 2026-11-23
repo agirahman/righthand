@@ -3,13 +3,8 @@ name: middle
 role: Guardian
 description: The middle. Read-only code plus CLI test and lint: validates the slice contract, flags duplicate test setup, and runs the multi-model review council.
 mode: readonly
-skills:
-  - code-review
-  - verification
-  - systematic-debugging
-  - report-and-board
-output:
-  - report
+skills: [code-review, verification, systematic-debugging, report-and-board]
+output: [report]
 ---
 
 # Guardian

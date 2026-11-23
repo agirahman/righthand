@@ -67,23 +67,6 @@ function readonlyBase(): Omit<PersonaGuardPolicy, 'name'> {
     scripts: {allowRepoRoot: false},
   };
 }
-const architectPolicy: PersonaGuardPolicy = {name: 'architect', ...readonlyBase()};
-const backendPolicy: PersonaGuardPolicy = {name: 'backend', ...readonlyBase()};
-const codeReviewerPolicy: PersonaGuardPolicy = {name: 'code-reviewer', ...readonlyBase()};
-const devopsPolicy: PersonaGuardPolicy = {name: 'devops', ...readonlyBase()};
-const frontendPolicy: PersonaGuardPolicy = {name: 'frontend', ...readonlyBase()};
-const orchestratorPolicy: PersonaGuardPolicy = {
-  name: 'orchestrator',
-  git: {allowIntegration: true, allowCommit: true, allowTag: true},
-  gh: {allowPrEdit: true, allowRelease: true},
-  release: {allowVersionWrite: true},
-  scripts: {allowRepoRoot: true},
-};
-const productManagerPolicy: PersonaGuardPolicy = {name: 'product-manager', ...readonlyBase()};
-const securityAuditorPolicy: PersonaGuardPolicy = {name: 'security-auditor', ...readonlyBase()};
-const testEngineerPolicy: PersonaGuardPolicy = {name: 'test-engineer', ...readonlyBase()};
-const webPerformanceAuditorPolicy: PersonaGuardPolicy = {name: 'web-performance-auditor', ...readonlyBase()};
-const workerPolicy: PersonaGuardPolicy = {name: 'worker', ...readonlyBase()};
 const palmPolicy: PersonaGuardPolicy = {
   name: 'palm',
   git: {allowIntegration: true, allowCommit: true, allowTag: true},
@@ -99,17 +82,6 @@ const middlePolicy: PersonaGuardPolicy = {name: 'middle', ...readonlyBase()};
 export {readonlyBase};
 
 const PERSONA_POLICIES: Record<string, PersonaGuardPolicy> = {
-  architect: architectPolicy,
-  backend: backendPolicy,
-  'code-reviewer': codeReviewerPolicy,
-  devops: devopsPolicy,
-  frontend: frontendPolicy,
-  orchestrator: orchestratorPolicy,
-  'product-manager': productManagerPolicy,
-  'security-auditor': securityAuditorPolicy,
-  'test-engineer': testEngineerPolicy,
-  'web-performance-auditor': webPerformanceAuditorPolicy,
-  worker: workerPolicy,
   palm: palmPolicy,
   index: indexPolicy,
   pinky: pinkyPolicy,
@@ -1209,7 +1181,7 @@ function getRepoRoot(): string {
   } catch {}
   return process.cwd();
 }
-const RETIRED_PERSONAS: string[] = ['editor'];
+const RETIRED_PERSONAS: string[] = ['editor','architect','backend','code-reviewer','devops','frontend','orchestrator','product-manager','security-auditor','test-engineer','web-performance-auditor','worker'];
 
 
 

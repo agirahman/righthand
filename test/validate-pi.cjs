@@ -100,7 +100,7 @@ try {
     process.chdir(previousCwd);
   }
   const completionNames = completions?.map((item) => item.value) || [];
-  check('completions include 17 personas, list, and off', completionNames.length === 19 && ['list', 'off'].every((name) => completionNames.includes(name)) && completionNames.filter((name) => name !== 'list' && name !== 'off').length === 17);
+  check('completions include 6 personas, list, and off', completionNames.length === 8 && ['list', 'off'].every((name) => completionNames.includes(name)) && completionNames.filter((name) => name !== 'list' && name !== 'off').length === 6);
 
   const isolatedCwd = path.join(base, 'isolated-cwd');
   fs.mkdirSync(isolatedCwd, { recursive: true });
@@ -127,7 +127,7 @@ try {
     process.chdir(packagePreviousCwd);
   }
   const packagePersonaCount = packageCompletions?.filter((item) => item.value !== 'list' && item.value !== 'off').length;
-  check('simulated package layout discovers all 17 shipped personas', packagePersonaCount === 17);
+  check('simulated package layout discovers all 6 shipped personas', packagePersonaCount === 6);
 
   let distCompletions;
   try {
@@ -137,16 +137,16 @@ try {
     process.chdir(packagePreviousCwd);
   }
   const distPersonaCount = distCompletions?.filter((item) => item.value !== 'list' && item.value !== 'off').length;
-  check('compiled dist extension walks to the repo and discovers all 17 shipped personas', distPersonaCount === 17);
+  check('compiled dist extension walks to the repo and discovers all 6 shipped personas', distPersonaCount === 6);
 
-  const activePersona = 'worker';
-  const workerBody = fs.readFileSync(path.join(profilesDir, 'worker.md'), 'utf8').split(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/m)[1].trim();
+  const activePersona = 'thumb';
+  const workerBody = fs.readFileSync(path.join(profilesDir, 'thumb.md'), 'utf8').split(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/m)[1].trim();
   const legacyStatePath = path.join(repoDir, '.righthand', 'active-persona.json');
   fs.mkdirSync(path.dirname(legacyStatePath), { recursive: true });
   fs.writeFileSync(legacyStatePath, JSON.stringify({ active: activePersona }));
   const legacyEvent = { systemPromptOptions: { sections: {} } };
   handlers.get('before_agent_start')(legacyEvent, ctx);
-  check('legacy state fallback resolves the existing worker persona', typeof legacyEvent.systemPromptOptions.sections.righthand === 'string' && legacyEvent.systemPromptOptions.sections.righthand.includes(workerBody));
+  check('legacy state fallback resolves the existing thumb persona', typeof legacyEvent.systemPromptOptions.sections.righthand === 'string' && legacyEvent.systemPromptOptions.sections.righthand.includes(workerBody));
 
   fs.mkdirSync(path.dirname(statePath), { recursive: true });
   fs.writeFileSync(statePath, '{"active":');
@@ -158,11 +158,11 @@ try {
   const activeEvent = { systemPromptOptions: { sections: {} } };
   handlers.get('before_agent_start')(activeEvent, ctx);
   const section = activeEvent.systemPromptOptions.sections.righthand;
-  check('active persona populates righthand section', typeof section === 'string' && section.includes('worker') && section.includes(workerBody));
+  check('active persona populates righthand section', typeof section === 'string' && section.includes('thumb') && section.includes(workerBody));
 
   handlers.get('session_start')({}, ctx);
   const startStatus = statuses.at(-1);
-  check('session_start sets status through ctx.ui.setStatus', startStatus?.key === 'righthand' && typeof startStatus.value === 'string' && startStatus.value.includes('worker'));
+  check('session_start sets status through ctx.ui.setStatus', startStatus?.key === 'righthand' && typeof startStatus.value === 'string' && startStatus.value.includes('thumb'));
 
   const inactiveEvent = { systemPromptOptions: { sections: { righthand: 'stale' } } };
   fs.writeFileSync(statePath, JSON.stringify({ active: null }));
@@ -181,7 +181,7 @@ try {
   process.env.COMMANDCODE_SCRATCHPAD = scratchDir;
   const toolCall = (toolName, input) => toolCallHandler({ type: 'tool_call', toolCallId: 'test', toolName, input }, ctx);
 
-  fs.writeFileSync(statePath, JSON.stringify({ active: 'security-auditor' }));
+  fs.writeFileSync(statePath, JSON.stringify({ active: 'middle' }));
   check('readonly write to src blocked', toolCall('write', { path: 'src/x.js', content: 'x' })?.block === true);
   check('readonly edit to src blocked', toolCall('edit', { path: 'src/x.js', edits: [{ oldText: 'x', newText: 'y' }] })?.block === true);
   check('readonly bash rm blocked', toolCall('bash', { command: 'rm -rf src' })?.block === true);
@@ -193,32 +193,32 @@ try {
   check('readonly find allowed', toolCall('find', { pattern: '**/*.js' })?.block !== true);
   check('readonly ls allowed', toolCall('ls', {})?.block !== true);
 
-  fs.writeFileSync(statePath, JSON.stringify({ active: 'worker' }));
+  fs.writeFileSync(statePath, JSON.stringify({ active: 'thumb' }));
   check('writer write to src allowed', toolCall('write', { path: 'src/x.js', content: 'x' })?.block !== true);
   fs.writeFileSync(statePath, JSON.stringify({ active: null }));
   check('no active persona write to src allowed', toolCall('write', { path: 'src/x.js', content: 'x' })?.block !== true);
   if (previousScratchpad === undefined) delete process.env.COMMANDCODE_SCRATCHPAD;
   else process.env.COMMANDCODE_SCRATCHPAD = previousScratchpad;
 
-  const securityBody = fs.readFileSync(path.join(profilesDir, 'security-auditor.md'), 'utf8').split(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/m)[1].trim();
+  const securityBody = fs.readFileSync(path.join(profilesDir, 'middle.md'), 'utf8').split(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/m)[1].trim();
   const previousPersonaEnv = process.env.RIGHTHAND_PERSONA;
   try {
-    fs.writeFileSync(statePath, JSON.stringify({ active: 'worker' }));
-    process.env.RIGHTHAND_PERSONA = 'security-auditor';
+    fs.writeFileSync(statePath, JSON.stringify({ active: 'thumb' }));
+    process.env.RIGHTHAND_PERSONA = 'middle';
     const envEvent = { systemPromptOptions: { sections: {} } };
     handlers.get('before_agent_start')(envEvent, ctx);
     const envSection = envEvent.systemPromptOptions.sections.righthand;
     check('env channel overrides the state file persona', typeof envSection === 'string' && envSection.includes(securityBody) && !envSection.includes(workerBody));
-    check('env channel readonly persona blocks a src write while file says worker', toolCall('write', { path: 'src/x.js', content: 'x' })?.block === true);
+    check('env channel readonly persona blocks a src write while file says thumb', toolCall('write', { path: 'src/x.js', content: 'x' })?.block === true);
 
-    process.env.RIGHTHAND_PERSONA = '  Worker  ';
+    process.env.RIGHTHAND_PERSONA = '  Thumb  ';
     const normalizedEvent = { systemPromptOptions: { sections: {} } };
     handlers.get('before_agent_start')(normalizedEvent, ctx);
     check('env channel trims and lowercases the persona name', typeof normalizedEvent.systemPromptOptions.sections.righthand === 'string' && normalizedEvent.systemPromptOptions.sections.righthand.includes(workerBody));
     check('env channel normalized writer persona allows a src write', toolCall('write', { path: 'src/x.js', content: 'x' })?.block !== true);
 
     delete process.env.RIGHTHAND_PERSONA;
-    fs.writeFileSync(statePath, JSON.stringify({ active: 'security-auditor' }));
+    fs.writeFileSync(statePath, JSON.stringify({ active: 'middle' }));
     const fileEvent = { systemPromptOptions: { sections: {} } };
     handlers.get('before_agent_start')(fileEvent, ctx);
     check('unset env falls back to the state file persona', typeof fileEvent.systemPromptOptions.sections.righthand === 'string' && fileEvent.systemPromptOptions.sections.righthand.includes(securityBody));

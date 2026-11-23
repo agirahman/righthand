@@ -129,7 +129,7 @@ async function main() {
     fs.mkdirSync(userHome, { recursive: true });
     fs.cpSync(path.join(root, 'profiles'), profilesDir, { recursive: true });
     fs.writeFileSync(path.join(repoDir, '.opencode', 'profiles', 'legacy-specialist.md'), '---\nname: legacy-specialist\nrole: Legacy Specialist\nmode: readonly\n---\nLegacy profile.\n');
-    check('fixture includes code-reviewer profile at package root', fs.existsSync(path.join(profilesDir, 'code-reviewer.md')));
+    check('fixture includes middle profile at package root', fs.existsSync(path.join(profilesDir, 'middle.md')));
     process.env.HOME = userHome;
     process.env.USERPROFILE = userHome;
 
@@ -180,7 +180,7 @@ async function main() {
     fs.mkdirSync(serviceCwd, { recursive: true });
     fs.mkdirSync(path.dirname(stateFile), { recursive: true });
     fs.writeFileSync(stateFile, JSON.stringify({ version: 1, sessions: {} }));
-    fs.writeFileSync(commonActiveFile, JSON.stringify({ active: 'security-auditor' }));
+    fs.writeFileSync(commonActiveFile, JSON.stringify({ active: 'middle' }));
     const scopedServer = makeHarness(serverPath);
     const scopedContextFor = (harness) => ({
       location: { directory: repoDir },
@@ -219,9 +219,9 @@ async function main() {
     scopedServer.context = scopedContextFor(scopedServer);
     const scoped = await probeScoped(scopedServer);
     check('project root comes from context.location.directory, not the service cwd',
-      scoped.system[0]?.text.includes('## Active RightHand Persona: security-auditor') === true);
+      scoped.system[0]?.text.includes('## Active RightHand Persona: middle') === true);
     check('readonly enforcement takes its cwd from context.location.directory',
-      scoped.writeError.startsWith('security-auditor is readonly: writes are limited to .righthand/ and the scratchpad.'));
+      scoped.writeError.startsWith('middle is readonly: writes are limited to .righthand/ and the scratchpad.'));
     console.log(`PROJECT ROOT PROBE: service cwd=${path.basename(serviceCwd)}; project=${path.basename(repoDir)}; prompt=${Boolean(scoped.system[0])}; write refusal="${scoped.writeError.slice(0, 60)}..."`);
 
     const projectRootMutation = server.source.replace(
@@ -235,8 +235,8 @@ async function main() {
     projectRootMutationServer.context = scopedContextFor(projectRootMutationServer);
     const mutatedScoped = await probeScoped(projectRootMutationServer);
     await expectMutationFailure('project root from host context', async () => {
-      assert.equal(mutatedScoped.system[0]?.text.includes('## Active RightHand Persona: security-auditor'), true);
-      assert.equal(mutatedScoped.writeError.startsWith('security-auditor is readonly: writes are limited to .righthand/ and the scratchpad.'), true);
+      assert.equal(mutatedScoped.system[0]?.text.includes('## Active RightHand Persona: middle'), true);
+      assert.equal(mutatedScoped.writeError.startsWith('middle is readonly: writes are limited to .righthand/ and the scratchpad.'), true);
     });
     console.log(`BITE MUTATION project root: prompt=${Boolean(mutatedScoped.system[0])}; write refusal="${mutatedScoped.writeError.slice(0, 60)}..."`);
     fs.writeFileSync(stateFile, JSON.stringify({ version: 1, sessions: {} }));
@@ -284,13 +284,13 @@ async function main() {
         return true;
       }
     };
-    fs.writeFileSync(commonActiveFile, JSON.stringify({ active: 'code-reviewer' }));
+    fs.writeFileSync(commonActiveFile, JSON.stringify({ active: 'middle' }));
     await runTui('list');
     check('TUI discovers .opencode profiles and marks common fallback active',
-      tuiList.includes('legacy-specialist') && tuiList.includes('=> code-reviewer'));
+      tuiList.includes('legacy-specialist') && tuiList.includes('=> middle'));
     fs.writeFileSync(commonActiveFile, JSON.stringify({ active: null }));
     writeState(null);
-    await runTui('code-reviewer');
+    await runTui('middle');
     const blockedBeforeSessionOff = await isWriteBlocked();
     await runTui('off');
     const allowedAfterSessionOff = !(await isWriteBlocked());
@@ -302,7 +302,7 @@ async function main() {
     check('TUI off clears session persona after session activation', !sessionAfterSessionOff[sessionId]);
     console.log(`OFF PROBE session: toast=${tuiToasts.at(-1)}; global=${JSON.stringify(globalAfterSessionOff)}; session=${JSON.stringify(sessionAfterSessionOff)}; writeBlocked=${!allowedAfterSessionOff}`);
 
-    fs.writeFileSync(commonActiveFile, JSON.stringify({ active: 'code-reviewer' }));
+    fs.writeFileSync(commonActiveFile, JSON.stringify({ active: 'middle' }));
     fs.writeFileSync(stateFile, JSON.stringify({ version: 1, sessions: {} }));
     const freshServer = await loadServer(serverPath);
     const invokeFresh = async () => {
@@ -338,7 +338,7 @@ async function main() {
       check(`no active persona allows ${tool}`, !rejected);
     }
 
-    writeState('code-reviewer');
+    writeState('middle');
     const readonlyCases = [
       ['write filePath src/file.ts blocks', 'write', { filePath: 'src/file.ts', content: 'x' }, true],
       ['write filePath .righthand allows', 'write', { filePath: '.righthand/tickets/T71/reports/x.md', content: 'x' }, false],
@@ -369,7 +369,7 @@ async function main() {
       readonlyDecisions[name] = rejected;
       check(name, rejected === blocked);
     }
-    const expectedWriteReason = 'code-reviewer is readonly: writes are limited to .righthand/ and the scratchpad. Put reports under .righthand/tickets/<ID>/reports/.';
+    const expectedWriteReason = 'middle is readonly: writes are limited to .righthand/ and the scratchpad. Put reports under .righthand/tickets/<ID>/reports/.';
     check('write and edit preserve the exact guard policy reason',
       readonlyWriteReason === expectedWriteReason && readonlyEditReason === expectedWriteReason);
     check('V2 write does not report unusable input', !readonlyWriteReason.includes('write input was unusable'));
@@ -381,7 +381,7 @@ async function main() {
     check('per-call POSIX dialect blocks process substitution on Windows',
       readonlyDecisions['bash process substitution blocks under per-call POSIX dialect']);
 
-    writeState('worker');
+    writeState('thumb');
     for (const [tool, input] of unrestrictedCases) {
       let rejected = false;
       try { await invoke(tool, input); } catch { rejected = true; }
@@ -389,23 +389,23 @@ async function main() {
     }
 
     fs.writeFileSync(stateFile, JSON.stringify({ version: 1, sessions: {} }));
-    fs.writeFileSync(path.join(repoDir, '.righthand', 'state', 'active-persona.json'), JSON.stringify({ active: 'code-reviewer' }));
+    fs.writeFileSync(path.join(repoDir, '.righthand', 'state', 'active-persona.json'), JSON.stringify({ active: 'middle' }));
     const fallbackPrompt = [];
     await server.hooks.find((hook) => hook.group === 'session' && hook.name === 'context').handler({ sessionID: sessionId, system: fallbackPrompt });
     let fallbackError = '';
     try { await invoke('write', { path: 'src/file.ts', content: 'x' }); } catch (error) { fallbackError = error.message; }
-    check('common active persona fallback injects context prompt', fallbackPrompt[0]?.text.includes('## Active RightHand Persona: code-reviewer') === true);
+    check('common active persona fallback injects context prompt', fallbackPrompt[0]?.text.includes('## Active RightHand Persona: middle') === true);
     check('common active persona fallback blocks write', fallbackError === expectedWriteReason);
-    console.log(`COMMON FALLBACK: context prompt=${fallbackPrompt[0]?.text.includes('## Active RightHand Persona: code-reviewer')}; write refusal=${fallbackError}`);
+    console.log(`COMMON FALLBACK: context prompt=${fallbackPrompt[0]?.text.includes('## Active RightHand Persona: middle')}; write refusal=${fallbackError}`);
 
     const previousPersonaEnv = process.env.RIGHTHAND_PERSONA;
     try {
-      process.env.RIGHTHAND_PERSONA = 'worker';
+      process.env.RIGHTHAND_PERSONA = 'thumb';
       const envPrompt = [];
       await server.hooks.find((hook) => hook.group === 'session' && hook.name === 'context').handler({ sessionID: sessionId, system: envPrompt });
       let envError = '';
       try { await invoke('write', { path: 'src/file.ts', content: 'x' }); } catch (error) { envError = error.message; }
-      check('env channel overrides the file persona in the session context prompt', envPrompt[0]?.text.includes('## Active RightHand Persona: worker') === true);
+      check('env channel overrides the file persona in the session context prompt', envPrompt[0]?.text.includes('## Active RightHand Persona: thumb') === true);
       check('env channel writer persona allows a src write while the file says readonly', envError === '');
 
       delete process.env.RIGHTHAND_PERSONA;
@@ -413,7 +413,7 @@ async function main() {
       await server.hooks.find((hook) => hook.group === 'session' && hook.name === 'context').handler({ sessionID: sessionId, system: filePrompt });
       let fileError = '';
       try { await invoke('write', { path: 'src/file.ts', content: 'x' }); } catch (error) { fileError = error.message; }
-      check('unset env falls back to the file readonly persona', filePrompt[0]?.text.includes('## Active RightHand Persona: code-reviewer') === true && fileError === expectedWriteReason);
+      check('unset env falls back to the file readonly persona', filePrompt[0]?.text.includes('## Active RightHand Persona: middle') === true && fileError === expectedWriteReason);
     } finally {
       if (previousPersonaEnv === undefined) delete process.env.RIGHTHAND_PERSONA;
       else process.env.RIGHTHAND_PERSONA = previousPersonaEnv;
@@ -466,11 +466,11 @@ async function main() {
     const mutatedPrompt = [];
     await contextMutationServer.hooks.find((hook) => hook.group === 'session' && hook.name === 'context').handler({ sessionID: sessionId, system: mutatedPrompt });
     await expectMutationFailure('context fallback alignment', () => assert.equal(
-      mutatedPrompt[0]?.text.includes('## Active RightHand Persona: code-reviewer'), true,
+      mutatedPrompt[0]?.text.includes('## Active RightHand Persona: middle'), true,
     ));
     console.log(`BITE MUTATION context fallback: injected prompt=${Boolean(mutatedPrompt[0])}; expected persona prompt=true`);
 
-    writeState('code-reviewer');
+    writeState('middle');
     const throwingInput = Object.defineProperty({}, 'command', { get() { throw new Error('command getter crash'); } });
     const failureMutationPath = path.join(tempDir, 'mutation-failure-server.js');
     const failureMutation = server.source.replace(
@@ -529,7 +529,7 @@ async function main() {
 
     const prompt = { system: [] };
     await server.hooks.find((hook) => hook.group === 'session' && hook.name === 'context').handler({ sessionID: sessionId, system: prompt.system });
-    check('context hook injects shared persona heading', prompt.system[0]?.text.includes('## Active RightHand Persona: code-reviewer') === true);
+    check('context hook injects shared persona heading', prompt.system[0]?.text.includes('## Active RightHand Persona: middle') === true);
     await server.hooks.find((hook) => hook.group === 'session' && hook.name === 'context').handler({ sessionID: sessionId, system: [] });
 
     let dispatchCount = 0;

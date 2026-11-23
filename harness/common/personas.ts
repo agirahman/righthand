@@ -3,7 +3,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { getRepoRoot } from './repo-root.js';
 
-export const RETIRED_PERSONAS: string[] = ['editor'];
+export const RETIRED_PERSONAS: string[] = ['editor','architect','backend','code-reviewer','devops','frontend','orchestrator','product-manager','security-auditor','test-engineer','web-performance-auditor','worker'];
 
 export type ProfileMode = 'writer' | 'readonly';
 
