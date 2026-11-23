@@ -4,3 +4,4 @@ export * from './state.js';
 export * from './prompt.js';
 export * from './status.js';
 export * from './commands.js';
+export * from './aliases.js';
