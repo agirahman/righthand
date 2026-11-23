@@ -35,8 +35,8 @@ for (const name of profileNames) {
   check(`${name} policy name matches its filename`, PERSONA_POLICIES[name]?.name === name);
 }
 check('orchestrator has all seven declared permissions', JSON.stringify(permissions(PERSONA_POLICIES.orchestrator)) === JSON.stringify(Array(7).fill(true)));
-check('steer has all seven declared permissions', JSON.stringify(permissions(PERSONA_POLICIES.steer)) === JSON.stringify(Array(7).fill(true)));
-for (const name of profileNames.filter((name) => name !== 'orchestrator' && name !== 'steer')) {
+check('palm has all seven declared permissions', JSON.stringify(permissions(PERSONA_POLICIES.palm)) === JSON.stringify(Array(7).fill(true)));
+for (const name of profileNames.filter((name) => name !== 'orchestrator' && name !== 'palm')) {
   check(`${name} remains fully readonly`, JSON.stringify(permissions(PERSONA_POLICIES[name])) === JSON.stringify(Array(7).fill(false)));
 }
 check('missing persona resolves to a fully readonly policy', JSON.stringify(permissions(resolvePersonaPolicy(undefined))) === JSON.stringify(Array(7).fill(false)));

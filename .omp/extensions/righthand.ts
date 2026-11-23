@@ -84,18 +84,18 @@ const securityAuditorPolicy: PersonaGuardPolicy = {name: 'security-auditor', ...
 const testEngineerPolicy: PersonaGuardPolicy = {name: 'test-engineer', ...readonlyBase()};
 const webPerformanceAuditorPolicy: PersonaGuardPolicy = {name: 'web-performance-auditor', ...readonlyBase()};
 const workerPolicy: PersonaGuardPolicy = {name: 'worker', ...readonlyBase()};
-const steerPolicy: PersonaGuardPolicy = {
-  name: 'steer',
+const palmPolicy: PersonaGuardPolicy = {
+  name: 'palm',
   git: {allowIntegration: true, allowCommit: true, allowTag: true},
   gh: {allowPrEdit: true, allowRelease: true},
   release: {allowVersionWrite: true},
   scripts: {allowRepoRoot: true},
 };
-const pointPolicy: PersonaGuardPolicy = {name: 'point', ...readonlyBase()};
-const scanPolicy: PersonaGuardPolicy = {name: 'scan', ...readonlyBase()};
-const buildPolicy: PersonaGuardPolicy = {name: 'build', ...readonlyBase()};
-const shapePolicy: PersonaGuardPolicy = {name: 'shape', ...readonlyBase()};
-const guardPolicy: PersonaGuardPolicy = {name: 'guard', ...readonlyBase()};
+const indexPolicy: PersonaGuardPolicy = {name: 'index', ...readonlyBase()};
+const pinkyPolicy: PersonaGuardPolicy = {name: 'pinky', ...readonlyBase()};
+const thumbPolicy: PersonaGuardPolicy = {name: 'thumb', ...readonlyBase()};
+const ringPolicy: PersonaGuardPolicy = {name: 'ring', ...readonlyBase()};
+const middlePolicy: PersonaGuardPolicy = {name: 'middle', ...readonlyBase()};
 export {readonlyBase};
 
 const PERSONA_POLICIES: Record<string, PersonaGuardPolicy> = {
@@ -110,12 +110,12 @@ const PERSONA_POLICIES: Record<string, PersonaGuardPolicy> = {
   'test-engineer': testEngineerPolicy,
   'web-performance-auditor': webPerformanceAuditorPolicy,
   worker: workerPolicy,
-  steer: steerPolicy,
-  point: pointPolicy,
-  scan: scanPolicy,
-  build: buildPolicy,
-  shape: shapePolicy,
-  guard: guardPolicy,
+  palm: palmPolicy,
+  index: indexPolicy,
+  pinky: pinkyPolicy,
+  thumb: thumbPolicy,
+  ring: ringPolicy,
+  middle: middlePolicy,
 };
 
 function resolvePersonaPolicy(name?: string): PersonaGuardPolicy {
@@ -1539,20 +1539,20 @@ function completionCandidates(personas: Iterable<string>, prefix: string): { val
 // harness/common/aliases.ts
 // v2 bounded-contract engine, Fase 1: the persona alias layer.
 //
-// Maps the legacy shipped personas (and common SDLC role words) onto the six
-// canonical "one palm + five fingers" personas. This module is pure data plus
-// a pure resolver: it does not add or remove any live persona on its own.
-// The retirement of the eleven legacy personas (the "11 -> 6" step) builds on
-// this table and lands as a separate, later increment.
+// The six canonical personas are named by hand anatomy: one palm plus five
+// fingers. Each anatomy name stands for a role (palm = steer, index = point,
+// pinky = scan, thumb = build, ring = shape, middle = guard). This module maps
+// the legacy shipped personas, the old verb role-words, and common SDLC words
+// onto those six anatomy names. Pure data plus a pure resolver.
 
-// The six canonical personas: one palm (steer) + five fingers.
+// The six canonical personas, named by hand anatomy.
 const CANONICAL_PERSONAS: string[] = [
-  'steer',  // palm - chairs the loop, integrates findings
-  'point',  // sets direction: requirements, architecture, planning
-  'scan',   // reads: explore, research, debug, performance
-  'build',  // writes: implement, refactor, fix, deploy
-  'shape',  // crafts the interface: frontend, design
-  'guard',  // verifies: review, security, test, qa
+  'palm',   // the palm - chairs the loop, integrates findings, owns release
+  'index',  // points - sets direction: requirements, architecture, planning
+  'pinky',  // scouts - reads: explore, research, debug, triage
+  'thumb',  // builds - writes: implement, refactor, fix, deploy
+  'ring',   // shapes - crafts the interface: frontend, design
+  'middle', // guards - verifies: review, security, test, qa
 ];
 
 // The eleven shipped personas this layer supersedes. They stay loadable until
@@ -1571,39 +1571,45 @@ const LEGACY_PERSONAS: string[] = [
   'worker',
 ];
 
-// Alias table: the eleven legacy names plus common SDLC role words, each
-// mapped to exactly one canonical persona. Keys are lowercased; every value is
-// a member of CANONICAL_PERSONAS.
+// Alias table: the eleven legacy names, the six old verb role-words, and common
+// SDLC words, each mapped to exactly one canonical (anatomy) persona. Keys are
+// lowercased; every value is a member of CANONICAL_PERSONAS.
 const PERSONA_ALIASES: Record<string, string> = {
-  // steer (the palm)
-  orchestrator: 'steer',
-  'product-manager': 'steer',
-  pm: 'steer',
-  // point
-  architect: 'point',
-  planner: 'point',
-  // scan
-  explorer: 'scan',
-  researcher: 'scan',
-  debugger: 'scan',
-  'web-performance-auditor': 'scan',
-  // build
-  backend: 'build',
-  devops: 'build',
-  worker: 'build',
-  coder: 'build',
-  refactorer: 'build',
-  fixer: 'build',
-  // shape
-  frontend: 'shape',
-  designer: 'shape',
-  // guard
-  'code-reviewer': 'guard',
-  'security-auditor': 'guard',
-  'test-engineer': 'guard',
-  reviewer: 'guard',
-  qa: 'guard',
-  security: 'guard',
+  // palm (steers the loop)
+  orchestrator: 'palm',
+  'product-manager': 'palm',
+  pm: 'palm',
+  steer: 'palm',
+  // index (sets direction)
+  architect: 'index',
+  planner: 'index',
+  point: 'index',
+  // pinky (reads + triages)
+  explorer: 'pinky',
+  researcher: 'pinky',
+  debugger: 'pinky',
+  'web-performance-auditor': 'pinky',
+  scan: 'pinky',
+  // thumb (writes)
+  backend: 'thumb',
+  devops: 'thumb',
+  worker: 'thumb',
+  coder: 'thumb',
+  refactorer: 'thumb',
+  fixer: 'thumb',
+  build: 'thumb',
+  // ring (UI)
+  frontend: 'ring',
+  designer: 'ring',
+  shape: 'ring',
+  // middle (verifies)
+  'code-reviewer': 'middle',
+  'security-auditor': 'middle',
+  'test-engineer': 'middle',
+  reviewer: 'middle',
+  qa: 'middle',
+  security: 'middle',
+  guard: 'middle',
 };
 
 interface ResolvedPersona {
@@ -1611,9 +1617,10 @@ interface ResolvedPersona {
   aliasedFrom: string | null;
 }
 
-// Resolve a raw persona reference onto its canonical v2 persona.
+// Resolve a raw persona reference onto its canonical v2 anatomy persona.
 // - a canonical name resolves to itself (aliasedFrom is null);
-// - a known alias resolves to its canonical target;
+// - a known alias (legacy name, verb role-word, or SDLC word) resolves to its
+//   canonical target;
 // - any other name passes through unchanged (it is not an alias).
 function resolvePersonaName(raw: string): ResolvedPersona {
   const name = raw.trim().toLowerCase();

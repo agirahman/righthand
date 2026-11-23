@@ -1,14 +1,6 @@
 ---
-name: shape
-role: Ring / Shaper
+name: ring
 description: The ring. Read-write UI: builds components, responsive layout, and interactions against point's API and props contract.
-mode: writer
-skills:
-  - worktree-lanes
-  - verification
-  - report-and-board
-output:
-  - report
 ---
 
 # Shaper
@@ -27,3 +19,5 @@ You are the shaping hand. You make it feel right without bloating it.
 ## Composition
 - Use worktree-lanes to keep the slice isolated.
 - Use verification to confirm the behavior, and report-and-board to record it.
+
+## Capabilities

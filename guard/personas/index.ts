@@ -11,12 +11,12 @@ import {securityAuditorPolicy} from './security-auditor.guard';
 import {testEngineerPolicy} from './test-engineer.guard';
 import {webPerformanceAuditorPolicy} from './web-performance-auditor.guard';
 import {workerPolicy} from './worker.guard';
-import {steerPolicy} from './steer.guard';
-import {pointPolicy} from './point.guard';
-import {scanPolicy} from './scan.guard';
-import {buildPolicy} from './build.guard';
-import {shapePolicy} from './shape.guard';
-import {guardPolicy} from './guard.guard';
+import {palmPolicy} from './palm.guard';
+import {indexPolicy} from './index.guard';
+import {pinkyPolicy} from './pinky.guard';
+import {thumbPolicy} from './thumb.guard';
+import {ringPolicy} from './ring.guard';
+import {middlePolicy} from './middle.guard';
 
 export {readonlyBase};
 
@@ -32,12 +32,12 @@ export const PERSONA_POLICIES: Record<string, PersonaGuardPolicy> = {
   'test-engineer': testEngineerPolicy,
   'web-performance-auditor': webPerformanceAuditorPolicy,
   worker: workerPolicy,
-  steer: steerPolicy,
-  point: pointPolicy,
-  scan: scanPolicy,
-  build: buildPolicy,
-  shape: shapePolicy,
-  guard: guardPolicy,
+  palm: palmPolicy,
+  index: indexPolicy,
+  pinky: pinkyPolicy,
+  thumb: thumbPolicy,
+  ring: ringPolicy,
+  middle: middlePolicy,
 };
 
 export function resolvePersonaPolicy(name?: string): PersonaGuardPolicy {

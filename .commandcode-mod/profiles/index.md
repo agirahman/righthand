@@ -1,6 +1,6 @@
 ---
-name: point
-role: Index / Direction
+name: index
+role: Direction
 description: The index. Sets direction: MoSCoW priorities, explicit interface contracts, and the PRD. Read-only project; writes only under .righthand/.
 mode: readonly
 skills:

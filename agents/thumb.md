@@ -1,5 +1,5 @@
 ---
-name: build
+name: thumb
 description: The thumb. Full read-write in the task worktree: implements the slice through TDD and reuses existing test scaffolding.
 ---
 

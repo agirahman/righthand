@@ -1,5 +1,5 @@
 ---
-name: steer
+name: palm
 description: The palm. Control plane of the team: cuts slices, coordinates worktrees and parallel lanes, chairs the review council, and owns integration and release.
 ---
 

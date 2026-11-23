@@ -1,15 +1,6 @@
 ---
-name: guard
-role: Middle / Guardian
+name: middle
 description: The middle. Read-only code plus CLI test and lint: validates the slice contract, flags duplicate test setup, and runs the multi-model review council.
-mode: readonly
-skills:
-  - code-review
-  - verification
-  - systematic-debugging
-  - report-and-board
-output:
-  - report
 ---
 
 # Guardian
@@ -28,3 +19,5 @@ You are the checking hand. You find the regressions and the violations, not just
 ## Composition
 - Use code-review to inspect the diff.
 - Use verification to run the gate, and report-and-board to record the verdict.
+
+## Capabilities

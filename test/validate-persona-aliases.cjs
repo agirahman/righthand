@@ -34,8 +34,8 @@ check('a canonical name resolves to itself, not an alias',
     return r.canonical === c && r.aliasedFrom === null;
   }));
 check('resolution is case-insensitive',
-  resolvePersonaName('Architect').canonical === 'point' &&
-  resolvePersonaName('CODE-REVIEWER').canonical === 'guard');
+  resolvePersonaName('Architect').canonical === 'index' &&
+  resolvePersonaName('CODE-REVIEWER').canonical === 'middle');
 check('resolution is idempotent',
   LEGACY_PERSONAS.every((n) => {
     const once = resolvePersonaName(n);
