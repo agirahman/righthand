@@ -5,7 +5,7 @@
 # RightHand
 
 **Specialist agent personas and multi-agent orchestration engine for Herdr workspaces across coding harnesses.**  
-*Adapted from Addy Osmani's [agent-skills](https://github.com/addyosmani/agent-skills) architectural patterns.*
+*Persona patterns adapted from Addy Osmani's [agent-skills](https://github.com/addyosmani/agent-skills). SDLC skills adapted from Matt Pocock's [skills](https://github.com/mattpocock/skills).*
 
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.3+-blue.svg)](https://www.typescriptlang.org/)
 [![npm](https://img.shields.io/npm/v/@agirahman/righthand.svg)](https://www.npmjs.com/package/@agirahman/righthand)
@@ -36,21 +36,31 @@ Instead of treating an AI agent as a generic monolith, RightHand injects targete
 
 ## Persona Catalog
 
-The catalog combines developer team roles with Addy Osmani's specialized audit personas (11 personas: 7 `readonly`, 4 `writer`):
+Six personas, named by hand anatomy, covering the whole delivery loop (4 `readonly`, 2 `writer`):
 
 | Profile | Mode | Role Title | Core Focus | Output Framework / Deliverable |
 |---|---|---|---|---|
-| `orchestrator` | `readonly` | Team Orchestrator | Decomposing tasks into tickets (`T1`, `T2`), worktree lane assignment, Herdr tab dispatch | Ticket contract matrix, worktree plan, merge checklist |
-| `product-manager` | `readonly` | Product Manager | Clarifying ambiguities (min. 2 questions), scoping features, drafting acceptance criteria | Product Spec (Problem statement, User stories, AC, Out-of-scope) |
-| `architect` | `readonly` | Software Architect | Module boundaries, coupling reduction, subsystem contracts, tradeoff analysis | Architecture Decision Record (ADR) + System boundary diagram |
-| `worker` | `writer` | General Worker | General-purpose tasks: CLI tools, build automation, data migrations, glue code | Status report, minimal file diff, verification proof |
-| `backend` | `writer` | Backend Engineer | API contracts, database queries/migrations, server-side trust boundaries | API diff, automated test assertions, migration idempotency proof |
-| `frontend` | `writer` | Frontend Engineer | Semantic HTML, CSS-first layout, state colocation, responsive UX, accessibility (a11y) | Component diff, keyboard/screen-reader audit, visual check proof |
-| `devops` | `writer` | DevOps Engineer | Deterministic CI/CD pipelines, Docker containerization, secrets hygiene, rollbacks | Pipeline/container diff, reproducibility checklist, build verification |
-| `code-reviewer` | `readonly` | Senior Code Reviewer | Multi-dimensional evaluation across 5 engineering axes | 5-axis review report (P1–P4 severity) anchored to `file:line` |
-| `security-auditor` | `readonly` | Security Auditor | Vulnerability discovery, OWASP Top 10 compliance, sanitization, threat modeling | Threat matrix (Critical–Low) + actionable remediation snippets |
-| `test-engineer` | `readonly` | Test Engineer | Testing pyramid strategy, coverage gap analysis, edge-case matrices, Prove-It bug verification | Test matrix (Unit/Integration/E2E), reproduction and regression cases |
-| `web-performance-auditor` | `readonly` | Web Performance Auditor | Core Web Vitals (LCP, INP, CLS), asset budgets, main-thread bottleneck elimination | Performance scorecard (Quick/Deep mode) + priority optimizations |
+| `palm` | `readonly` | Team Orchestrator | Steering the loop: clarifying and scoping, decomposing work into tickets (`T1`, `T2`), worktree lane assignment, Herdr dispatch, integration and release gate | Ticket contract matrix, product spec, worktree plan, merge checklist |
+| `index` | `readonly` | Software Architect | Pointing the direction: requirements, module boundaries, subsystem contracts, tradeoff analysis | Architecture Decision Record (ADR), A->B->C contract path, PRD and issues |
+| `pinky` | `readonly` | Scout and Performance Auditor | Reading the code and the runtime: blast radius, root-cause tracing, triage, Core Web Vitals (LCP, INP, CLS), asset budgets | Blast-radius map, triage note, performance scorecard (Quick/Deep mode) |
+| `thumb` | `writer` | Builder | Building it: API contracts, database queries and migrations, CI/CD determinism, containers, secrets hygiene, general implementation | Status report, minimal file diff, pipeline impact and rollback plan, verification proof |
+| `ring` | `writer` | Frontend Engineer | Shaping the interface: semantic HTML, CSS-first layout, state colocation, responsive UX, accessibility (a11y) | Component diff, keyboard/screen-reader audit, visual check proof |
+| `middle` | `readonly` | Senior Code Reviewer | Guarding the gate: 5-axis code review, security audit (OWASP Top 10), testing strategy, edge-case matrices | Review report (P1-P4 severity) anchored to `file:line`, threat matrix, test matrix |
+
+### Legacy names
+
+The six personas fold in the eleven earlier ones. Old names still resolve to the
+persona that absorbed them, so existing habits, scripts, and `.righthand/persona.json`
+files keep working:
+
+| Legacy name | Resolves to |
+|---|---|
+| `orchestrator`, `product-manager` | `palm` |
+| `architect` | `index` |
+| `web-performance-auditor` | `pinky` |
+| `worker`, `backend`, `devops` | `thumb` |
+| `frontend` | `ring` |
+| `code-reviewer`, `security-auditor`, `test-engineer` | `middle` |
 
 ---
 
@@ -79,9 +89,9 @@ RightHand includes a built-in CLI for managing personas and harness integrations
 
 ```bash
 # --- Persona Commands ---
-righthand list                   # List all 11 personas + active state
-righthand switch backend         # Activate a persona
-righthand switch security-auditor
+righthand list                   # List all six personas + active state
+righthand switch thumb           # Activate a persona
+righthand switch middle          # (legacy names such as backend or code-reviewer still resolve)
 righthand off                    # Deactivate persona (restore default)
 righthand inject                 # Print active persona prompt to stdout
 righthand init                   # Provision .righthand/ in the current project
@@ -89,6 +99,8 @@ righthand status                 # One-liner: active persona + setup harnesses
 righthand config [persona]       # Resolve dispatch harness and model for a persona
 righthand launch <persona>       # Launch an agent for a persona (--print to dry-run)
 righthand launch <harness> <persona>  # Pin the harness for one launch (commandcode, pi)
+righthand blast-radius [scope]   # Map blast radius + triage (activates pinky)
+righthand council [flags]        # Multi-model council review of a diff (--print to dry-run)
 # --- Setup & Maintenance ---
 righthand setup <harness|all>    # Install RightHand into a harness
 righthand update [harness]       # Re-sync files for omp/opencode after npm update
@@ -112,15 +124,15 @@ RightHand was originally built as a first-class Command Code mod.
   ```bash
   righthand setup cmdc
   # Runs internally: cmdc mods add -g @agirahman/righthand
-  # and syncs the nine capability skills to ~/.commandcode/skills
+  # and syncs the fifteen skills to ~/.commandcode/skills
   ```
 - **Slash Commands in session**:
   - `/righthand` — open fuzzy picker or show active persona.
   - `/righthand <persona>` — switch persona on-the-fly.
   - `/righthand off` — restore default prompt.
-- **Update after npm upgrade**: `righthand update cmdc` (re-syncs the nine capability skills to `~/.commandcode/skills` and removes profiles of retired personas)
+- **Update after npm upgrade**: `righthand update cmdc` (re-syncs the fifteen skills to `~/.commandcode/skills` and removes profiles of retired personas)
 - **Details**: See [`.commandcode-mod/README.md`](./.commandcode-mod/README.md).
-- Readonly personas are guarded by the mod: project writes are blocked, reports go under `.righthand/`. `orchestrator` alone may also integrate and release: `git fetch`, `git rebase`, `git push` a ticket branch or a version tag, `git add`, `git commit -m`, `git tag v<version>`, `gh pr create/edit` and `gh release create/edit/delete`, plus a version-only write to `package.json` and `package-lock.json`. Still blocked for it: `git commit --amend/--no-verify` or no message, `git tag -d/-f/-e`, force and delete pushes, pushes to `main`, `gh pr merge`, `npm version` and `npm publish`.
+- Readonly personas are guarded by the mod: project writes are blocked, reports go under `.righthand/`. `palm` alone may also integrate and release: `git fetch`, `git rebase`, `git push` a ticket branch or a version tag, `git add`, `git commit -m`, `git tag v<version>`, `gh pr create/edit` and `gh release create/edit/delete`, plus a version-only write to `package.json` and `package-lock.json`. Still blocked for it: `git commit --amend/--no-verify` or no message, `git tag -d/-f/-e`, force and delete pushes, pushes to `main`, `gh pr merge`, `npm version` and `npm publish`.
 
 ### 2. Pi Coding Agent (`.pi-plugin/`)
 Pi supports native extensions that hook agent lifecycle events.
@@ -131,7 +143,7 @@ Pi supports native extensions that hook agent lifecycle events.
   # Runs internally: pi install npm:@agirahman/righthand
   ```
 - **Slash Command**:
-  - `/righthand <persona>` — interactive slash command with full tab-autocomplete for all 11 personas.
+  - `/righthand <persona>` — interactive slash command with full tab-autocomplete for all six personas.
   - `/righthand off` — clear persona.
 - **Status Indicator**: Displays current persona badge in the Pi UI status bar.
 - **Details**: See [`.pi-plugin/README.md`](./.pi-plugin/README.md).
@@ -166,8 +178,9 @@ OpenCode uses the native `@opencode/plugin` and `@opencode/plugin/tui` APIs.
 ### 5. Cross-Harness Portable Skills (`skills/`)
 For harnesses that support portable Agent Skills or custom plugins (Claude Code, Cursor, Codex, Kimi Code):
 
-- Capability skills are available under `skills/<capability>/SKILL.md`.
-- Personas are defined in `profiles/<name>.md` and reference capabilities from their `skills:` field.
+- Skills are available under `skills/<name>/SKILL.md` in two layers: the capability skills (`code-review`, `dispatch`, `verification`, and the rest) and the SDLC skills (`grill-me`, `write-a-prd`, `prd-to-issues`, `tdd`, `triage-issue`, `improve-codebase-architecture`).
+- Personas are defined in `profiles/<name>.md` and reference capabilities from their `skills:` field. A profile plus its skills must stay within the 400-line prompt budget enforced by `npm test`.
+- `righthand blast-radius <scope>` activates `pinky` and prints the reconnaissance directive for mapping a change's blast radius before any code is written.
 - Compatible plugin manifests are included: `.claude-plugin/`, `.cursor-plugin/`, `.codex-plugin/`, `.kimi-plugin/`, and `.agents/`.
 
 ---
@@ -178,14 +191,14 @@ For harnesses that support portable Agent Skills or custom plugins (Claude Code,
 
 ### Worktree Isolation for Writer Personas
 
-To prevent merge conflicts when multiple agents work simultaneously on the same repository, writer roles (`backend`, `frontend`, `devops`, `worker`) must operate in isolated, ticket-prefixed git worktrees:
+To prevent merge conflicts when multiple agents work simultaneously on the same repository, writer roles (`thumb`, `ring`) must operate in isolated, ticket-prefixed git worktrees:
 
 ```bash
 # Lanes live outside the repository, under Herdr's worktree root.
 herdr worktree create --cwd . --branch T1-auth-api --base main --label backend-T1
 ```
 
-Readonly roles (`orchestrator`, `architect`, `code-reviewer`, `security-auditor`, `test-engineer`, `web-performance-auditor`, `product-manager`) inspect the main working tree directly without spawning worktree branches.
+Readonly roles (`palm`, `index`, `pinky`, `middle`) inspect the main working tree directly without spawning worktree branches.
 
 ### Automated Tab Spawning
 
@@ -203,7 +216,7 @@ Helper scripts automate creating Herdr workspace tabs and provisioning ticket wo
 
 ### Per-persona dispatch model and harness
 
-Dispatch harness and model are resolved per persona from `<main checkout>/.righthand/persona.json` (optional, local only). Inspect with `righthand config [persona]`. Dispatchable harnesses are `commandcode` and `pi`; `righthand launch <harness> <persona>` pins one for a single launch without touching the file, and `omp`/`opencode` are valid ids that are not dispatch targets. A persona entry may carry an optional `models` map keyed by dispatch harness (`{"worker":{"harness":"commandcode","model":"<cmdc id>","models":{"pi":"<pi id>"}}}`); a launch pinned to a harness other than the configured one uses that harness's entry, or omits the model flag when none is present, and never forwards the configured harness's model cross-harness. The resolved model is passed through untouched, so it must be an id the target harness accepts; discover available ids with `cmdc --list-models`.
+Dispatch harness and model are resolved per persona from `<main checkout>/.righthand/persona.json` (optional, local only). Inspect with `righthand config [persona]`. Dispatchable harnesses are `commandcode` and `pi`; `righthand launch <harness> <persona>` pins one for a single launch without touching the file, and `omp`/`opencode` are valid ids that are not dispatch targets. A persona entry may carry an optional `models` map keyed by dispatch harness (`{"thumb":{"harness":"commandcode","model":"<cmdc id>","models":{"pi":"<pi id>"}}}`); a launch pinned to a harness other than the configured one uses that harness's entry, or omits the model flag when none is present, and never forwards the configured harness's model cross-harness. The resolved model is passed through untouched, so it must be an id the target harness accepts; discover available ids with `cmdc --list-models`.
 
 ---
 

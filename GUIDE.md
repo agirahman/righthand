@@ -52,7 +52,7 @@ On Windows use `Copy-Item -Recurse`.
 ## Usage modes
 
 - Native `/righthand` slash commands and interactive persona switching are supported in **Command Code**, **Pi**, **Oh My Pi**, **OpenCode**, and via the **RightHand CLI** (`righthand switch <persona>`).
-- On other harnesses (Claude Code, Cursor, Codex, Kimi), activate by requesting the persona in conversation: *"Act as righthand-backend"* or *"Use the righthand-orchestrator skill"*.
+- On other harnesses (Claude Code, Cursor, Codex, Kimi), activate by requesting the persona in conversation: *"Act as righthand-thumb"* or *"Use the righthand-palm skill"*. Legacy names such as backend or orchestrator still resolve to the persona that absorbed them.
 - Writer personas should run in isolated lanes created by Herdr outside this repository, using `scripts/herdr-spawn.*`.
 
 ## Per-persona dispatch model and harness
@@ -62,7 +62,7 @@ Dispatch harness and model are resolved per persona from `<main checkout>/.right
 ```json
 {
   "personas": {
-    "worker": {
+    "thumb": {
       "harness": "commandcode",
       "model": "9router-bili/cmc/deepseek/deepseek-v4.1-flash",
       "models": { "pi": "9router/agness/agnes-2.5-flash" }
@@ -77,27 +77,27 @@ Dispatch harness and model are resolved per persona from `<main checkout>/.right
 
 Preview the command without running it:
 
-    righthand launch worker --print
+    righthand launch thumb --print
 
 Then run it for real in a lane:
 
-    righthand launch worker --cwd <lane>
+    righthand launch thumb --cwd <lane>
 
 Pin a harness for a single launch without editing `persona.json`:
 
-    righthand launch pi worker --cwd <lane>
+    righthand launch pi thumb --cwd <lane>
 
-A Pi launch spawns `pi --approve` plus `--model <model>` only when the resolved model is non-empty, and injects the persona through `RIGHTHAND_PERSONA` in the child process environment. Pi reads that variable before the state file, so a dispatched process keeps the persona the dispatcher chose. When the launch is pinned to a harness other than the persona's configured one, the model comes from `models[<harness>]` if present, otherwise the flag is omitted and Pi uses its own default; a commandcode model id is never forwarded to Pi. `righthand launch pi worker --print` prints the command line followed by an `env: RIGHTHAND_PERSONA=worker` line.
+A Pi launch spawns `pi --approve` plus `--model <model>` only when the resolved model is non-empty, and injects the persona through `RIGHTHAND_PERSONA` in the child process environment. Pi reads that variable before the state file, so a dispatched process keeps the persona the dispatcher chose. When the launch is pinned to a harness other than the persona's configured one, the model comes from `models[<harness>]` if present, otherwise the flag is omitted and Pi uses its own default; a commandcode model id is never forwarded to Pi. `righthand launch pi thumb --print` prints the command line followed by an `env: RIGHTHAND_PERSONA=thumb` line.
 
 ## Readonly enforcement
 
-Readonly personas (code-reviewer, security-auditor, etc.) cannot modify the project. The Command Code mod blocks file writes and edits outside `.righthand/` and the session scratchpad, and blocks shell commands that mutate files outside those paths. Read-only commands are allowed: inspection (`git status`, `git log`, `git diff`, `git tag --list`, `git worktree list`, `git branch --list`, `git remote -v`, `git stash list`), evaluation that only prints (`node -p`, `node --print`), and test runners such as `npm test`. Shell commands are parsed into segments, so a write aimed at `.righthand/` or the scratchpad is allowed while the same verb aimed at the project is refused. Reports and reviews go under `.righthand/tickets/<ID>/reports/` or `.righthand/tickets/<ID>/reviews/`. The guard stops accidents and ordinary violations; it is not a sandbox, and a deliberately evasive shell command can still write.
+Readonly personas (palm, index, pinky, middle) cannot modify the project. The Command Code mod blocks file writes and edits outside `.righthand/` and the session scratchpad, and blocks shell commands that mutate files outside those paths. Read-only commands are allowed: inspection (`git status`, `git log`, `git diff`, `git tag --list`, `git worktree list`, `git branch --list`, `git remote -v`, `git stash list`), evaluation that only prints (`node -p`, `node --print`), and test runners such as `npm test`. Shell commands are parsed into segments, so a write aimed at `.righthand/` or the scratchpad is allowed while the same verb aimed at the project is refused. Reports and reviews go under `.righthand/tickets/<ID>/reports/` or `.righthand/tickets/<ID>/reviews/`. The guard stops accidents and ordinary violations; it is not a sandbox, and a deliberately evasive shell command can still write.
 
 ## Verification
 
 After install, list available skills (harness UI or CLI). You should see the capability modules under `skills/`.
 
-For Command Code, `righthand setup cmdc` and `righthand update cmdc` also sync the nine capability skills into `~/.commandcode/skills`, leaving any unrelated skill directory untouched.
+For Command Code, `righthand setup cmdc` and `righthand update cmdc` also sync the fifteen skills into `~/.commandcode/skills`, leaving any unrelated skill directory untouched.
 
 ## Integration flow
 
@@ -105,7 +105,7 @@ Branch from a fresh `origin/main`, commit in small units, rebase before pushing,
 
 ## Troubleshooting
 
-`righthand doctor` checks harness availability, package health, the project persona config at `.righthand/persona.json`, the installed Command Code mod and its version, and the nine capability skills in `~/.commandcode/skills`. With `--strict`, the command exits 1 only for real health failures: an unparseable persona config, an unsupported harness in the config, missing or stale capability skills, or mod version drift. Informational lines such as a harness not set up here or a missing persona config do not fail strict. Config validation is intentionally not part of `npm test`, because `npm test` must never read or require user-owned data.
+`righthand doctor` checks harness availability, package health, the project persona config at `.righthand/persona.json`, the installed Command Code mod and its version, and the fifteen skills in `~/.commandcode/skills`. With `--strict`, the command exits 1 only for real health failures: an unparseable persona config, an unsupported harness in the config, missing or stale capability skills, or mod version drift. Informational lines such as a harness not set up here or a missing persona config do not fail strict. Config validation is intentionally not part of `npm test`, because `npm test` must never read or require user-owned data.
 
 ## Known limitations
 

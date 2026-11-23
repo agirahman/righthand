@@ -12,7 +12,7 @@ RightHand provides specialist AI agent personas and multi-agent orchestration ac
 - **`.omp/`**: Oh My Pi native extension (`.omp/extensions/righthand.ts`).
 - **`.opencode-plugin/`**: OpenCode server and TUI plugins.
 - **`profiles/`**: Source persona profile definitions in Markdown with YAML frontmatter.
-- **`skills/`**: Portable cross-harness skill definitions (`skills/righthand-<persona>/SKILL.md`).
+- **`skills/`**: Portable cross-harness skill definitions (`skills/<name>/SKILL.md`), in two layers: capability skills and SDLC skills.
 - **`bin/`**: Unified CLI executable (`righthand switch`, `inject`, `list`, `off`).
 - **`test/`**: Validation test suites for profiles, skills, and cross-harness manifests.
 
@@ -39,7 +39,7 @@ All external contributions follow the standard GitHub Fork and Pull Request mode
 Before submitting any Pull Request, you MUST run and verify all three local validation checks:
 
 ```bash
-# 1. Validate all 11 persona profiles, 11 skills, and 10 cross-harness manifests
+# 1. Validate every persona profile, every skill, and every cross-harness manifest
 npm test
 
 # 2. Typecheck TypeScript across all harness extensions (0 errors required)
@@ -63,7 +63,7 @@ When modifying or adding a persona in `profiles/`:
 1. Ensure `profiles/<name>.md` has valid frontmatter.
 2. Update capability references in `skills/` only when a new capability is added; profiles reference capabilities by name.
 3. Update autocomplete lists in `.commandcode-mod/mods/righthand.ts`, `.pi-plugin/extensions/righthand.ts`, and `bin/state.js` if adding a new persona.
-4. Run `npm test` to verify all 11 profiles, 11 skills, and 10 manifests pass validation.
+4. Run `npm test` to verify every profile, skill, and manifest passes validation.
 
 ---
 
@@ -96,4 +96,5 @@ Local verification before committing (`npm test`, `npm run typecheck`, `npm run 
 ## Lessons
 
 <!-- Newest on top. Delete what no longer applies. -->
+- When reporting merge/release-readiness, `git fetch` and diff against the live `origin/main` before trusting a local `origin/*` ref; a squash merge leaves the branch's commits as non-ancestors of main even though their content is already in main, so a stale ref makes merged work look unmerged. Confirm with `git diff --stat <branch> origin/main` (empty = content is in main).
 - When integrating a branch, rebase onto `origin/main` and push with `--force-with-lease`, never a merge commit.
