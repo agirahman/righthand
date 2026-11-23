@@ -147,12 +147,75 @@ function councilReview(opts) {
   const findings = { regressions: [], contractViolations: [] };
   for (const rv of reviewers) {
     const out = rv && typeof rv.review === 'function' ? rv.review(diff) : {};
-    collect(findings, out && out.regressions);
-    collect(findings, out && out.contractViolations);
+    rejectScore(out);
+    collect(findings, out && out.regressions, 'regressions');
+    collect(findings, out && out.contractViolations, 'contractViolations');
   }
   return { harness: m ? m.key : null, findings: findings };
 }
-function collect(findings, list) {
+// One-screen chairman synthesis (palm). Renders structured findings into a
+// compact report that names every regression and contract violation by
+// file:line. There is deliberately NO numeric 1-10 score field anywhere.
+function synthesizeCouncilReport(findings, opts) {
+  opts = opts || {};
+  const reg = findings && Array.isArray(findings.regressions) ? findings.regressions : [];
+  const cv = findings && Array.isArray(findings.contractViolations) ? findings.contractViolations : [];
+  const models = opts.models || [];
+  const lines = ['# Council report', ''];
+  lines.push('Chairman: ' + (opts.chairman || 'palm'));
+  lines.push('Models: ' + (models.length ? models.join(', ') : 'n/a'));
+  lines.push('');
+  lines.push('## Regressions (' + reg.length + ')');
+  if (reg.length === 0) lines.push('- none');
+  for (const f of reg) {
+    const loc = (f.file || '?') + (f.line ? ':' + f.line : '');
+    lines.push('- ' + loc);
+    if (f.note) lines.push('  ' + f.note);
+  }
+  lines.push('');
+  lines.push('## Contract violations (' + cv.length + ')');
+  if (cv.length === 0) lines.push('- none');
+  for (const f of cv) {
+    const loc = (f.file || '?') + (f.line ? ':' + f.line : '');
+    lines.push('- ' + loc);
+    if (f.note) lines.push('  ' + f.note);
+  }
+  const total = reg.length + cv.length;
+  lines.push('');
+  lines.push('Verdict: ' + (total === 0
+    ? 'no regressions or contract violations found'
+    : total + ' finding(s) need attention before merge'));
+  return lines.join('\n') + '\n';
+}
+
+// Parallel multi-model council path: fan out to N reviewers concurrently.
+// Each reviewer.review(diff) may be sync or async; a reviewer may be a real
+// model launch or an injectable stub for tests. Findings are merged and the
+// numeric-score ban is enforced by the shared collector.
+async function councilReviewAsync(opts) {
+  opts = opts || {};
+  const m = resolveIn(opts.manifests, opts.harness);
+  const reviewers = Array.isArray(opts.reviewers) ? opts.reviewers : [];
+  const diff = typeof opts.diff === 'string' ? opts.diff : '';
+  const outs = await Promise.all(reviewers.map(function (rv) {
+    if (!rv || typeof rv.review !== 'function') return null;
+    return Promise.resolve(rv.review(diff));
+  }));
+  const findings = { regressions: [], contractViolations: [] };
+  for (const out of outs) {
+    if (out == null) continue;
+    rejectScore(out);
+    collect(findings, out.regressions, 'regressions');
+    collect(findings, out.contractViolations, 'contractViolations');
+  }
+  return {
+    harness: m ? m.key : null,
+    findings: findings,
+    report: synthesizeCouncilReport(findings, { models: opts.models, chairman: opts.chairman }),
+  };
+}
+
+function collect(findings, list, target) {
   if (!Array.isArray(list)) return;
   for (const f of list) {
     if (!f || typeof f !== 'object') continue;
@@ -164,8 +227,17 @@ function collect(findings, list) {
     const entry = { file: String(f.file || ''), note: String(f.note || '') };
     if (f.line) entry.line = f.line;
     if (f.severity) entry.severity = f.severity;
-    if (f.kind === 'regression') findings.regressions.push(entry);
-    else findings.contractViolations.push(entry);
+    findings[target].push(entry);
+  }
+}
+
+// A reviewer's output may also carry a top-level numeric score; reject it here
+// so the ban holds at the reviewer level, not just per finding.
+function rejectScore(out) {
+  if (out && typeof out.score === 'number') {
+    const err = new Error('council findings must not carry a numeric score field');
+    err.code = 'NUMERIC_SCORE';
+    throw err;
   }
 }
 
@@ -176,4 +248,6 @@ module.exports = {
   launchSpec: launchSpec,
   runSlice: runSlice,
   councilReview: councilReview,
+  councilReviewAsync: councilReviewAsync,
+  synthesizeCouncilReport: synthesizeCouncilReport,
 };

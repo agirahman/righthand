@@ -198,6 +198,7 @@ Setup Commands:
 Dispatch Commands:
   config [persona]         Resolve dispatch harness and model for a persona
   launch [harness] <persona> Launch an agent for a persona [--cwd <dir>] [--print]
+  council [flags]       Multi-model council: review a diff, one-screen report
 
 Harnesses: cmdc (commandcode), pi, omp, opencode
 
@@ -213,6 +214,7 @@ Examples:
   righthand setup all
   righthand doctor
   righthand config code-reviewer
+  righthand council --models pi,cmdc --print
 `.trim());
 }
 
@@ -475,6 +477,103 @@ function cmdLaunch(personaName, opts) {
   child.on('exit', (code) => {
     process.exit(code == null ? 1 : code);
   });
+}
+
+function readCouncilDiff(spec) {
+  if (spec) {
+    if (fs.existsSync(spec)) return fs.readFileSync(spec, 'utf8');
+    return '';
+  }
+  const r = spawnSync('git', ['diff', 'HEAD~1'], { encoding: 'utf8', shell: false, stdio: ['ignore', 'pipe', 'pipe'] });
+  return (r && !r.error) ? (r.stdout || '') : '';
+}
+
+function guardPromptBody() {
+  const raw = loadProfile('middle');
+  const m = raw ? /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/.exec(raw) : null;
+  return m ? m[2].trim() : '';
+}
+
+function parseFindingsBlock(text) {
+  const start = text.indexOf('{');
+  if (start === -1) return { regressions: [], contractViolations: [] };
+  const seg = text.slice(start);
+  let depth = 0;
+  for (let i = 0; i < seg.length; i++) {
+    if (seg[i] === '{') depth++;
+    else if (seg[i] === '}') {
+      depth--;
+      if (depth === 0) {
+        try { return JSON.parse(seg.slice(0, i + 1)); } catch (e) { break; }
+      }
+    }
+  }
+  return { regressions: [], contractViolations: [] };
+}
+
+function cmdCouncil(opts) {
+  opts = opts || {};
+  const engine = require('../harness/engine');
+  const models = opts.models && opts.models.length ? opts.models : ['pi'];
+  const run = !!opts.run;
+  const diff = readCouncilDiff(opts.diff);
+  const harnessKey = registry.defaultDispatchHarness() || SUPPORTED_DISPATCH_HARNESSES[0];
+  const manifest = getHarnessManifest(harnessKey);
+  const launchPerModel = models.map(function (model) {
+    const spec = manifest && typeof manifest.buildLaunch === 'function'
+      ? manifest.buildLaunch('middle', { model })
+      : { bin: manifest ? manifest.bin : 'pi', args: ['--model', model], env: { RIGHTHAND_PERSONA: 'middle' } };
+    return { model: model, spec: spec, command: formatCommand(spec.bin, spec.args), env: spec.env || {} };
+  });
+
+  if (!run) {
+    const g = guardPromptBody();
+    console.log('RightHand council (review-only; pass --run to launch the models)');
+    console.log('Chairman: palm | guard persona: middle | models: ' + models.join(', '));
+    console.log('Diff source: ' + (opts.diff || 'git diff HEAD~1'));
+    console.log('Per-model guard launch commands:');
+    for (const e of launchPerModel) {
+      console.log('  ' + e.model + ' -> ' + e.command);
+      for (const [k, v] of Object.entries(e.env)) console.log('    env ' + k + '=' + v);
+    }
+    if (g) console.log('\n--- Guard prompt (middle) ---\n' + g);
+    return;
+  }
+
+  const { spawn } = require('child_process');
+  const reviewers = launchPerModel.map(function (e) {
+    return {
+      review: function () {
+        return new Promise(function (resolve) {
+          let child;
+          try {
+            child = spawn(e.spec.bin, e.spec.args || [], { cwd: process.cwd(), env: Object.assign({}, process.env, e.env), stdio: ['ignore', 'pipe', 'pipe'] });
+          } catch (err) {
+            resolve({ regressions: [], contractViolations: [] });
+            return;
+          }
+          let out = '';
+          child.stdout.on('data', function (d) { out += d; });
+          child.on('error', function () { resolve({ regressions: [], contractViolations: [] }); });
+          child.on('exit', function () { resolve(parseFindingsBlock(out)); });
+        });
+      },
+    };
+  });
+  engine.councilReviewAsync({ harness: harnessKey, diff: diff, models: models, chairman: 'palm', reviewers: reviewers })
+    .then(function (r) {
+      const outDir = path.join(process.cwd(), '.righthand', 'council');
+      fs.mkdirSync(outDir, { recursive: true });
+      const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const file = path.join(outDir, stamp + '.md');
+      fs.writeFileSync(file, r.report + '\n## Diff (head)\n\n' + ((diff || '(no diff)').slice(0, 4000)) + '\n', 'utf8');
+      console.log(r.report);
+      console.log('Wrote: ' + file);
+    })
+    .catch(function (err) {
+      console.error('Council failed: ' + (err && err.message ? err.message : err));
+      process.exit(1);
+    });
 }
 
 function cmdSetup(target, opts) {
@@ -816,6 +915,18 @@ if (!cmd || cmd === 'list') {
   const launchHarness = launchPositional.length === 2 ? launchPositional[0] : null;
   const personaName = launchPositional.length === 2 ? launchPositional[1] : launchPositional[0];
   cmdLaunch(personaName, { cwd: cwdOpt, print, harness: launchHarness });
+} else if (cmd === 'council') {
+  const rest = argv.slice(1);
+  let modelsList = [];
+  let diffSpec = null;
+  let run = false;
+  for (let i = 0; i < rest.length; i++) {
+    const a = rest[i];
+    if (a === '--models') { const v = rest[++i] || ''; modelsList = v.split(',').filter(Boolean); }
+    else if (a === '--diff') { diffSpec = rest[++i] || null; }
+    else if (a === '--run') run = true;
+  }
+  cmdCouncil({ models: modelsList, diff: diffSpec, run: run });
 } else if (cmd === '-v' || cmd === '--version' || cmd === 'version') {
   cmdVersion();
 } else if (cmd === '-h' || cmd === '--help' || cmd === 'help') {
