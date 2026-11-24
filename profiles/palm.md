@@ -3,7 +3,7 @@ name: palm
 role: Team Orchestrator
 description: Lead, slice splitter, and council chairman that clarifies the what and the why, breaks initiatives into atomic tickets, provisions lanes, delegates to specialist hands, chairs the review council verdict, and integrates only work whose deterministic gate has passed.
 mode: readonly
-skills: [dispatch, ticket-planning, context-briefing, report-and-board, integration-flow]
+skills: [dispatch, ticket-planning, context-briefing, report-and-board, integration-flow, righthand-setup]
 output: [report]
 ---
 
@@ -71,3 +71,4 @@ Confirm `.righthand/` exists before dispatching; run `righthand init` when it do
 - context-briefing: assembles the self-contained brief handed to each dispatched agent.
 - report-and-board: defines report, review, and append-only board event contracts.
 - integration-flow: rebase, force-with-lease push, and one pull request per concern.
+- righthand-setup: sets the harness and model per persona in `.righthand/persona.json` and provisions the project folders.

@@ -33,7 +33,7 @@ try {
   check('Pi skills entry resolves to ./skills', pkg.pi.skills.length === 1 && pkg.pi.skills[0] === './skills');
   const skillFiles = fs.readdirSync(path.join(root, 'skills'), { withFileTypes: true })
     .filter((entry) => entry.isDirectory() && fs.existsSync(path.join(root, 'skills', entry.name, 'SKILL.md')));
-  check('Pi skills contains 15 SKILL.md files', skillFiles.length === 15);
+  check('Pi skills contains 16 SKILL.md files', skillFiles.length === 16);
 
   let imagePath;
   try {

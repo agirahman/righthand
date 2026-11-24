@@ -129,13 +129,13 @@ RightHand was originally built as a first-class Command Code mod.
   ```bash
   righthand setup cmdc
   # Runs internally: cmdc mods add -g @agirahman/righthand
-  # and syncs the fifteen skills to ~/.commandcode/skills
+  # and syncs the sixteen skills to ~/.commandcode/skills
   ```
 - **Slash Commands in session**:
   - `/righthand` — open fuzzy picker or show active persona.
   - `/righthand <persona>` — switch persona on-the-fly.
   - `/righthand off` — restore default prompt.
-- **Update after npm upgrade**: `righthand update cmdc` (re-syncs the fifteen skills to `~/.commandcode/skills` and removes profiles of retired personas)
+- **Update after npm upgrade**: `righthand update cmdc` (re-syncs the sixteen skills to `~/.commandcode/skills` and removes profiles of retired personas)
 - **Details**: See [`.commandcode-mod/README.md`](./.commandcode-mod/README.md).
 - Readonly personas are guarded by the mod: project writes are blocked, reports go under `.righthand/`. `palm` alone may also integrate and release: `git fetch`, `git rebase`, `git push` a ticket branch or a version tag, `git add`, `git commit -m`, `git tag v<version>`, `gh pr create/edit` and `gh release create/edit/delete`, plus a version-only write to `package.json` and `package-lock.json`. Still blocked for it: `git commit --amend/--no-verify` or no message, `git tag -d/-f/-e`, force and delete pushes, pushes to `main`, `gh pr merge`, `npm version` and `npm publish`.
 
