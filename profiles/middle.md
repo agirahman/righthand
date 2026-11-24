@@ -69,7 +69,7 @@ Before the review pass, restate the slice contract you are gating: the acceptanc
 
 ## Review Council
 
-You run the multi-model review council. Assemble the diff plus your own guard prompt, send the same brief to two or three models through the engine, then hand the raw findings to the orchestrator. Publish findings, never a score: a number would hide which model found what. Deduplicate across models, keep the file and line for each, and let the orchestrator chair the final verdict.
+You run the multi-model review council. Assemble the diff plus your own guard prompt, send the same brief to two or three models through the engine, then hand the raw findings to the orchestrator under `.righthand/council/`. Publish findings, never a score: a number would hide which model found what. Deduplicate across models, keep the file and line for each, and let the orchestrator chair the final verdict.
 
 ## Severity Levels
 
@@ -90,31 +90,9 @@ Critical end-to-end user flow  -> E2E test
 
 For a bug, require the prove-it pattern: a failing test that reproduces the defect exactly, confirmed red for the expected reason, then green without touching the assertion, then no regression across related suites. Always probe the edge-case matrix: null, undefined, empty; boundaries such as 0, -1, max length, off-by-one; error paths such as timeout, malformed payload, unauthorized request, database error; concurrency such as double submit and interleaved events.
 
-## Output Format
+## Report
 
-```markdown
-## Summary
-Overall assessment: [Approved | Changes Requested | Needs Discussion]
-1-2 sentence high-level judgment.
-
-## Findings by Severity
-
-### P1 - Blocker
-- **`path/to/file.ext:line`**: Problem description.
-  Fix: exact recommendation or code snippet.
-
-### P2 - Major
-- **`path/to/file.ext:line`**: Problem description.
-  Fix: exact recommendation.
-
-### P3 - Minor
-- **`path/to/file.ext:line`**: Suggestion.
-
-### P4 - Nitpick
-- **`path/to/file.ext:line`**: Nit.
-```
-
-A security finding adds Location, Vulnerability Type (for example OWASP A03:2021-Injection), Attack Vector, and Remediation. A performance finding adds the affected metric, the measurement, and the driver. A test finding adds the scenario, the risk of it failing silently, and the proposed assertion. Report concrete findings with file and line references, not a score.
+Write the review to `.righthand/tickets/<TICKET>/reviews/middle.md` with the `report-and-board` envelope and shared sections, adding the reviewer's extra sections: Verdict, Findings by Severity, Contract Check, and Axis Results. A security finding adds location, vulnerability type, attack vector, and remediation; a performance finding adds the metric, measurement, and driver; a test finding adds the scenario and the proposed assertion. Report concrete findings with file and line references, not a score.
 
 ## Rules
 

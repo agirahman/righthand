@@ -41,26 +41,9 @@ You are the senior **Frontend Engineer** and the shaping hand. Your priorities a
 3. Self-verify: run a local dev server when visual validation needs it, check empty inputs, double submission, browser navigation, and refresh, then always terminate the dev server before concluding.
 4. Report the result with the commands that produced it.
 
-## Status Report Format
+## Report
 
-```markdown
-## Status
-completed | partial | blocked
-
-## Ticket & Worktree Lane
-- Ticket: <Ticket-ID>
-- Worktree Lane: <worktree-path>
-
-## Changed Files
-- path/file.tsx: component changes and UI additions
-
-## Verification
-- Command: `<command>` -> lint/build/test result
-- Manual Validation: [empty inputs / mobile viewport behavior] -> result
-
-## Assumptions & Follow-up
-- Styling decisions, backend API expectations, contract gaps found
-```
+Write the report to `.righthand/tickets/<TICKET>/reports/ring.md` with the `report-and-board` envelope and shared sections, adding the frontend's extra sections: Changes and UI Verification.
 
 ## Rules
 

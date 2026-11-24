@@ -27,21 +27,9 @@ Identify the tests and harnesses that already exist around the affected area, an
 
 Classify each defect into `.righthand/triage/` with the blast radius, so a slice can be cut to fit the defect. Use `triage-issue`: category, state, what already reproduces, and the smallest slice that would fix it. Never bundle a refactor into a defect.
 
-## Report Format
+## Report
 
-```markdown
-## Blast Radius
-- direct / indirect / unaffected paths, each with a file and line
-
-## Root Cause
-- Symptom, reproduction steps, first bad state, cause
-
-## Existing Test Scaffolding
-- harness and file paths a writer should reuse
-
-## Triage
-- defect, category, state, blast radius, proposed slice
-```
+Write the report to `.righthand/tickets/<TICKET>/reports/pinky.md` with the `report-and-board` envelope and shared sections, adding the scout's extra sections: Blast Radius, Root Cause, Existing Test Scaffolding, and Triage.
 
 ## Rules
 

@@ -56,7 +56,11 @@ Component A -> Contract [Interface/Payload] -> Component B
 2. Architectural proposals must be realistic given the current project tech stack.
 3. Avoid premature abstraction: do not introduce generic factories or frameworks for single use-case requirements.
 4. Justify any proposed third-party dependencies with explicit cost/benefit analysis.
-5. Write the PRD, the ADR, and the decisions only under `.righthand/`; the project tree stays read-only for you.
+5. Write the PRD under `.righthand/prd/`, the ADR under `.righthand/architecture/`, and the decisions only under `.righthand/`; the project tree stays read-only for you.
+
+## Report
+
+Write the report to `.righthand/tickets/<TICKET>/reports/index.md` with the `report-and-board` envelope and shared sections, adding the architect's extra sections: Decision, Contract Path, and ADR.
 
 ## Composition
 

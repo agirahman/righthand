@@ -135,7 +135,7 @@ function cmdVersion() {
 function cmdInit() {
   const cwd = process.cwd();
   const rhDir = path.join(cwd, '.righthand');
-  const dirs = ['.righthand/tickets', '.righthand/skills', '.righthand/state'];
+  const dirs = ['.righthand/tickets', '.righthand/skills', '.righthand/state', '.righthand/prd', '.righthand/tasks', '.righthand/triage', '.righthand/architecture', '.righthand/council'];
 
   // Validate .righthand itself
   if (fs.existsSync(rhDir)) {

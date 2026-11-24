@@ -61,6 +61,12 @@ files keep working:
 | `frontend` | `ring` |
 | `code-reviewer`, `security-auditor`, `test-engineer`, `web-performance-auditor` | `middle` |
 
+### Report contract
+
+Every persona writes its result under `.righthand/` in one shape, so a coordinator and a script read all six the same way. A report or review opens with a YAML envelope holding `ticket`, `persona`, `kind` (`report` or `review`), `status` (`completed`, `partial`, `blocked`), `verdict` (`pass` or `fail`, reviews only), `commit`, and `round`. Three shared sections follow in order: `## Outcome`, `## Verification`, `## Risks & Follow-up`. Each persona then adds only its own extras, for example a blast-radius map for `pinky` or findings by severity for `middle`. The `report-and-board` skill owns the envelope; the profiles own the extras.
+
+A ticket closes only when the board at `.righthand/tickets/<TICKET>/board.jsonl` holds a `done` event and, where a reviewer participated, a `verdict` of `pass`. A report that claims `status: completed` without its `done` event is a contract violation.
+
 ---
 
 ## Quick Setup
@@ -93,7 +99,7 @@ righthand switch thumb           # Activate a persona
 righthand switch middle          # (legacy names such as backend or code-reviewer still resolve)
 righthand off                    # Deactivate persona (restore default)
 righthand inject                 # Print active persona prompt to stdout
-righthand init                   # Provision .righthand/ in the current project
+righthand init                   # Provision .righthand/ artifact folders in the current project
 righthand status                 # One-liner: active persona + setup harnesses
 righthand config [persona]       # Resolve dispatch harness and model for a persona
 righthand launch <persona>       # Launch an agent for a persona (--print to dry-run)

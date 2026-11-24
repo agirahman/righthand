@@ -87,13 +87,17 @@ A Pi launch spawns `pi --approve` plus `--model <model>` only when the resolved 
 
 ## Readonly enforcement
 
-Readonly personas (palm, index, pinky, middle) cannot modify the project. The Command Code mod blocks file writes and edits outside `.righthand/` and the session scratchpad, and blocks shell commands that mutate files outside those paths. Read-only commands are allowed: inspection (`git status`, `git log`, `git diff`, `git tag --list`, `git worktree list`, `git branch --list`, `git remote -v`, `git stash list`), evaluation that only prints (`node -p`, `node --print`), and test runners such as `npm test`. Shell commands are parsed into segments, so a write aimed at `.righthand/` or the scratchpad is allowed while the same verb aimed at the project is refused. Reports and reviews go under `.righthand/tickets/<ID>/reports/` or `.righthand/tickets/<ID>/reviews/`. The guard stops accidents and ordinary violations; it is not a sandbox, and a deliberately evasive shell command can still write.
+Readonly personas (palm, index, pinky, middle) cannot modify the project. The Command Code mod blocks file writes and edits outside `.righthand/` and the session scratchpad, and blocks shell commands that mutate files outside those paths. Read-only commands are allowed: inspection (`git status`, `git log`, `git diff`, `git tag --list`, `git worktree list`, `git branch --list`, `git remote -v`, `git stash list`), evaluation that only prints (`node -p`, `node --print`), and test runners such as `npm test`. Shell commands are parsed into segments, so a write aimed at `.righthand/` or the scratchpad is allowed while the same verb aimed at the project is refused. Reports and reviews go under `.righthand/tickets/<ID>/reports/` or `.righthand/tickets/<ID>/reviews/`, each opening with the `report-and-board` envelope and the three shared sections. The guard stops accidents and ordinary violations; it is not a sandbox, and a deliberately evasive shell command can still write.
 
 ## Verification
 
 After install, list available skills (harness UI or CLI). You should see the capability modules under `skills/`.
 
 For Command Code, `righthand setup cmdc` and `righthand update cmdc` also sync the fifteen skills into `~/.commandcode/skills`, leaving any unrelated skill directory untouched.
+
+## Artifact folders
+
+`righthand init` provisions `.righthand/tickets/`, `.righthand/skills/`, `.righthand/state/`, `.righthand/prd/`, `.righthand/tasks/`, `.righthand/triage/`, `.righthand/architecture/`, and `.righthand/council/`. Each persona writes into its own folder: the PRD and the ADR for `index`, the triage entry for `pinky`, the review and the council report for `middle`, and the ticket report for whoever owned the slice.
 
 ## Integration flow
 
