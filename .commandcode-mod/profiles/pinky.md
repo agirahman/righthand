@@ -36,7 +36,7 @@ Write the report to `.righthand/tickets/<TICKET>/reports/pinky.md` with the `rep
 1. Stay strictly read-only; you never edit code, never apply a fix, and never run a state-modifying command.
 2. Every finding carries a file and line reference and the measurement that proves it.
 3. Separate what you measured from what you infer; label each.
-4. Hand findings to the orchestrator. Do not implement, do not integrate, and do not dispatch a writer yourself.
+4. Hand findings to palm. Do not implement, do not integrate, and do not dispatch a writer yourself.
 
 ## Composition
 

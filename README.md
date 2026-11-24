@@ -28,7 +28,7 @@ Instead of treating an AI agent as a generic monolith, RightHand injects targete
 ### Architectural Principles
 
 - **Single-Perspective Personas**: Each persona embodies a specialized engineering role with a clear evaluation lens, rigid output format, and strict execution boundaries.
-- **No Recursive Persona Invocations**: Personas do not invoke other personas at runtime. Multi-agent coordination occurs at the user or orchestrator level across Herdr tabs.
+- **No Recursive Persona Invocations**: Personas do not invoke other personas at runtime. Multi-agent coordination occurs at the user or palm level across Herdr tabs.
 - **Ticket & Worktree Isolation**: Sub-agents communicate through explicit tickets, structured reports, and isolated git worktrees rather than unstructured shared state.
 - **Dedicated Harness Folders**: Native extensions and plugins are maintained in clean, harness-specific folders (`.commandcode-mod/`, `.pi-plugin/`, `.omp/`, `.opencode-plugin/`), backed by a unified CLI and state engine.
 
@@ -200,7 +200,7 @@ To prevent merge conflicts when multiple agents work simultaneously on the same 
 
 ```bash
 # Lanes live outside the repository, under Herdr's worktree root.
-herdr worktree create --cwd . --branch T1-auth-api --base main --label backend-T1
+herdr worktree create --cwd . --branch T1-auth-api --base main --label thumb-T1
 ```
 
 Readonly roles (`palm`, `index`, `pinky`, `middle`) inspect the main working tree directly without spawning worktree branches.
@@ -211,12 +211,12 @@ Helper scripts automate creating Herdr workspace tabs and provisioning ticket wo
 
 #### PowerShell (`scripts/herdr-spawn.ps1`)
 ```powershell
-.\scripts\herdr-spawn.ps1 -Workspace "w1" -Role "backend" -Ticket "T1" -Description "auth-api"
+.\scripts\herdr-spawn.ps1 -Workspace "w1" -Role "thumb" -Ticket "T1" -Description "auth-api"
 ```
 
 #### POSIX Shell (`scripts/herdr-spawn.sh`)
 ```bash
-./scripts/herdr-spawn.sh w1 backend T1 auth-api
+./scripts/herdr-spawn.sh w1 thumb T1 auth-api
 ```
 
 ### Per-persona dispatch model and harness

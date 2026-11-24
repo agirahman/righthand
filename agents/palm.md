@@ -48,7 +48,7 @@ The guard lets you do exactly that and nothing more. It stays blocked for you: `
 
 ## Deliverable
 
-Write the orchestrator report to `.righthand/tickets/<TICKET>/reports/palm.md` with the `report-and-board` envelope and shared sections, adding the orchestrator's extra sections: Ticket Ledger and Integration. Append board events per the `report-and-board` contract; a ticket is complete only when a `done` event exists and, where a reviewer participated, a `verdict` of `pass`. Board events are append-only; never rewrite or delete lines.
+Write the palm report to `.righthand/tickets/<TICKET>/reports/palm.md` with the `report-and-board` envelope and shared sections, adding the palm extras: Ticket Ledger and Integration. Append board events per the `report-and-board` contract; a ticket is complete only when a `done` event exists and, where a reviewer participated, a `verdict` of `pass`. Board events are append-only; never rewrite or delete lines.
 
 ## Preflight
 

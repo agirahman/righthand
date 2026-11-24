@@ -65,7 +65,7 @@ Before the review pass, restate the slice contract you are gating: the acceptanc
 
 ## Review Council
 
-You run the multi-model review council. Assemble the diff plus your own guard prompt, send the same brief to two or three models through the engine, then hand the raw findings to the orchestrator under `.righthand/council/`. Publish findings, never a score: a number would hide which model found what. Deduplicate across models, keep the file and line for each, and let the orchestrator chair the final verdict.
+You run the multi-model review council. Assemble the diff plus your own guard prompt, send the same brief to two or three models through the engine, then hand the raw findings to palm under `.righthand/council/`. Publish findings, never a score: a number would hide which model found what. Deduplicate across models, keep the file and line for each, and let palm chair the final verdict.
 
 ## Severity Levels
 

@@ -62,7 +62,7 @@ Write the report to `.righthand/tickets/<TICKET>/reports/index.md` with the `rep
 
 - **Invoke directly when**: requirements are vague, a specification is missing, or high-impact design decisions, major refactorings, or subsystem boundary definitions are required.
 - **Invoke via**: Herdr Orchestrator (`herdr tab create --label index-<T##>`) or slash command `/righthand index`.
-- **Rule**: do not implement code. Your output is a specification, a contract, and an ADR for the orchestrator and the writer hands. Use `grill-me` to interrogate the design and `write-a-prd` to publish it.
+- **Rule**: do not implement code. Your output is a specification, a contract, and an ADR for palm and the writer hands. Use `grill-me` to interrogate the design and `write-a-prd` to publish it.
 
 ## Capabilities
 

@@ -29,22 +29,28 @@ Each persona is defined in `profiles/<name>.md` using YAML frontmatter:
 
 ```yaml
 ---
-name: backend
+name: thumb
 role: Backend Engineer
+description: "One line on what this persona does."
 mode: writer
-tab: backend
+skills: [worktree-lanes, verification]
+output: [report]
 ---
 ```
 
+The key order is fixed: `name`, `role`, `description`, `mode`, `skills`, `output`.
+Every entry in `skills` must resolve to `skills/<name>/SKILL.md`.
+
 ### Modes
 - **`readonly`**: For inspection, code review, architecture planning, security auditing, and test design. Agents in readonly mode do not modify implementation files.
-- **`writer`**: For implementation tasks (frontend, backend, devops, worker). Agents work in isolated lanes created by Herdr outside this repository, never a `wt/` directory inside it.
+- **`writer`**: For implementation tasks (thumb, ring). Agents work in isolated lanes created by Herdr outside this repository, never a `wt/` directory inside it.
 
 ### Synchronization
 When modifying or adding a persona in `profiles/`:
 1. Ensure `profiles/<name>.md` has valid frontmatter.
 2. Update capability references in `skills/` only when a new capability is added; profiles reference capabilities by name.
-3. Update autocomplete lists in `.commandcode-mod/mods/righthand.ts`, `.pi-plugin/extensions/righthand.ts`, and `bin/state.js` if a new persona is added.
+3. Autocomplete and persona lists come from `harness/common/commands.ts` (`completionCandidates()`); each harness extension reads them, so no per-harness list needs editing.
+4. Mirror a retired persona name by adding it to `harness/common/aliases.ts` and `bin/persona-aliases.js`; `test/validate-persona-aliases.cjs` asserts the two tables agree.
 
 ### Skill conventions
 A description containing a colon must be quoted, otherwise cmdc cannot parse the frontmatter.
