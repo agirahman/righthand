@@ -4,14 +4,14 @@ const path = require('node:path');
 const root = path.join(__dirname, '..');
 const profilesDir = path.join(root, 'profiles');
 const skillsRoot = path.join(root, 'skills');
+// The retired persona mirrors from da7a1a2. Any other righthand-* directory is a capability.
+const LEGACY_PERSONA_MIRRORS = new Set([
+  'architect', 'backend', 'code-reviewer', 'devops', 'editor', 'frontend',
+  'orchestrator', 'product-manager', 'security-auditor', 'test-engineer',
+  'web-performance-auditor', 'worker',
+]);
 const manifestDirs = [
   path.join(root, 'plugin.json'),
-  path.join(root, '.claude-plugin', 'plugin.json'),
-  path.join(root, '.claude-plugin', 'marketplace.json'),
-  path.join(root, '.codex-plugin', 'plugin.json'),
-  path.join(root, '.cursor-plugin', 'plugin.json'),
-  path.join(root, '.cursor-plugin', 'marketplace.json'),
-  path.join(root, '.kimi-plugin', 'plugin.json'),
   path.join(root, '.omp-plugin', 'marketplace.json'),
   path.join(root, '.agents', 'plugins', 'marketplace.json'),
 ];
@@ -114,7 +114,7 @@ if (fs.existsSync(skillsRoot)) {
   for (const dir of fs.readdirSync(skillsRoot)) {
     const dirPath = path.join(skillsRoot, dir);
     if (!fs.statSync(dirPath).isDirectory()) continue;
-    if (dir.startsWith('righthand-')) {
+    if (dir.startsWith('righthand-') && LEGACY_PERSONA_MIRRORS.has(dir.slice('righthand-'.length))) {
       console.error(`FAIL: [skill] Legacy persona envelope directory present: ${dir}`);
       failed++;
       continue;

@@ -36,27 +36,27 @@ try {
   fs.mkdirSync(path.join(projDir, 'profiles'), { recursive: true });
   fs.mkdirSync(path.join(projDir, '.commandcode', 'profiles'), { recursive: true });
 
-  fs.writeFileSync(path.join(pkgDir, 'architect.md'), 'PKG BODY');
-  fs.writeFileSync(path.join(pkgDivDir, 'renamed.md'), '---\nname: architect\nrole: Renamed\nmode: readonly\n---\nPKG RENAMED BODY');
-  fs.writeFileSync(path.join(userDir, 'architect.md'), 'OLD USER BODY');
+  fs.writeFileSync(path.join(pkgDir, 'index.md'), 'PKG BODY');
+  fs.writeFileSync(path.join(pkgDivDir, 'renamed.md'), '---\nname: index\nrole: Renamed\nmode: readonly\n---\nPKG RENAMED BODY');
+  fs.writeFileSync(path.join(userDir, 'index.md'), 'OLD USER BODY');
   fs.writeFileSync(path.join(userDir, 'editor.md'), 'RETIRED BODY');
   fs.writeFileSync(path.join(userDir, 'my-custom.md'), 'CUSTOM BODY');
-  fs.writeFileSync(path.join(projDir, 'profiles', 'architect.md'), 'PROJECT PROFILES BODY');
-  fs.writeFileSync(path.join(projDir, '.commandcode', 'profiles', 'architect.md'), 'PROJECT BODY');
+  fs.writeFileSync(path.join(projDir, 'profiles', 'index.md'), 'PROJECT PROFILES BODY');
+  fs.writeFileSync(path.join(projDir, '.commandcode', 'profiles', 'index.md'), 'PROJECT BODY');
 
   const profiles = common.loadAllProfiles(projDir, {
     packageDir: pkgDir,
     userDir,
     projectDirs: [],
   });
-  check('shipped name resolves to package body', profiles.get('architect')?.body === 'PKG BODY');
+  check('shipped name resolves to package body', profiles.get('index')?.body === 'PKG BODY');
 
   const divProfiles = common.loadAllProfiles(projDir, {
     packageDir: pkgDivDir,
     userDir,
     projectDirs: [],
   });
-  check('frontmatter name divergence blocks legacy copy', divProfiles.get('architect')?.body === 'PKG RENAMED BODY');
+  check('frontmatter name divergence blocks legacy copy', divProfiles.get('index')?.body === 'PKG RENAMED BODY');
   check('retired persona absent', !profiles.has('editor'));
   check('custom user persona loads', profiles.get('my-custom')?.body === 'CUSTOM BODY');
 
@@ -65,14 +65,14 @@ try {
     userDir,
     projectDirs: [path.join(projDir, 'profiles'), path.join(projDir, '.commandcode', 'profiles')],
   });
-  check('project .commandcode profile overrides project profiles', overridden.get('architect')?.body === 'PROJECT BODY');
+  check('project .commandcode profile overrides project profiles', overridden.get('index')?.body === 'PROJECT BODY');
 
   const missingPkg = common.loadAllProfiles(projDir, {
     packageDir: path.join(base, 'no-such-pkg'),
     userDir,
     projectDirs: [],
   });
-  check('missing package directory lets legacy file load as custom', missingPkg.get('architect')?.body === 'OLD USER BODY');
+  check('missing package directory lets legacy file load as custom', missingPkg.get('index')?.body === 'OLD USER BODY');
   let zeroArgOk = false;
   try {
     common.loadAllProfiles(projDir);
@@ -114,10 +114,10 @@ try {
   fs.writeFileSync(canonicalPath, '{');
   check('corrupt canonical state does not fall through', common.readActivePersona(base) === null);
 
-  common.writeActivePersona(base, 'worker');
+  common.writeActivePersona(base, 'thumb');
   const written = JSON.parse(fs.readFileSync(canonicalPath, 'utf8'));
   check('atomic write persists active persona and timestamp',
-    common.readActivePersona(base) === 'worker' && written.active === 'worker' && typeof written.updatedAt === 'string');
+    common.readActivePersona(base) === 'thumb' && written.active === 'thumb' && typeof written.updatedAt === 'string');
   check('atomic write leaves no temporary file',
     JSON.stringify(fs.readdirSync(stateDir).sort()) === JSON.stringify(['active-persona.json']));
 
@@ -128,30 +128,30 @@ try {
       common.readActivePersona(base) === 'envoverride');
     process.env.RIGHTHAND_PERSONA = '   ';
     check('blank env channel falls through to the state file',
-      common.readActivePersona(base) === 'worker');
+      common.readActivePersona(base) === 'thumb');
     delete process.env.RIGHTHAND_PERSONA;
     check('unset env channel reads the state file',
-      common.readActivePersona(base) === 'worker');
+      common.readActivePersona(base) === 'thumb');
   } finally {
     if (previousPersonaEnv === undefined) delete process.env.RIGHTHAND_PERSONA;
     else process.env.RIGHTHAND_PERSONA = previousPersonaEnv;
   }
 
-  const worker = shippedProfiles.get('worker');
-  const piPrompt = `## Active RightHand Persona: worker (General Worker) [mode: writer]\n> ${worker.desc}\n\n${worker.body}`;
+  const thumb = shippedProfiles.get('thumb');
+  const piPrompt = `## Active RightHand Persona: thumb (Builder) [mode: writer]\n> ${thumb.desc}\n\n${thumb.body}`;
   check('default prompt exactly matches Pi adapter output',
-    common.buildPersonaPrompt(worker) === piPrompt);
-  const modPrompt = `## Active RightHand persona: ${worker.label} (writer)\nHerdr Tab: worker\n\n${worker.body}`;
+    common.buildPersonaPrompt(thumb) === piPrompt);
+  const modPrompt = `## Active RightHand persona: ${thumb.label} (writer)\nHerdr Tab: thumb\n\n${thumb.body}`;
   check('Command Code prompt options exactly match mod output',
-    common.buildPersonaPrompt(worker, {
+    common.buildPersonaPrompt(thumb, {
       heading: 'persona',
-      label: worker.label,
-      sections: ['Herdr Tab: ' + worker.name],
+      label: thumb.label,
+      sections: ['Herdr Tab: ' + thumb.name],
       includeDesc: false,
     }) === modPrompt);
 
   check('status label formats active persona and clears with undefined',
-    common.buildStatusLabel({ name: 'worker', role: 'General Worker' }) === 'RightHand: worker (General Worker)' &&
+    common.buildStatusLabel({ name: 'thumb', role: 'General Worker' }) === 'RightHand: thumb (General Worker)' &&
     common.buildStatusLabel(null) === undefined);
 
   const args = [
@@ -161,8 +161,8 @@ try {
     ['off', { action: 'off' }],
     ['none', { action: 'off' }],
     ['default', { action: 'off' }],
-    [' Worker ', { action: 'activate', name: 'worker' }],
-    ['Worker', { action: 'activate', name: 'worker' }],
+    [' Thumb ', { action: 'activate', name: 'thumb' }],
+    ['Thumb', { action: 'activate', name: 'thumb' }],
   ];
   check('argument parsing matches all required aliases and normalization',
     args.every(([input, expected]) => JSON.stringify(common.parseRighthandArgs(input)) === JSON.stringify(expected)));
@@ -170,10 +170,10 @@ try {
   const names = [...shippedProfiles.keys()];
   const allCandidates = common.completionCandidates(names, '');
   check('completion candidates include base commands first and all shipped personas',
-    names.length === 11 && allCandidates?.length === 13 &&
+    names.length === 6 && allCandidates?.length === 8 &&
     allCandidates[0].value === 'list' && allCandidates[1].value === 'off');
   check('completion candidates filter prefixes and return null when empty',
-    JSON.stringify(common.completionCandidates(names, 'wo')?.map((item) => item.value)) === JSON.stringify(['worker']) &&
+    JSON.stringify(common.completionCandidates(names, 'th')?.map((item) => item.value)) === JSON.stringify(['thumb']) &&
     common.completionCandidates(names, 'zzz') === null);
 } finally {
   fs.rmSync(base, { recursive: true, force: true });
@@ -204,15 +204,34 @@ const launchManifests = registry.listManifests().filter((m) => m.dispatchable ==
 check('every dispatchable manifest exposes a working buildLaunch contract',
   launchManifests.length > 0 && launchManifests.every((m) => {
     if (typeof m.buildLaunch !== 'function') return false;
-    const built = m.buildLaunch('worker', { model: 'reflection/beam:free' });
+    const built = m.buildLaunch('thumb', { model: 'reflection/beam:free' });
     return built && typeof built.bin === 'string' && built.bin !== '' &&
       Array.isArray(built.args) && built.args.every((a) => typeof a === 'string') &&
       built.env && typeof built.env === 'object' && !Array.isArray(built.env) &&
       Object.values(built.env).every((v) => typeof v === 'string');
   }));
-const nonDispatchable = registry.listManifests().filter((m) => m.key === 'omp' || m.key === 'opencode');
-check('non-dispatchable harnesses expose no launch builder',
-  nonDispatchable.length === 2 && nonDispatchable.every((m) => typeof m.buildLaunch !== 'function'));
+const ompManifest = registry.getManifest('omp');
+const ompBuilt = ompManifest.buildLaunch('thumb', {});
+check('omp launch loads the repo extension explicitly and carries the persona env',
+  ompBuilt.bin === 'omp' &&
+  ompBuilt.args[0] === '-e' &&
+  ompBuilt.args[1].endsWith(`.omp${path.sep}extensions${path.sep}righthand.ts`) &&
+  ompBuilt.env.RIGHTHAND_PERSONA === 'thumb');
+check('omp launch forwards a model as one argv token',
+  JSON.stringify(ompManifest.buildLaunch('thumb', { model: ' reflection/beam:free ' }).args.slice(2)) ===
+  JSON.stringify(['--model=reflection/beam:free']));
+
+const opencodeManifest = registry.getManifest('opencode');
+const opencodeBare = opencodeManifest.buildLaunch('middle', {});
+check('opencode launch stays the interactive TUI when no model or prompt is forwarded',
+  opencodeBare.bin === 'opencode' && opencodeBare.args.length === 0 &&
+  opencodeBare.env.RIGHTHAND_PERSONA === 'middle');
+check('opencode launch uses the run subcommand when a model is forwarded',
+  JSON.stringify(opencodeManifest.buildLaunch('middle', { model: ' reflection/beam:free ' }).args) ===
+  JSON.stringify(['run', '-m', 'reflection/beam:free', '--auto']));
+check('opencode launch passes a prompt through the run subcommand',
+  JSON.stringify(opencodeManifest.buildLaunch('middle', { prompt: ' fix the slice ' }).args) ===
+  JSON.stringify(['run', '--auto', 'fix the slice']));
 
 if (failed > 0) {
   console.error(`\nHarness parity validation FAILED with ${failed} errors.`);

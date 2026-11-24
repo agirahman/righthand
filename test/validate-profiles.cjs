@@ -173,6 +173,26 @@ if (fs.existsSync(skillsRoot)) {
   }
 }
 
+// Skill frontmatter carries exactly name and description, nothing else.
+const skillKeys = ['name', 'description'];
+if (fs.existsSync(skillsRoot)) {
+  for (const dir of fs.readdirSync(skillsRoot)) {
+    const dirPath = path.join(skillsRoot, dir);
+    if (!fs.statSync(dirPath).isDirectory()) continue;
+    const skillFile = path.join(dirPath, 'SKILL.md');
+    if (!fs.existsSync(skillFile)) continue;
+    const fm = /^---\r?\n([\s\S]*?)\r?\n---/.exec(fs.readFileSync(skillFile, 'utf8'))?.[1] ?? '';
+    const found = fm.split(/\r?\n/)
+      .map((l) => /^([a-zA-Z0-9_-]+)\s*:/.exec(l))
+      .filter(Boolean)
+      .map((m) => m[1].toLowerCase());
+    if (found.join(',') !== skillKeys.join(',')) {
+      console.error(`FAIL: [skill] ${dir}/SKILL.md frontmatter keys must be ${skillKeys.join(', ')}, got ${found.join(', ')}`);
+      failed++;
+    }
+  }
+}
+
 if (failed > 0) {
   console.error(`\nValidation FAILED with ${failed} errors.`);
   process.exit(1);

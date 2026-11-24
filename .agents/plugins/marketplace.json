@@ -8,7 +8,7 @@
     {
       "name": "righthand",
       "source": "./",
-      "version": "1.0.3",
+      "version": "1.3.5",
       "description": "RightHand personas bundled as transferable skills across all Herdr-supported harnesses."
     }
   ]

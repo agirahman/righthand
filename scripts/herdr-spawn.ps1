@@ -12,7 +12,8 @@
   Herdr workspace ID (e.g. w1, w2)
 
 .PARAMETER Role
-  Profile persona name (e.g. orchestrator, backend, frontend, worker, code-reviewer, test-engineer)
+  Profile persona name (e.g. palm, index, pinky, thumb, ring, middle). Legacy names
+  such as backend, worker, or code-reviewer still resolve to their canonical persona.
 
 .PARAMETER Ticket
   Ticket identifier (e.g. T1, T2, T3)
@@ -21,7 +22,7 @@
   Short slug for ticket/worktree (e.g. auth-api, login-ui)
 
 .EXAMPLE
-  .\scripts\herdr-spawn.ps1 -Workspace "w1" -Role "backend" -Ticket "T1" -Description "auth-api"
+  .\scripts\herdr-spawn.ps1 -Workspace "w1" -Role "thumb" -Ticket "T1" -Description "auth-api"
 #>
 
 [CmdletBinding()]
@@ -39,7 +40,9 @@ param(
     [string]$Description = ""
 )
 
-$WriterRoles = @('backend', 'frontend', 'devops', 'worker')
+# Canonical writers first, then the legacy names that resolve onto them, so an
+# un-migrated invocation still gets its worktree lane.
+$WriterRoles = @('thumb', 'ring', 'backend', 'frontend', 'devops', 'worker')
 $IsWriter = $WriterRoles -contains $Role.ToLower()
 
 $Label = if ($Ticket) { "$Role-$Ticket" } else { $Role }

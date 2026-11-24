@@ -30,17 +30,17 @@ function check(name, condition) {
 }
 
 check('policy modules match shipped profile basenames', JSON.stringify(policyNames) === JSON.stringify(profileNames));
-check('registry contains exactly 11 personas', Object.keys(PERSONA_POLICIES).length === 11);
+check('registry contains exactly 6 personas', Object.keys(PERSONA_POLICIES).length === 6);
 for (const name of profileNames) {
   check(`${name} policy name matches its filename`, PERSONA_POLICIES[name]?.name === name);
 }
-check('orchestrator has all seven declared permissions', JSON.stringify(permissions(PERSONA_POLICIES.orchestrator)) === JSON.stringify(Array(7).fill(true)));
-for (const name of profileNames.filter((name) => name !== 'orchestrator')) {
+check('palm has all seven declared permissions', JSON.stringify(permissions(PERSONA_POLICIES.palm)) === JSON.stringify(Array(7).fill(true)));
+for (const name of profileNames.filter((name) => name !== 'palm')) {
   check(`${name} remains fully readonly`, JSON.stringify(permissions(PERSONA_POLICIES[name])) === JSON.stringify(Array(7).fill(false)));
 }
 check('missing persona resolves to a fully readonly policy', JSON.stringify(permissions(resolvePersonaPolicy(undefined))) === JSON.stringify(Array(7).fill(false)));
 check('unknown persona resolves to a fully readonly policy', JSON.stringify(permissions(resolvePersonaPolicy('nope'))) === JSON.stringify(Array(7).fill(false)));
-check('persona lookup is case-insensitive', resolvePersonaPolicy('Orchestrator') === PERSONA_POLICIES.orchestrator);
+check('persona lookup is case-insensitive', resolvePersonaPolicy('Palm') === PERSONA_POLICIES.palm);
 if (failed > 0) {
   console.error(`\nGuard persona validation FAILED with ${failed} errors.`);
   process.exit(1);

@@ -6,6 +6,7 @@ const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const { readState, writeState } = require('./state');
+const { resolvePersonaName } = require('./persona-aliases');
 const { readConfig, resolvePersona, formatResolution, ConfigError, SUPPORTED_DISPATCH_HARNESSES } = require('./persona-config');
 const { formatCommand } = require('./launch');
 const pkg = require('../package.json');
@@ -29,11 +30,18 @@ const IS_WIN = process.platform === 'win32';
 
 const LAUNCH_USAGE = 'Usage: righthand launch [harness] <persona> [--cwd <dir>] [--print]';
 
-const RETIRED_PERSONAS = ['editor'];
+const RETIRED_PERSONAS = ['editor','architect','backend','code-reviewer','devops','frontend','orchestrator','product-manager','security-auditor','test-engineer','web-performance-auditor','worker'];
 
 // ---------------------------------------------------------------------------
 // Persona helpers
 // ---------------------------------------------------------------------------
+// Legacy and role-word names resolve onto the canonical six, so a persona
+// retired by the v2 compaction keeps working from a habit, a script, or a
+// config written before the merge.
+function canonicalPersona(name) {
+  return resolvePersonaName(name).canonical;
+}
+
 function listProfiles() {
   if (!fs.existsSync(profilesDir)) return [];
   return fs.readdirSync(profilesDir)
@@ -127,7 +135,7 @@ function cmdVersion() {
 function cmdInit() {
   const cwd = process.cwd();
   const rhDir = path.join(cwd, '.righthand');
-  const dirs = ['.righthand/tickets', '.righthand/skills', '.righthand/state'];
+  const dirs = ['.righthand/tickets', '.righthand/skills', '.righthand/state', '.righthand/prd', '.righthand/tasks', '.righthand/triage', '.righthand/architecture', '.righthand/council'];
 
   // Validate .righthand itself
   if (fs.existsSync(rhDir)) {
@@ -186,6 +194,7 @@ Persona Commands:
   switch <persona>         Activate a persona
   off                      Deactivate current persona
   inject                   Print active persona prompt to stdout
+  blast-radius [scope]     Map blast radius + triage (activates pinky)
   status                   Show active persona and setup harnesses
 
 Setup Commands:
@@ -197,6 +206,7 @@ Setup Commands:
 Dispatch Commands:
   config [persona]         Resolve dispatch harness and model for a persona
   launch [harness] <persona> Launch an agent for a persona [--cwd <dir>] [--print]
+  council [flags]       Multi-model council: review a diff, one-screen report
 
 Harnesses: cmdc (commandcode), pi, omp, opencode
 
@@ -212,15 +222,17 @@ Examples:
   righthand setup all
   righthand doctor
   righthand config code-reviewer
+  righthand council --models pi,cmdc --print
 `.trim());
 }
 
 function cmdList() {
   const names = listProfiles();
   const state = readState(process.cwd());
+  const active = state.active ? canonicalPersona(state.active) : null;
   console.log('RightHand personas:');
   for (const n of names) {
-    const mark = state.active === n ? ' [ACTIVE]' : '';
+    const mark = active === n ? ' [ACTIVE]' : '';
     console.log(`  - ${n}${mark}`);
   }
   console.log('\nUsage: righthand switch <name> | righthand off | righthand inject');
@@ -232,13 +244,14 @@ function cmdSwitch(name) {
     process.exit(1);
   }
   const names = listProfiles();
-  if (!names.includes(name)) {
+  const canonical = canonicalPersona(name);
+  if (!names.includes(canonical)) {
     console.error(`Unknown persona: ${name}`);
     console.error(`Available: ${names.join(', ')}`);
     process.exit(1);
   }
-  writeState({ active: name, updatedAt: new Date().toISOString() }, process.cwd());
-  console.log(`Active persona set to: ${name}`);
+  writeState({ active: canonical, updatedAt: new Date().toISOString() }, process.cwd());
+  console.log(`Active persona set to: ${canonical}`);
 }
 
 function cmdOff() {
@@ -246,14 +259,28 @@ function cmdOff() {
   console.log('Persona deactivated');
 }
 
+function cmdBlastRadius(scope) {
+  const cwd = process.cwd();
+  writeState({ active: 'pinky', updatedAt: new Date().toISOString() }, cwd);
+  const raw = loadProfile('pinky');
+  const m = raw ? /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/.exec(raw) : null;
+  const body = m ? m[2].trim() : '';
+  console.log('Active persona set to: pinky (scan)');
+  if (scope) console.log('Scope: ' + scope);
+  console.log('\nBlast-radius directive (read-only; run the triage-issue skill):\n');
+  if (body) console.log(body + '\n');
+  console.log('Write the triage to .righthand/triage/<issue>.md.');
+}
+
 function cmdInject() {
   const state = readState(process.cwd());
   if (!state.active) return;
-  const raw = loadProfile(state.active);
+  const active = canonicalPersona(state.active);
+  const raw = loadProfile(active);
   if (!raw) return;
   const m = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/.exec(raw);
   const body = m ? m[2] : raw;
-  console.log(`## Active RightHand persona: ${state.active}\n\n${body.trim()}\n`);
+  console.log(`## Active RightHand persona: ${active}\n\n${body.trim()}\n`);
 }
 
 function cmdStatus() {
@@ -261,7 +288,7 @@ function cmdStatus() {
   const state = readState(cwd);
 
   if (state.active) {
-    console.log(`Active persona : ${state.active}`);
+    console.log(`Active persona : ${canonicalPersona(state.active)}`);
     if (state.updatedAt) console.log(`Last updated   : ${state.updatedAt}`);
   } else {
     console.log('Active persona : none');
@@ -289,6 +316,7 @@ function cmdStatus() {
 function cmdConfig(personaArg) {
   const cwd = process.cwd();
   const names = listProfiles();
+  const canonicalArg = personaArg ? canonicalPersona(personaArg) : null;
   let config;
   try {
     config = readConfig(cwd);
@@ -302,7 +330,7 @@ function cmdConfig(personaArg) {
 
   const configPersonas = (config && config.personas) || {};
   for (const key of Object.keys(configPersonas)) {
-    if (!names.includes(key)) {
+    if (!names.includes(key) && !names.includes(canonicalPersona(key))) {
       console.error(`Warning: .righthand/persona.json configures unknown persona "${key}"`);
     }
   }
@@ -317,7 +345,7 @@ function cmdConfig(personaArg) {
   })();
 
   if (personaArg) {
-    if (!names.includes(personaArg)) {
+    if (!names.includes(canonicalArg)) {
       console.error(`Unknown persona: ${personaArg}`);
       console.error(`Available: ${names.join(', ')}`);
       process.exit(1);
@@ -380,7 +408,7 @@ function cmdLaunch(personaName, opts) {
   }
 
   const names = listProfiles();
-  if (!names.includes(personaName)) {
+  if (!names.includes(canonicalPersona(personaName))) {
     console.error(`Unknown persona: ${personaName}`);
     console.error(`Available: ${names.join(', ')}`);
     process.exit(1);
@@ -461,6 +489,103 @@ function cmdLaunch(personaName, opts) {
   child.on('exit', (code) => {
     process.exit(code == null ? 1 : code);
   });
+}
+
+function readCouncilDiff(spec) {
+  if (spec) {
+    if (fs.existsSync(spec)) return fs.readFileSync(spec, 'utf8');
+    return '';
+  }
+  const r = spawnSync('git', ['diff', 'HEAD~1'], { encoding: 'utf8', shell: false, stdio: ['ignore', 'pipe', 'pipe'] });
+  return (r && !r.error) ? (r.stdout || '') : '';
+}
+
+function guardPromptBody() {
+  const raw = loadProfile('middle');
+  const m = raw ? /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/.exec(raw) : null;
+  return m ? m[2].trim() : '';
+}
+
+function parseFindingsBlock(text) {
+  const start = text.indexOf('{');
+  if (start === -1) return { regressions: [], contractViolations: [] };
+  const seg = text.slice(start);
+  let depth = 0;
+  for (let i = 0; i < seg.length; i++) {
+    if (seg[i] === '{') depth++;
+    else if (seg[i] === '}') {
+      depth--;
+      if (depth === 0) {
+        try { return JSON.parse(seg.slice(0, i + 1)); } catch (e) { break; }
+      }
+    }
+  }
+  return { regressions: [], contractViolations: [] };
+}
+
+function cmdCouncil(opts) {
+  opts = opts || {};
+  const engine = require('../harness/engine');
+  const models = opts.models && opts.models.length ? opts.models : ['pi'];
+  const run = !!opts.run;
+  const diff = readCouncilDiff(opts.diff);
+  const harnessKey = registry.defaultDispatchHarness() || SUPPORTED_DISPATCH_HARNESSES[0];
+  const manifest = getHarnessManifest(harnessKey);
+  const launchPerModel = models.map(function (model) {
+    const spec = manifest && typeof manifest.buildLaunch === 'function'
+      ? manifest.buildLaunch('middle', { model })
+      : { bin: manifest ? manifest.bin : 'pi', args: ['--model', model], env: { RIGHTHAND_PERSONA: 'middle' } };
+    return { model: model, spec: spec, command: formatCommand(spec.bin, spec.args), env: spec.env || {} };
+  });
+
+  if (!run) {
+    const g = guardPromptBody();
+    console.log('RightHand council (review-only; pass --run to launch the models)');
+    console.log('Chairman: palm | guard persona: middle | models: ' + models.join(', '));
+    console.log('Diff source: ' + (opts.diff || 'git diff HEAD~1'));
+    console.log('Per-model guard launch commands:');
+    for (const e of launchPerModel) {
+      console.log('  ' + e.model + ' -> ' + e.command);
+      for (const [k, v] of Object.entries(e.env)) console.log('    env ' + k + '=' + v);
+    }
+    if (g) console.log('\n--- Guard prompt (middle) ---\n' + g);
+    return;
+  }
+
+  const { spawn } = require('child_process');
+  const reviewers = launchPerModel.map(function (e) {
+    return {
+      review: function () {
+        return new Promise(function (resolve) {
+          let child;
+          try {
+            child = spawn(e.spec.bin, e.spec.args || [], { cwd: process.cwd(), env: Object.assign({}, process.env, e.env), stdio: ['ignore', 'pipe', 'pipe'] });
+          } catch (err) {
+            resolve({ regressions: [], contractViolations: [] });
+            return;
+          }
+          let out = '';
+          child.stdout.on('data', function (d) { out += d; });
+          child.on('error', function () { resolve({ regressions: [], contractViolations: [] }); });
+          child.on('exit', function () { resolve(parseFindingsBlock(out)); });
+        });
+      },
+    };
+  });
+  engine.councilReviewAsync({ harness: harnessKey, diff: diff, models: models, chairman: 'palm', reviewers: reviewers })
+    .then(function (r) {
+      const outDir = path.join(process.cwd(), '.righthand', 'council');
+      fs.mkdirSync(outDir, { recursive: true });
+      const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const file = path.join(outDir, stamp + '.md');
+      fs.writeFileSync(file, r.report + '\n## Diff (head)\n\n' + ((diff || '(no diff)').slice(0, 4000)) + '\n', 'utf8');
+      console.log(r.report);
+      console.log('Wrote: ' + file);
+    })
+    .catch(function (err) {
+      console.error('Council failed: ' + (err && err.message ? err.message : err));
+      process.exit(1);
+    });
 }
 
 function cmdSetup(target, opts) {
@@ -760,6 +885,8 @@ if (!cmd || cmd === 'list') {
   cmdSwitch(arg);
 } else if (cmd === 'off') {
   cmdOff();
+} else if (cmd === 'blast-radius') {
+  cmdBlastRadius(arg);
 } else if (cmd === 'inject') {
   cmdInject();
 } else if (cmd === 'status') {
@@ -800,6 +927,18 @@ if (!cmd || cmd === 'list') {
   const launchHarness = launchPositional.length === 2 ? launchPositional[0] : null;
   const personaName = launchPositional.length === 2 ? launchPositional[1] : launchPositional[0];
   cmdLaunch(personaName, { cwd: cwdOpt, print, harness: launchHarness });
+} else if (cmd === 'council') {
+  const rest = argv.slice(1);
+  let modelsList = [];
+  let diffSpec = null;
+  let run = false;
+  for (let i = 0; i < rest.length; i++) {
+    const a = rest[i];
+    if (a === '--models') { const v = rest[++i] || ''; modelsList = v.split(',').filter(Boolean); }
+    else if (a === '--diff') { diffSpec = rest[++i] || null; }
+    else if (a === '--run') run = true;
+  }
+  cmdCouncil({ models: modelsList, diff: diffSpec, run: run });
 } else if (cmd === '-v' || cmd === '--version' || cmd === 'version') {
   cmdVersion();
 } else if (cmd === '-h' || cmd === '--help' || cmd === 'help') {

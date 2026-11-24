@@ -5,7 +5,7 @@ Native integration for [Oh My Pi](https://github.com/canisminor-hex/oh-my-pi).
 ## Features
 - **Native Extension**: Located at `.omp/extensions/righthand.ts`
 - **Auto-discovery**: OMP auto-discovers extensions inside `<cwd>/.omp/extensions/`
-- **Dynamic Slash Command**: `/righthand` with autocomplete for all 12 personas, `/righthand list`, and `/righthand off`
+- **Dynamic Slash Command**: `/righthand` with autocomplete for all six personas, `/righthand list`, and `/righthand off`
 - **Automatic Context Injection**: Injects active persona into `systemPromptOptions.sections.righthand` before agent start
 - **Status Indicator**: Shows active persona in OMP's status bar via `ctx.ui.setStatus`
 - **CLI Sync**: Shares persistent state in `.righthand/state/active-persona.json` with the `righthand` CLI
@@ -25,12 +25,18 @@ Copy `.omp/extensions/righthand.ts` to `~/.omp/agent/extensions/righthand.ts`.
 
 ## Usage in OMP
 - `/righthand` or `/righthand list` — Open interactive picker to choose a persona
-- `/righthand backend` — Switch to `backend` persona
+- `/righthand thumb` — Switch to the `thumb` persona
 - `/righthand off` — Deactivate active persona
 
 ## Usage via CLI
 ```bash
-righthand backend
+righthand switch thumb
 righthand list
 righthand off
+```
+
+Headless run:
+
+```bash
+omp -p "$(righthand inject) <task>" --cwd <lane>
 ```

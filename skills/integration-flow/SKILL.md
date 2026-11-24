@@ -2,7 +2,6 @@
 name: integration-flow
 description: "Integrate a finished branch without conflicts: branch from a fresh main, rebase instead of merge, push with force-with-lease, and keep one pull request to one concern."
 ---
-
 # Integration Flow
 
 ## When to use
@@ -39,3 +38,4 @@ description: "Integrate a finished branch without conflicts: branch from a fresh
 
 - Never `git merge origin/main` into a feature branch, and never push a merge commit on a pull request branch.
 - One pull request, one concern: two tickets that must edit the same file are sequenced, never run in parallel.
+

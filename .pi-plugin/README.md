@@ -4,7 +4,7 @@ Native integration for [Pi Coding Agent](https://github.com/earendil-works/pi).
 
 ## Features
 - **Native Extension**: Located at `.pi-plugin/extensions/righthand.ts`
-- **Dynamic Slash Command**: `/righthand` with autocomplete for all 11 personas and `/righthand off`
+- **Dynamic Slash Command**: `/righthand` with autocomplete for all six personas and `/righthand off`
 - **Automatic Context Injection**: Injects active persona into `systemPromptOptions.sections.righthand` before agent start
 - **Status Indicator**: Shows active persona in Pi's status bar via `ctx.ui.setStatus`
 - **CLI Sync**: Shares persistent state in `.righthand/state/active-persona.json` with the `righthand` CLI

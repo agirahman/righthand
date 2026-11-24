@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Helper script to spawn an agent tab in Herdr workspace with RightHand persona.
 # Usage: ./scripts/herdr-spawn.sh <workspace> <role> [ticket] [description]
-# Example: ./scripts/herdr-spawn.sh w1 backend T1 auth-api
+# Example: ./scripts/herdr-spawn.sh w1 thumb T1 auth-api
 
 set -euo pipefail
 
@@ -12,7 +12,7 @@ DESC="${4:-}"
 
 if [[ -z "$WORKSPACE" || -z "$ROLE" ]]; then
   echo "Usage: $0 <workspace> <role> [ticket] [description]"
-  echo "Example: $0 w1 backend T1 auth-api"
+  echo "Example: $0 w1 thumb T1 auth-api"
   exit 1
 fi
 
@@ -21,7 +21,9 @@ if [[ -n "$TICKET" ]]; then
   LABEL="$ROLE-$TICKET"
 fi
 
-WRITER_ROLES=("backend" "frontend" "devops" "worker")
+# Canonical writers first, then the legacy names that resolve onto them, so an
+# un-migrated invocation still gets its worktree lane.
+WRITER_ROLES=("thumb" "ring" "backend" "frontend" "devops" "worker")
 IS_WRITER=false
 
 for r in "${WRITER_ROLES[@]}"; do

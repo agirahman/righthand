@@ -128,7 +128,7 @@ expectThrow('unsupported harness throws ConfigError', 'not supported for dispatc
   try {
     const dir = path.join(d, '.righthand');
     fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(path.join(dir, 'persona.json'), JSON.stringify({ personas: { backend: { harness: 'omp' } } }));
+    fs.writeFileSync(path.join(dir, 'persona.json'), JSON.stringify({ personas: { backend: { harness: 'no-such-harness' } } }));
     pc.resolvePersona(d, 'backend', { orchestratorModel: 'm' });
   } finally { rmTmp(d); }
 });
@@ -321,7 +321,7 @@ expectThrow('non-object models throws ConfigError', '"models" must be an object'
 expectThrow('unknown harness key in models throws ConfigError', 'is not supported for dispatch', () => {
   const d = mkTmp();
   try {
-    writeConfig(d, { worker: { models: { omp: 'model' } } });
+    writeConfig(d, { worker: { models: { 'no-such-harness': 'model' } } });
     pc.resolvePersona(d, 'worker', { orchestratorModel: 'm' });
   } finally { rmTmp(d); }
 });

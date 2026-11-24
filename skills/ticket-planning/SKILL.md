@@ -2,7 +2,6 @@
 name: ticket-planning
 description: Decompose an initiative into atomic, ticket-scoped units with a clear contract, dependencies, and acceptance criteria before any implementation starts.
 ---
-
 # Ticket Planning
 
 ## When to use

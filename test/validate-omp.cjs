@@ -72,11 +72,11 @@ try {
   const completions = command.config.getArgumentCompletions('');
   const completionNames = completions?.map((item) => item.value) || [];
   check('completions include list, off, all shipped personas and user persona',
-    ['list', 'off', 'code-reviewer', 'worker', 'custom-user-persona'].every((name) => completionNames.includes(name)) && completionNames.length === 14);
+    ['list', 'off', 'middle', 'thumb', 'custom-user-persona'].every((name) => completionNames.includes(name)) && completionNames.length === 9);
   process.chdir(previousCwd);
 
   const toolCall = (toolName, input) => handlers.get('tool_call')({ type: 'tool_call', toolCallId: 'test', toolName, input }, ctx);
-  fs.writeFileSync(statePath, JSON.stringify({ active: 'code-reviewer' }));
+  fs.writeFileSync(statePath, JSON.stringify({ active: 'middle' }));
   const readonlyDecisions = {
     'write src/file.ts': toolCall('write', { path: 'src/file.ts', content: 'x' })?.block === true,
     'write report': toolCall('write', { path: '.righthand/tickets/T70/reports/result.md', content: 'x' })?.block === true,
@@ -97,7 +97,7 @@ try {
   check('Windows bash process substitution blocks under per-call POSIX dialect',
     process.platform !== 'win32' || readonlyDecisions['bash process substitution']);
 
-  fs.writeFileSync(statePath, JSON.stringify({ active: 'worker' }));
+  fs.writeFileSync(statePath, JSON.stringify({ active: 'thumb' }));
   const writerDecisions = {
     'write src/file.ts': toolCall('write', { path: 'src/file.ts', content: 'x' })?.block === true,
     'write report': toolCall('write', { path: '.righthand/tickets/T70/reports/result.md', content: 'x' })?.block === true,
@@ -111,14 +111,14 @@ try {
   fs.writeFileSync(statePath, JSON.stringify({ active: null }));
   check('no active persona allows every tested tool',
     ['write', 'bash', 'read', 'grep', 'glob'].every((toolName) => toolCall(toolName, { path: 'src/file.ts', command: 'rm -rf src/file.ts' })?.block !== true));
-  fs.writeFileSync(statePath, JSON.stringify({ active: 'code-reviewer' }));
+  fs.writeFileSync(statePath, JSON.stringify({ active: 'middle' }));
   check('tool_call fails closed when guard evaluation throws',
     toolCall('write', new Proxy({}, { ownKeys() { throw new Error('forced guard failure'); } }))?.block === true);
 
   const previousPersonaEnv = process.env.RIGHTHAND_PERSONA;
   try {
-    fs.writeFileSync(statePath, JSON.stringify({ active: 'code-reviewer' }));
-    process.env.RIGHTHAND_PERSONA = 'worker';
+    fs.writeFileSync(statePath, JSON.stringify({ active: 'middle' }));
+    process.env.RIGHTHAND_PERSONA = 'thumb';
     check('env channel overrides the state file persona',
       toolCall('write', { path: 'src/file.ts', content: 'x' })?.block !== true);
     delete process.env.RIGHTHAND_PERSONA;
@@ -129,27 +129,27 @@ try {
     else process.env.RIGHTHAND_PERSONA = previousPersonaEnv;
   }
 
-  fs.writeFileSync(statePath, JSON.stringify({ active: 'worker' }));
+  fs.writeFileSync(statePath, JSON.stringify({ active: 'thumb' }));
   const promptEvent = { systemPromptOptions: { sections: {} } };
   handlers.get('before_agent_start')(promptEvent, ctx);
   check('before_agent_start populates shared persona prompt',
-    promptEvent.systemPromptOptions.sections.righthand?.includes('Active RightHand Persona: worker (General Worker) [mode: writer]') === true);
+    promptEvent.systemPromptOptions.sections.righthand?.includes('Active RightHand Persona: thumb (Builder) [mode: writer]') === true);
   handlers.get('session_start')({}, ctx);
-  check('session_start sets RightHand status', statuses.at(-1)?.key === 'righthand' && statuses.at(-1).value.includes('worker'));
+  check('session_start sets RightHand status', statuses.at(-1)?.key === 'righthand' && statuses.at(-1).value.includes('thumb'));
   handlers.get('session_shutdown')({}, ctx);
   check('session_shutdown clears RightHand status', statuses.at(-1)?.key === 'righthand' && statuses.at(-1).value === undefined);
 
   const selectItems = [];
   ctx.ui.select = async (title, items) => {
     selectItems.push({ title, items });
-    return items.find((item) => item.includes('worker ('));
+    return items.find((item) => item.includes('thumb ('));
   };
   (async () => {
     await command.config.handler('list', ctx);
     check('list UI keeps selection title and deactivate entry',
       selectItems[0]?.title === 'Select RightHand Persona' && selectItems[0].items[0].startsWith('[Deactivate] off'));
     check('list flow activates selection and notifies',
-      JSON.parse(fs.readFileSync(statePath, 'utf8')).active === 'worker' && notifications.at(-1)?.message.includes('Switched to RightHand persona: worker'));
+      JSON.parse(fs.readFileSync(statePath, 'utf8')).active === 'thumb' && notifications.at(-1)?.message.includes('Switched to RightHand persona: thumb'));
 
     await command.config.handler('off', ctx);
     check('off command deactivates and notifies',

@@ -18,21 +18,21 @@ function check(label, fn) {
 }
 
 check('model present: -m with exact model in right order', () => {
-  const args = launch.buildLaunchArgs('worker', { model: 'reflection/beam:free' });
-  const expected = ['-t', '--yolo', '-m', 'reflection/beam:free', '--mod-option', 'default=worker'];
+  const args = launch.buildLaunchArgs('thumb', { model: 'reflection/beam:free' });
+  const expected = ['-t', '--yolo', '-m', 'reflection/beam:free', '--mod-option', 'default=thumb'];
   if (JSON.stringify(args) !== JSON.stringify(expected)) throw new Error(JSON.stringify(args));
 });
 
 check('model absent: no -m at all', () => {
-  const args = launch.buildLaunchArgs('backend', { model: '' });
+  const args = launch.buildLaunchArgs('index', { model: '' });
   if (args.includes('-m')) throw new Error('unexpected -m');
-  const expected = ['-t', '--yolo', '--mod-option', 'default=backend'];
+  const expected = ['-t', '--yolo', '--mod-option', 'default=index'];
   if (JSON.stringify(args) !== JSON.stringify(expected)) throw new Error(JSON.stringify(args));
 });
 
 check('model absent (null resolution): no -m', () => {
-  const args = launch.buildLaunchArgs('backend', null);
-  if (JSON.stringify(args) !== JSON.stringify(['-t', '--yolo', '--mod-option', 'default=backend'])) throw new Error(JSON.stringify(args));
+  const args = launch.buildLaunchArgs('index', null);
+  if (JSON.stringify(args) !== JSON.stringify(['-t', '--yolo', '--mod-option', 'default=index'])) throw new Error(JSON.stringify(args));
 });
 
 check('persona with spaces stays single --mod-option arg', () => {
@@ -61,9 +61,11 @@ const fs = require('node:fs');
 const os = require('node:os');
 const { spawnSync } = require('node:child_process');
 
-const PERSONA = 'worker';
+const PERSONA = 'thumb';
 const CMDC_MODEL = '9router-bili/cmc/deepseek/deepseek-v4.1-flash';
 const PI_MODEL = '9router/agness/agnes-2.5-flash';
+const OMP_MODEL = 'omp-probe-model';
+const OC_MODEL = 'probe-prov/oc-probe-model';
 
 check('CLI-level checks derive the bin from launch.CMDC_BIN', () => {
   if (launch.CMDC_BIN !== 'cmdc' && launch.CMDC_BIN !== 'cmd') {
@@ -91,7 +93,7 @@ function mkProject(personas) {
 
 function launchPrint(dir, args) {
   const env = Object.assign({}, process.env);
-  // The orchestrator model must not leak in: these checks are about the config.
+  // The palm model must not leak in: these checks are about the config.
   delete env.HERDR_PANE_ID;
   delete env.RIGHTHAND_PERSONA;
   const r = spawnSync(process.execPath, [path.join(root, 'bin', 'righthand.js'), 'launch', ...args, '--print'], {
@@ -104,15 +106,15 @@ function launchPrint(dir, args) {
   return (r.stdout || '').replace(/\r\n/g, '\n').trim();
 }
 
-check('launch worker --print is byte-identical to the pre-change baseline', () => {
+check('launch thumb --print is byte-identical to the pre-change baseline', () => {
   const dir = mkProject(null);
   try {
     const out = launchPrint(dir, [PERSONA]);
-    if (out !== `${launch.CMDC_BIN} -t --yolo --mod-option default=worker`) throw new Error(out);
+    if (out !== `${launch.CMDC_BIN} -t --yolo --mod-option default=thumb`) throw new Error(out);
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
-check('launch pi worker --print never forwards the commandcode model', () => {
+check('launch pi thumb --print never forwards the commandcode model', () => {
   const dir = mkProject({ [PERSONA]: { harness: 'commandcode', model: CMDC_MODEL } });
   try {
     const out = launchPrint(dir, ['pi', PERSONA]);
@@ -122,7 +124,7 @@ check('launch pi worker --print never forwards the commandcode model', () => {
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
-check('launch pi worker --print emits exactly the pi models entry', () => {
+check('launch pi thumb --print emits exactly the pi models entry', () => {
   const dir = mkProject({ [PERSONA]: { harness: 'commandcode', model: CMDC_MODEL, models: { pi: PI_MODEL } } });
   try {
     const out = launchPrint(dir, ['pi', PERSONA]);
@@ -133,11 +135,55 @@ check('launch pi worker --print emits exactly the pi models entry', () => {
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
-check('launch worker --print keeps the commandcode model when models is present', () => {
+check('launch thumb --print keeps the commandcode model when models is present', () => {
   const dir = mkProject({ [PERSONA]: { harness: 'commandcode', model: CMDC_MODEL, models: { pi: PI_MODEL } } });
   try {
     const out = launchPrint(dir, [PERSONA]);
-    if (out !== `${launch.CMDC_BIN} -t --yolo -m ${CMDC_MODEL} --mod-option default=worker`) throw new Error(out);
+    if (out !== `${launch.CMDC_BIN} -t --yolo -m ${CMDC_MODEL} --mod-option default=thumb`) throw new Error(out);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+check('launch omp thumb --print loads the repo extension with an absolute -e path', () => {
+  const dir = mkProject({ [PERSONA]: { harness: 'commandcode', model: CMDC_MODEL } });
+  try {
+    const out = launchPrint(dir, ['omp', PERSONA]);
+    if (out.includes(CMDC_MODEL)) throw new Error(`forwarded cmdc model: ${out}`);
+    const lines = out.split('\n');
+    // The path is quoted only when it contains a space, so Windows and POSIX agree.
+    const m = /^omp -e (".*"|\S+)$/.exec(lines[0]);
+    if (!m) throw new Error(out);
+    // quoteArg escapes backslashes for display, so undo that before resolving.
+    const extPath = m[1].replace(/^"|"$/g, '').replace(/\\\\/g, '\\');
+    if (!path.isAbsolute(extPath)) throw new Error('extension path is not absolute: ' + extPath);
+    if (!extPath.endsWith(path.join('.omp', 'extensions', 'righthand.ts'))) throw new Error('wrong extension: ' + extPath);
+    if (lines[1] !== `env: RIGHTHAND_PERSONA=${PERSONA}`) throw new Error(out);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+check('launch omp thumb --print emits exactly the omp models entry', () => {
+  const dir = mkProject({ [PERSONA]: { harness: 'commandcode', model: CMDC_MODEL, models: { omp: OMP_MODEL } } });
+  try {
+    const out = launchPrint(dir, ['omp', PERSONA]);
+    const first = out.split('\n')[0];
+    if (!first.endsWith(` --model=${OMP_MODEL}`)) throw new Error(out);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+check('launch opencode thumb --print forwards the opencode model through run', () => {
+  const dir = mkProject({ [PERSONA]: { harness: 'commandcode', model: CMDC_MODEL, models: { opencode: OC_MODEL } } });
+  try {
+    const out = launchPrint(dir, ['opencode', PERSONA]);
+    if (out.includes(CMDC_MODEL)) throw new Error(`forwarded cmdc model: ${out}`);
+    if (out !== `opencode run -m ${OC_MODEL} --auto\nenv: RIGHTHAND_PERSONA=${PERSONA}`) throw new Error(out);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+check('launch opencode thumb --print stays the bare TUI without a model', () => {
+  const dir = mkProject({ [PERSONA]: { harness: 'commandcode', model: CMDC_MODEL } });
+  try {
+    const out = launchPrint(dir, ['opencode', PERSONA]);
+    if (out.includes('run')) throw new Error(`unexpected run subcommand: ${out}`);
+    if (out !== `opencode\nenv: RIGHTHAND_PERSONA=${PERSONA}`) throw new Error(out);
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 

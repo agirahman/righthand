@@ -2,7 +2,6 @@
 name: context-briefing
 description: Assemble the self-contained brief a dispatched agent receives, including ticket, scope, constraints, and absolute report path.
 ---
-
 # Context Briefing
 
 ## When to use

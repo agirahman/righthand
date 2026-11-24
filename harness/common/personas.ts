@@ -2,8 +2,26 @@ import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { getRepoRoot } from './repo-root.js';
+import { resolvePersonaName } from './aliases.js';
 
-export const RETIRED_PERSONAS: string[] = ['editor'];
+export const RETIRED_PERSONAS: string[] = ['editor','architect','backend','code-reviewer','devops','frontend','orchestrator','product-manager','security-auditor','test-engineer','web-performance-auditor','worker'];
+
+// A profile map that also answers legacy and role-word persona names.
+// A retired name such as 'architect' or 'backend' still finds its canonical
+// anatomy persona, so a stale config, a stale state file, or a habit typed at
+// the command line keeps working after the eleven were folded into six.
+// Iteration, keys(), size and has() stay exactly the canonical set, so lists,
+// completion, and 'unknown persona' checks never see an alias as a persona.
+class AliasAwareMap<V> extends Map<string, V> {
+  override get(key: string): V | undefined {
+    const direct = super.get(key);
+    if (direct !== undefined) return direct;
+    if (typeof key !== 'string' || key === '') return undefined;
+    const canonical = resolvePersonaName(key).canonical;
+    if (canonical === key) return undefined;
+    return super.get(canonical);
+  }
+}
 
 export type ProfileMode = 'writer' | 'readonly';
 
@@ -125,7 +143,7 @@ export function parseProfileFile(filePath: string, fallbackName: string): Profil
 }
 
 export function loadAllProfiles(cwd: string, dirs?: ProfileLoadDirs): Map<string, ProfileMetadata> {
-  const map = new Map<string, ProfileMetadata>();
+  const map = new AliasAwareMap<ProfileMetadata>();
 
   // Resolve directories, defaulting to today's paths so existing single-arg
   // call sites keep working unchanged.
@@ -229,7 +247,7 @@ export function loadAllProfiles(cwd: string, dirs?: ProfileLoadDirs): Map<string
 
 export function loadAllPersonas(cwd: string, dirs?: ProfileLoadDirs): Map<string, PersonaMetadata> {
   const profiles = loadAllProfiles(cwd, dirs);
-  const personas = new Map<string, PersonaMetadata>();
+  const personas = new AliasAwareMap<PersonaMetadata>();
   for (const [name, profile] of profiles) {
     personas.set(name, {
       name: profile.name,

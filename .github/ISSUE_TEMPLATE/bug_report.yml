@@ -18,11 +18,7 @@ body:
         - Pi (.pi-plugin)
         - Oh My Pi (.omp)
         - OpenCode (.opencode-plugin)
-        - Cursor (.cursor-plugin)
         - DeepSeek Harness (DSH)
-        - Claude Code (.claude-plugin)
-        - Codex (.codex-plugin)
-        - Kimi (.kimi-plugin)
         - CLI Executable (bin/righthand.js)
         - Other / Not Applicable
     validations:
@@ -44,17 +40,12 @@ body:
       options:
         - All / Core Engine
         - CLI (righthand switch / inject)
-        - architect (Software Architect)
-        - backend (Backend Engineer)
-        - code-reviewer (Senior Code Reviewer)
-        - devops (DevOps Engineer)
-        - frontend (Frontend Engineer)
-        - orchestrator (Team Orchestrator)
-        - product-manager (Product Manager)
-        - security-auditor (Security Auditor)
-        - test-engineer (Test Engineer)
-        - web-performance-auditor (Web Performance Auditor)
-        - worker (General Worker)
+        - palm (Team Orchestrator)
+        - index (Software Architect)
+        - pinky (Scout and Blast-Radius Investigator)
+        - thumb (Builder)
+        - ring (Frontend Engineer)
+        - middle (Senior Code Reviewer)
     validations:
       required: true
 
