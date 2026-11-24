@@ -149,7 +149,13 @@ check('launch omp thumb --print loads the repo extension with an absolute -e pat
     const out = launchPrint(dir, ['omp', PERSONA]);
     if (out.includes(CMDC_MODEL)) throw new Error(`forwarded cmdc model: ${out}`);
     const lines = out.split('\n');
-    if (!/^omp -e ".*righthand\.ts"$/.test(lines[0])) throw new Error(out);
+    // The path is quoted only when it contains a space, so Windows and POSIX agree.
+    const m = /^omp -e (".*"|\S+)$/.exec(lines[0]);
+    if (!m) throw new Error(out);
+    // quoteArg escapes backslashes for display, so undo that before resolving.
+    const extPath = m[1].replace(/^"|"$/g, '').replace(/\\\\/g, '\\');
+    if (!path.isAbsolute(extPath)) throw new Error('extension path is not absolute: ' + extPath);
+    if (!extPath.endsWith(path.join('.omp', 'extensions', 'righthand.ts'))) throw new Error('wrong extension: ' + extPath);
     if (lines[1] !== `env: RIGHTHAND_PERSONA=${PERSONA}`) throw new Error(out);
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
