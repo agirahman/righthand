@@ -43,6 +43,8 @@ try {
   fs.mkdirSync(path.join(projDir, 'profiles'), { recursive: true });
   fs.writeFileSync(path.join(projDir, 'profiles', 'index.md'), 'PROJECT PROFILES BODY');
   fs.writeFileSync(path.join(projDir, '.commandcode', 'profiles', 'index.md'), 'PROJECT BODY');
+  fs.writeFileSync(path.join(projDir, '.commandcode', 'profiles', 'editor.md'), 'PROJECT RETIRED BODY');
+  fs.writeFileSync(path.join(projDir, '.commandcode', 'profiles', 'my-project-persona.md'), 'PROJECT CUSTOM BODY');
 
   const profiles = loadAllProfiles(projDir, {
     packageDir: path.join(pkgDir, 'profiles'),
@@ -66,7 +68,9 @@ try {
     userDir,
     projectDirs: [path.join(projDir, 'profiles'), path.join(projDir, '.commandcode', 'profiles')],
   });
-  check('project profiles loses to project .commandcode', overridden.get('index') && overridden.get('index').body === 'PROJECT BODY');
+  check('shipped project persona does not override the package body', overridden.get('index') && overridden.get('index').body === 'PKG BODY');
+  check('retired project persona is absent', !overridden.has('editor'));
+  check('custom project persona still loads', overridden.get('my-project-persona') && overridden.get('my-project-persona').body === 'PROJECT CUSTOM BODY');
 
   // missing package dir: legacy loads as custom
   const missingPkg = loadAllProfiles(projDir, {

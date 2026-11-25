@@ -1,14 +1,13 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { evaluateToolGuard } from "../../guard/engine";
 import { piGuardMap } from "./guard-map";
-import { getRepoRoot, loadAllPersonas, type PersonaMetadata } from "../common/index";
+import { getPackageProfilesDir, loadAllPersonas, type PersonaMetadata } from "../common/index";
 import { readActivePersona, writeActivePersona } from "../common/state";
 import { buildPersonaPrompt } from "../common/prompt";
 import { buildStatusLabel } from "../common/status";
 import { completionCandidates, parseRighthandArgs } from "../common/commands";
-import { join } from "node:path";
 
-const packageProfilesDir = join(getRepoRoot(), "profiles");
+const packageProfilesDir = getPackageProfilesDir();
 const loadPiPersonas = (cwd: string): Map<string, PersonaMetadata> =>
   loadAllPersonas(cwd, { packageDir: packageProfilesDir });
 

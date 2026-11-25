@@ -5,6 +5,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { bundle } = require('../scripts/bundle-harness.js');
+const { spawnSync } = require('node:child_process');
 
 const root = path.join(__dirname, '..');
 const extensionPath = path.join(root, 'dist', '.omp', 'extensions', 'righthand.js');
@@ -43,6 +44,68 @@ try {
     '---\nname: custom-user-persona\nrole: User Custom Persona\nmode: readonly\n---\nUser-tier persona');
   process.env.USERPROFILE = userHome;
   process.env.HOME = userHome;
+
+  // OMP now installs under the OMP home tree (~/.omp/agent or $PI_CONFIG_DIR/agent),
+  // not in the project cwd.
+  const { HARNESSES, resolveDestBase } = require('../bin/harness');
+  const ompManifest = require('../harness/omp/manifest.js');
+  check('omp manifest declares destBase omp and agent-relative files dest',
+    HARNESSES.omp.destBase === 'omp' &&
+    HARNESSES.omp.files.length === 1 &&
+    HARNESSES.omp.files[0].src === '.omp/extensions/righthand.ts' &&
+    HARNESSES.omp.files[0].dest === 'agent/extensions/righthand.ts' &&
+    typeof ompManifest.skillsTarget === 'function');
+  check('resolveDestBase resolves omp under the OMP home tree',
+    resolveDestBase(HARNESSES.omp) === path.join(userHome, '.omp'));
+  const previousPiConfigDir = process.env.PI_CONFIG_DIR;
+  process.env.PI_CONFIG_DIR = path.join(base, 'pi-config');
+  check('resolveDestBase and skillsTarget honor PI_CONFIG_DIR',
+    resolveDestBase(HARNESSES.omp) === path.join(base, 'pi-config') &&
+    ompManifest.skillsTarget({}) === path.join(base, 'pi-config', 'agent', 'skills'));
+  if (previousPiConfigDir === undefined) delete process.env.PI_CONFIG_DIR;
+  else process.env.PI_CONFIG_DIR = previousPiConfigDir;
+  check('omp skillsTarget defaults to ~/.omp/agent/skills',
+    ompManifest.skillsTarget({}) === path.join(userHome, '.omp', 'agent', 'skills'));
+  check('omp skillsTarget prefers explicit target options',
+    ompManifest.skillsTarget({ dest: 'x' }) === 'x' &&
+    ompManifest.skillsTarget({ home: 'y' }) === path.join('y', '.omp', 'agent', 'skills'));
+
+  // setup omp must land the extension, the persona tree and the package skills
+  // in the OMP home tree, and leave the project directory untouched.
+  const cliDir = path.join(base, 'cli');
+  const projectDir = path.join(base, 'project');
+  fs.mkdirSync(projectDir, { recursive: true });
+  for (const name of ['bin', 'harness', 'profiles', 'skills', '.omp']) {
+    fs.cpSync(path.join(root, name), path.join(cliDir, name), { recursive: true });
+  }
+  fs.copyFileSync(path.join(root, 'package.json'), path.join(cliDir, 'package.json'));
+  const setupEnv = { ...process.env, USERPROFILE: userHome, HOME: userHome };
+  delete setupEnv.PI_CONFIG_DIR;
+  const setup = spawnSync(process.execPath, [path.join(cliDir, 'bin', 'righthand.js'), 'setup', 'omp'], {
+    cwd: projectDir,
+    env: setupEnv,
+    encoding: 'utf8',
+  });
+  const ompExtDir = path.join(userHome, '.omp', 'agent', 'extensions');
+  check('setup omp exits 0 and reports the new paths',
+    setup.status === 0 &&
+    setup.stdout.includes(path.join(ompExtDir, 'righthand.ts')) &&
+    setup.stdout.includes(path.join(ompExtDir, 'righthand-profiles')));
+  check('setup omp copies the extension to ~/.omp/agent/extensions',
+    fs.existsSync(path.join(ompExtDir, 'righthand.ts')));
+  const shippedProfiles = path.join(ompExtDir, 'righthand-profiles');
+  const repoProfileCount = fs.readdirSync(path.join(root, 'profiles')).filter((f) => f.endsWith('.md')).length;
+  const shippedProfileCount = fs.existsSync(shippedProfiles)
+    ? fs.readdirSync(shippedProfiles).filter((f) => f.endsWith('.md')).length
+    : 0;
+  check('setup omp ships every package persona next to the extension',
+    repoProfileCount > 0 && shippedProfileCount === repoProfileCount);
+  const skillsRoot = path.join(userHome, '.omp', 'agent', 'skills');
+  check('setup omp syncs package skills to ~/.omp/agent/skills',
+    fs.existsSync(skillsRoot) &&
+    fs.readdirSync(skillsRoot).filter((n) => !n.startsWith('.')).length > 0);
+  check('setup omp writes nothing into the project directory',
+    !fs.existsSync(path.join(projectDir, '.omp')));
 
   const handlers = new Map();
   let command;

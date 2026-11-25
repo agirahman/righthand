@@ -1,6 +1,6 @@
 import { evaluateToolGuard } from "../../guard/engine.js";
 import { Plugin } from "@opencode/plugin";
-import { loadAllPersonas, getRepoRoot, type PersonaMetadata } from "../common/index.js";
+import { loadAllPersonas, getPackageProfilesDir, type PersonaMetadata } from "../common/index.js";
 import { buildPersonaPrompt } from "../common/prompt.js";
 import { join } from "node:path";
 import { openCodeGuardMap } from "./guard-map.js";
@@ -12,7 +12,7 @@ const resolveProjectDirectory = (context?: any): string => {
   return typeof directory === "string" && directory.trim() !== "" ? directory : process.cwd();
 };
 
-const packageProfilesDir = join(getRepoRoot(), "profiles");
+const packageProfilesDir = getPackageProfilesDir();
 const loadOpenCodePersonas = (cwd: string): Map<string, PersonaMetadata> =>
   loadAllPersonas(cwd, {
     packageDir: packageProfilesDir,

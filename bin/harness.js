@@ -24,6 +24,12 @@ function configBaseDir() {
 
 function resolveDestBase(h) {
   if (h && h.destBase === 'home') return configBaseDir();
+  if (h && h.destBase === 'omp') {
+    // OMP keeps its extension tree under $PI_CONFIG_DIR when that override
+    // is set, otherwise under ~/.omp.
+    if (process.env.PI_CONFIG_DIR) return process.env.PI_CONFIG_DIR;
+    return path.join(os.homedir(), '.omp');
+  }
   return process.cwd();
 }
 

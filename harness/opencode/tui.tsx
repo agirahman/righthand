@@ -1,45 +1,23 @@
-import { Plugin, usePlugin } from "@opencode/plugin/tui";
-import { Show, createMemo } from "solid-js";
-import { loadAllPersonas, getRepoRoot, type PersonaMetadata } from "../common/index.js";
+import { Plugin } from "@opencode/plugin/tui";
+import { loadAllPersonas, getPackageProfilesDir, type PersonaMetadata } from "../common/index.js";
 import { parseRighthandArgs } from "../common/commands.js";
 import { writeActivePersona } from "../common/state.js";
 import { join } from "node:path";
 import { activePersonaForSession, loadSessionState, MAX_AGE, saveSessionState } from "./state.js";
 
-const packageProfilesDir = join(getRepoRoot(), "profiles");
+const packageProfilesDir = getPackageProfilesDir();
 const loadOpenCodePersonas = (cwd: string): Map<string, PersonaMetadata> =>
   loadAllPersonas(cwd, {
     packageDir: packageProfilesDir,
     projectDirs: [join(cwd, "profiles"), join(cwd, ".commandcode", "profiles"), join(cwd, ".opencode", "profiles")],
   });
 
-function PersonaFooter(props: { sessionID?: string; active: Record<string, string>; available: PersonaMetadata[] }) {
-  const context = usePlugin() as any;
-  const isChild = createMemo(() => {
-    const id = props.sessionID;
-    if (!id) return false;
-    return Boolean(context.data.session.get(id)?.parentID);
-  });
-  const label = createMemo(() => {
-    const id = props.sessionID;
-    if (!id) return undefined;
-    const name = props.active[id] ?? activePersonaForSession(id, process.cwd());
-    if (!name) return undefined;
-    const persona = props.available.find((item) => item.name.toLowerCase() === name.toLowerCase());
-    return persona ? persona.role : name;
-  });
-
-  // @ts-ignore
-  return <Show when={Boolean(props.sessionID) && !isChild()}><text fg={label() ? context.theme.text.base : context.theme.text.muted}>{`persona: ${label() ?? "off"}`}</text></Show>;
-}
-
 export const righthandOpenCodeTui = Plugin.define({
   id: "user.righthand",
 
   setup(context: any) {
     const cwd = process.cwd();
-    const available = Array.from(loadOpenCodePersonas(cwd).values()).sort((a, b) => a.name.localeCompare(b.name));
-    const [store, update] = context.storage.store("righthand", { initial: { active: {} } });
+    const [, update] = context.storage.store("righthand", { initial: { active: {} } });
 
     const hydrate = () => {
       const now = Date.now();
@@ -160,14 +138,6 @@ export const righthandOpenCodeTui = Plugin.define({
         run: (input: string) => run(input),
       }],
     }));
-
-    context.ui.slot({
-      append: "prompt.footer.status",
-      render: (input: { sessionID?: string }) => {
-        // @ts-ignore
-        return <PersonaFooter sessionID={input.sessionID} active={store.active} available={available} />;
-      },
-    });
   },
 });
 

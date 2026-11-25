@@ -1,13 +1,12 @@
 import { evaluateToolGuard } from '../../guard/engine.js';
-import { getRepoRoot, loadAllPersonas, type PersonaMetadata } from '../common/index.js';
+import { getPackageProfilesDir, loadAllPersonas, type PersonaMetadata } from '../common/index.js';
 import { readActivePersona, writeActivePersona } from '../common/state.js';
 import { buildPersonaPrompt } from '../common/prompt.js';
 import { buildStatusLabel } from '../common/status.js';
 import { completionCandidates } from '../common/commands.js';
-import { join } from 'node:path';
 import { ompGuardMap } from './guard-map.js';
 
-const packageProfilesDir = join(getRepoRoot(), 'profiles');
+const packageProfilesDir = getPackageProfilesDir();
 const loadOmpPersonas = (cwd: string): Map<string, PersonaMetadata> =>
   loadAllPersonas(cwd, { packageDir: packageProfilesDir });
 
