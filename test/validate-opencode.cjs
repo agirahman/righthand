@@ -245,7 +245,6 @@ async function main() {
     let tuiList = '';
     const tuiToasts = [];
     const tuiContext = {
-      storage: { store(_name, config) { return [config.initial, async () => {}]; } },
       keymap: { layer(factory) { tui.layers.push(factory()); } },
       ui: {
         slot(config) { tui.slots.push(config); },
@@ -257,6 +256,7 @@ async function main() {
       theme: { text: { base: '', muted: '' } },
     };
     check('TUI plugin id is unchanged', tui.definition.id === 'user.righthand');
+    check('TUI bundle does not depend on a storage API', !/context\.storage\b/.test(tui.source));
     tui.definition.setup(tuiContext);
     check('TUI drops the footer slot and keeps the global slash command layer',
       tui.slots.length === 0 && tui.layers[0]?.mode === 'global' &&

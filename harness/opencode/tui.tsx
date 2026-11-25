@@ -3,7 +3,7 @@ import { loadAllPersonas, getPackageProfilesDir, type PersonaMetadata } from "..
 import { parseRighthandArgs } from "../common/commands.js";
 import { writeActivePersona } from "../common/state.js";
 import { join } from "node:path";
-import { activePersonaForSession, loadSessionState, MAX_AGE, saveSessionState } from "./state.js";
+import { activePersonaForSession, loadSessionState, saveSessionState } from "./state.js";
 
 const packageProfilesDir = getPackageProfilesDir();
 const loadOpenCodePersonas = (cwd: string): Map<string, PersonaMetadata> =>
@@ -17,20 +17,6 @@ export const righthandOpenCodeTui = Plugin.define({
 
   setup(context: any) {
     const cwd = process.cwd();
-    const [, update] = context.storage.store("righthand", { initial: { active: {} } });
-
-    const hydrate = () => {
-      const now = Date.now();
-      const active: Record<string, string> = {};
-      for (const [id, entry] of Object.entries(loadSessionState().sessions)) {
-        if (!entry.persona || now - (entry.updated ?? 0) > MAX_AGE) continue;
-        active[id] = entry.persona;
-      }
-      void update((draft: any) => {
-        draft.active = active;
-      });
-    };
-    hydrate();
 
     const apply = async (sessionID: string, persona?: PersonaMetadata) => {
       const state = loadSessionState();
@@ -39,10 +25,6 @@ export const righthandOpenCodeTui = Plugin.define({
       saveSessionState(state);
       writeActivePersona(cwd, persona?.name.toLowerCase() ?? null);
 
-      await update((draft: any) => {
-        if (persona) draft.active[sessionID] = persona.name.toLowerCase();
-        else delete draft.active[sessionID];
-      });
       context.ui.toast.show({
         message: persona
           ? `RightHand persona: ${persona.role} (${persona.mode})`
