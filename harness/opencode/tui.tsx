@@ -1,5 +1,6 @@
 import { Plugin } from "@opencode/plugin/tui";
-import { loadAllPersonas, getPackageProfilesDir, type PersonaMetadata } from "../common/index.js";
+import { jsx } from "@opentui/solid/jsx-runtime";
+import { loadAllPersonas, buildStatusLabel, getPackageProfilesDir, type PersonaMetadata } from "../common/index.js";
 import { parseRighthandArgs } from "../common/commands.js";
 import { writeActivePersona } from "../common/state.js";
 import { join } from "node:path";
@@ -17,6 +18,24 @@ export const righthandOpenCodeTui = Plugin.define({
 
   setup(context: any) {
     const cwd = process.cwd();
+    const personas = () => loadOpenCodePersonas(cwd);
+    const statusLabel = (slotSessionID?: string) => {
+      const sessionID = slotSessionID ?? context.ui.router.current()?.sessionID ?? "";
+      const root = context.data?.session?.root?.(sessionID);
+      if (sessionID && root && root !== sessionID) return undefined;
+      const name = activePersonaForSession(sessionID, cwd);
+      const persona = name ? personas().get(name.toLowerCase()) : undefined;
+      return buildStatusLabel(persona ? { name: persona.name, role: persona.role } : null);
+    };
+    if (typeof context.ui?.slot === "function") {
+      context.ui.slot({
+        append: "prompt.footer.status",
+        render: (input: { sessionID?: string }) => {
+          const label = statusLabel(input?.sessionID);
+          return label ? jsx("text", { content: label }) : null;
+        },
+      });
+    }
 
     const apply = async (sessionID: string, persona?: PersonaMetadata) => {
       const state = loadSessionState();
@@ -45,7 +64,7 @@ export const righthandOpenCodeTui = Plugin.define({
         return;
       }
 
-      const profiles = Array.from(loadOpenCodePersonas(cwd).values()).sort((a, b) => a.name.localeCompare(b.name));
+      const profiles = Array.from(personas().values()).sort((a, b) => a.name.localeCompare(b.name));
       const currentName = activePersonaForSession(sessionID, cwd) ?? undefined;
       const rawArg = (input ?? "").trim().toLowerCase();
       const action = parseRighthandArgs(rawArg);

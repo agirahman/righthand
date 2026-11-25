@@ -42,6 +42,10 @@ declare module '@opencode/plugin/tui' {
   export function usePlugin(): unknown;
 }
 
+declare module '@opentui/solid/jsx-runtime' {
+  export function jsx(type: unknown, props: Record<string, unknown> | null): unknown;
+}
+
 declare module 'solid-js' {
   export function Show(props: { when: unknown; children?: unknown }): unknown;
   export function createMemo<T>(fn: () => T): () => T;

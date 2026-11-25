@@ -69,6 +69,7 @@ function makeHarness(bundlePath) {
       if (name in nodeModules) return nodeModules[name];
       if (name === '@opencode/plugin') return { Plugin: plugin };
       if (name === '@opencode/plugin/tui') return { Plugin: plugin, usePlugin: () => ({}) };
+      if (name === '@opentui/solid/jsx-runtime') return { jsx: (type, props) => ({ type, props }) };
       if (name === 'solid-js') return solid;
       throw new Error(`Unexpected external module: ${String(name)}`);
     },
@@ -259,9 +260,24 @@ async function main() {
     check('TUI plugin id is unchanged', tui.definition.id === 'user.righthand');
     check('TUI bundle does not depend on a storage API', !/context\.storage\b/.test(tui.source));
     tui.definition.setup(tuiContext);
-    check('TUI drops the footer slot and keeps the global slash command layer',
-      tui.slots.length === 0 && tui.layers[0]?.mode === 'global' &&
+    check('TUI claims the footer slot and keeps the global slash command layer',
+      tui.slots.length === 1 && tui.slots[0].append === 'prompt.footer.status' &&
+      typeof tui.slots[0].render === 'function' && tui.layers[0]?.mode === 'global' &&
       tui.layers[0]?.commands.some((command) => command.slash?.name === 'righthand'));
+    const writeFooterState = (persona) => {
+      fs.mkdirSync(path.dirname(stateFile), { recursive: true });
+      fs.writeFileSync(stateFile, JSON.stringify({ version: 1, sessions: { [sessionId]: { persona, updated: Date.now() } } }));
+    };
+    writeFooterState('middle');
+    check('footer slot renders the active persona label from session state',
+      tui.slots[0].render({ sessionID: sessionId }).props.content === 'RightHand: middle (Senior Code Reviewer)');
+    check('footer slot hides when no persona is active', (() => {
+      fs.writeFileSync(stateFile, JSON.stringify({ version: 1, sessions: {} }));
+      fs.writeFileSync(commonActiveFile, JSON.stringify({ active: null }));
+      return tui.slots[0].render({ sessionID: sessionId }) === null;
+    })());
+    fs.writeFileSync(commonActiveFile, JSON.stringify({ active: 'middle' }));
+    writeFooterState('middle');
 
     const serverShapedTui = makeHarness(tuiPath);
     serverShapedTui.definition.setup({

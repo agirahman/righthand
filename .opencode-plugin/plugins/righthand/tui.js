@@ -2,6 +2,7 @@
 // Source: harness/opencode/tui.tsx
 // Regenerate: node scripts/bundle-harness.js
 import { Plugin } from "@opencode/plugin/tui";
+import { jsx } from "@opentui/solid/jsx-runtime";
 import { existsSync, readFileSync, readdirSync, mkdirSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, dirname, resolve } from "node:path";
@@ -507,6 +508,25 @@ const righthandOpenCodeTui = Plugin.define({
     id: "user.righthand",
     setup(context) {
         const cwd = process.cwd();
+        const personas = () => loadOpenCodePersonas(cwd);
+        const statusLabel = (slotSessionID) => {
+            const sessionID = slotSessionID ?? context.ui.router.current()?.sessionID ?? "";
+            const root = context.data?.session?.root?.(sessionID);
+            if (sessionID && root && root !== sessionID)
+                return undefined;
+            const name = activePersonaForSession(sessionID, cwd);
+            const persona = name ? personas().get(name.toLowerCase()) : undefined;
+            return buildStatusLabel(persona ? { name: persona.name, role: persona.role } : null);
+        };
+        if (typeof context.ui?.slot === "function") {
+            context.ui.slot({
+                append: "prompt.footer.status",
+                render: (input) => {
+                    const label = statusLabel(input?.sessionID);
+                    return label ? jsx("text", { content: label }) : null;
+                },
+            });
+        }
         const apply = async (sessionID, persona) => {
             const state = loadSessionState();
             if (persona)
@@ -533,7 +553,7 @@ const righthandOpenCodeTui = Plugin.define({
                 context.ui.toast.show({ message: "Persona hanya untuk sesi utama, bukan subagent.", variant: "warning" });
                 return;
             }
-            const profiles = Array.from(loadOpenCodePersonas(cwd).values()).sort((a, b) => a.name.localeCompare(b.name));
+            const profiles = Array.from(personas().values()).sort((a, b) => a.name.localeCompare(b.name));
             const currentName = activePersonaForSession(sessionID, cwd) ?? undefined;
             const rawArg = (input ?? "").trim().toLowerCase();
             const action = parseRighthandArgs(rawArg);
