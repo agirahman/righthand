@@ -13,7 +13,7 @@ righthand/
 ├── .commandcode-mod/     # Command Code mod, manifests, and profiles
 ├── .pi-plugin/           # Pi native extension (.pi-plugin/extensions/righthand.ts)
 ├── .omp/                 # Oh My Pi native extension (.omp/extensions/righthand.ts)
-├── .opencode-plugin/     # OpenCode server plugin (.opencode-plugin/plugins/righthand-server.js)
+├── .opencode-plugin/     # OpenCode plugins (.opencode-plugin/plugins/righthand/)
 ├── bin/                  # Unified CLI (`righthand switch`, `inject`, `list`, `off`)
 ├── profiles/             # Source persona profiles (Markdown with YAML frontmatter)
 ├── skills/               # Portable cross-harness skill definitions (SKILL.md)

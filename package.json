@@ -10,8 +10,7 @@
   },
   "opencode": {
     "plugins": [
-      "./.opencode-plugin/plugins/righthand-server.js",
-      "./.opencode-plugin/plugins/righthand-tui.js"
+      "./.opencode-plugin/plugins/righthand"
     ]
   },
   "commandcode": {

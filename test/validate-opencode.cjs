@@ -79,10 +79,11 @@ function makeHarness(bundlePath) {
     fileName: bundlePath,
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.React, jsxFactory: 'Show', jsxFragmentFactory: 'Show.Fragment' },
   }).outputText
+    .replace(/^const __RH_BUNDLE_DIR__ = new URL\(.+, import\.meta\.url\)\.pathname.*$/m, 'const __RH_BUNDLE_DIR__ = __dirname;')
     .replace(/^import \{ (.*?) \} from "(.*?)";$/gm, 'const { $1 } = require("$2");')
     .replace(/^export \{[^}]+\};?$/gm, '')
     .replace(/^export default (\w+);?$/gm, 'module.exports.default = $1;');
-  check(`${path.basename(bundlePath)} has no solid-js or JSX in tracked bundle`, bundlePath.endsWith('righthand-tui.js') ? !/<Show\b/.test(source) && !/solid-js/.test(source) && jsx.parseDiagnostics.length === 0 : true);
+  check(`${path.basename(bundlePath)} has no solid-js or JSX in tracked bundle`, /[/\\]tui\.js$/.test(bundlePath) ? !/<Show\b/.test(source) && !/solid-js/.test(source) && jsx.parseDiagnostics.length === 0 : true);
   const wrapped = `(function(require,module,exports,__dirname){${transformed}\n})`;
   vm.runInThisContext(wrapped, { filename: bundlePath })(
     (specifier) => externals[specifier],
@@ -133,8 +134,8 @@ async function main() {
     process.env.HOME = userHome;
     process.env.USERPROFILE = userHome;
 
-    const serverPath = path.join(root, '.opencode-plugin', 'plugins', 'righthand-server.js');
-    const tuiPath = process.env.RH_OPENCODE_TUI_BUNDLE || path.join(root, '.opencode-plugin', 'plugins', 'righthand-tui.js');
+    const serverPath = path.join(root, '.opencode-plugin', 'plugins', 'righthand', 'index.js');
+    const tuiPath = process.env.RH_OPENCODE_TUI_BUNDLE || path.join(root, '.opencode-plugin', 'plugins', 'righthand', 'tui.js');
     process.chdir(repoDir);
     const server = makeHarness(serverPath);
     const serverContext = {
@@ -261,6 +262,22 @@ async function main() {
     check('TUI drops the footer slot and keeps the global slash command layer',
       tui.slots.length === 0 && tui.layers[0]?.mode === 'global' &&
       tui.layers[0]?.commands.some((command) => command.slash?.name === 'righthand'));
+
+    const serverShapedTui = makeHarness(tuiPath);
+    serverShapedTui.definition.setup({
+      keymap: { layer(factory) { serverShapedTui.layers.push(factory()); } },
+      ui: { toast: { show() {} }, router: { current: () => null } },
+    });
+    check('TUI setup registers the slash layer without requiring a session route',
+      serverShapedTui.layers[0]?.mode === 'global' &&
+      serverShapedTui.layers[0]?.commands.some((command) => command.slash?.name === 'righthand'));
+
+    check('generated bundles carry the ESM directory marker',
+      [serverPath, tuiPath].every((bundlePath) => {
+        const generated = fs.readFileSync(bundlePath, 'utf8');
+        return /^const __RH_BUNDLE_DIR__ = new URL\("\.", import\.meta\.url\)\.pathname/m.test(generated) &&
+          /join\(directory, ['"]righthand-profiles['"]\)/.test(generated);
+      }));
 
     const writeState = (persona) => {
       fs.mkdirSync(path.dirname(stateFile), { recursive: true });

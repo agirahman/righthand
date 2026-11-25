@@ -296,7 +296,13 @@ function buildBundle(config, rootDir) {
   }
   const intermediateExt = files.some((item) => path.extname(item.file).toLowerCase() === '.tsx') ? '.tsx' : '.ts';
   const imports = mergeExternalImports(external);
-  const body = [HEADER(config.entry), ...imports, ...Array.from(typeAliases, (name) => `type ${name} = any;`), ...emitted, `export default ${defaults[0]};`, ''].join('\n');
+  const bundleDirName = config.format === 'js'
+    ? 'const __RH_BUNDLE_DIR__ = new URL(".", import.meta.url).pathname.replace(/^\\/([A-Za-z]:)/, "$1");\n'
+    : '';
+  const cleaned = config.format === 'js'
+    ? emitted.map((source) => source.replace(/^declare const __RH_BUNDLE_DIR__: string \| undefined;\n?/gm, ''))
+    : emitted;
+  const body = [HEADER(config.entry), ...imports, bundleDirName, ...Array.from(typeAliases, (name) => `type ${name} = any;`), ...cleaned, `export default ${defaults[0]};`, ''].join('\n');
   return { body, imports, external, duplicateDrops, files, intermediateExt };
 }
 

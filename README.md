@@ -171,11 +171,11 @@ OpenCode uses the native `@opencode/plugin` and `@opencode/plugin/tui` APIs.
 - **Setup**:
   ```bash
   righthand setup opencode
-  # Copies two plugins into <cwd>/.opencode/plugins/
+  # Copies one plugin directory into ~/.config/opencode/plugins/righthand/
   ```
-- **Two plugins installed**:
-  - `righthand-server.js` — injects active persona into system prompt on every session context event (hooks `session.hook("context")`).
-  - `righthand-tui.js` — registers native `/righthand` slash command with interactive persona picker, footer status indicator, and toast notifications. State is stored per session in `~/.local/state/opencode/righthand.json`.
+- **One plugin directory installed**:
+  - `righthand/index.js` — injects active persona into system prompt on every session context event (hooks `session.hook("context")`).
+  - `righthand/tui.js` — registers native `/righthand` slash command with interactive persona picker, footer status indicator, and toast notifications. State is stored per session in `~/.local/state/opencode/righthand.json`.
 - **Slash Command**: `/righthand <persona>` | `/righthand off` | `/righthand list` | `/righthand` (picker)
 - **Update after npm upgrade**: `righthand update opencode`
 - **Details**: See [`.opencode-plugin/README.md`](./.opencode-plugin/README.md).

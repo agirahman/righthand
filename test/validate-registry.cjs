@@ -91,12 +91,11 @@ check('registry HARNESSES deep-equals expected four-entry shape', () => {
       pathCheck: ['opencode'],
       destBase: 'home',
       legacyFiles: [
-        '.opencode/plugins/righthand-server.js',
-        '.opencode/plugins/righthand-tui.js',
+        'opencode/plugins/righthand-server.js',
+        'opencode/plugins/righthand-tui.js',
       ],
       files: [
-        { src: '.opencode-plugin/plugins/righthand-server.js', dest: 'opencode/plugins/righthand-server.js' },
-        { src: '.opencode-plugin/plugins/righthand-tui.js',    dest: 'opencode/plugins/righthand-tui.js' },
+        { src: '.opencode-plugin/plugins/righthand', dest: 'opencode/plugins/righthand' },
       ],
     },
   };
