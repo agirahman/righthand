@@ -56,6 +56,20 @@ function loadProfile(name) {
   return fs.readFileSync(p, 'utf8');
 }
 
+// Recursively copy files from src into dst. Add-only: it never deletes
+// unrelated files that already live under dst. Silent no-op when src
+// does not exist.
+function copyDirRecursive(src, dst) {
+  if (!fs.existsSync(src)) return;
+  fs.mkdirSync(dst, { recursive: true });
+  for (const name of fs.readdirSync(src)) {
+    const s = path.join(src, name);
+    const d = path.join(dst, name);
+    if (fs.statSync(s).isDirectory()) copyDirRecursive(s, d);
+    else fs.copyFileSync(s, d);
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Harness helpers
 // ---------------------------------------------------------------------------
@@ -623,6 +637,7 @@ function cmdSetup(target, opts) {
       }
       runHarnessSkillsAndProfileCleanup(key, dryRun);
     } else if (h.type === 'copy') {
+      const syncedProfileDirs = new Set();
       for (const { src, dest } of h.files) {
         const srcPath = path.join(root, src);
         const destPath = resolveDestPath(h, dest);
@@ -630,14 +645,28 @@ function cmdSetup(target, opts) {
           console.log(`  ✗ source not found: ${src}`);
           continue;
         }
+        // Ship the persona tree next to the copied bundle so the runtime
+        // getPackageProfilesDir() finds the shipped personas instead of
+        // falling back to the user's home tree.
+        const profilesDest = path.join(path.dirname(destPath), 'righthand-profiles');
         if (dryRun) {
           console.log(`  ✓ (dry run) ${destPath}`);
+          if (!syncedProfileDirs.has(profilesDest) && fs.existsSync(profilesDir)) {
+            syncedProfileDirs.add(profilesDest);
+            console.log(`  ✓ (dry run) ${profilesDest}`);
+          }
           continue;
         }
         fs.mkdirSync(path.dirname(destPath), { recursive: true });
         fs.copyFileSync(srcPath, destPath);
         console.log(`  ✓ copied → ${destPath}`);
+        if (!syncedProfileDirs.has(profilesDest) && fs.existsSync(profilesDir)) {
+          syncedProfileDirs.add(profilesDest);
+          copyDirRecursive(profilesDir, profilesDest);
+          console.log(`  ✓ copied profiles → ${profilesDest}`);
+        }
       }
+      runHarnessSkillsAndProfileCleanup(key, dryRun);
     }
   }
 }
@@ -674,6 +703,7 @@ function cmdUpdate(target, opts) {
     for (const key of existingCopy) {
       const h = HARNESSES[key];
       console.log(`\n[${h.label}]`);
+      const syncedProfileDirs = new Set();
       for (const { src, dest } of h.files) {
         const srcPath = path.join(root, src);
         const destPath = resolveDestPath(h, dest);
@@ -695,7 +725,14 @@ function cmdUpdate(target, opts) {
         }
         fs.copyFileSync(srcPath, destPath);
         console.log(`  ✓ updated → ${destPath}`);
+        const profilesDest = path.join(path.dirname(destPath), 'righthand-profiles');
+        if (!syncedProfileDirs.has(profilesDest) && fs.existsSync(profilesDir)) {
+          syncedProfileDirs.add(profilesDest);
+          copyDirRecursive(profilesDir, profilesDest);
+          console.log(`  ✓ updated profiles → ${profilesDest}`);
+        }
       }
+      runHarnessSkillsAndProfileCleanup(key, dryRun);
     }
   }
 

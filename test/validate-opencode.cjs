@@ -82,7 +82,7 @@ function makeHarness(bundlePath) {
     .replace(/^import \{ (.*?) \} from "(.*?)";$/gm, 'const { $1 } = require("$2");')
     .replace(/^export \{[^}]+\};?$/gm, '')
     .replace(/^export default (\w+);?$/gm, 'module.exports.default = $1;');
-  check(`${path.basename(bundlePath)} contains JSX syntax in tracked bundle`, bundlePath.endsWith('righthand-tui.js') ? /<Show\b/.test(source) && jsx.parseDiagnostics.length === 0 : true);
+  check(`${path.basename(bundlePath)} has no solid-js or JSX in tracked bundle`, bundlePath.endsWith('righthand-tui.js') ? !/<Show\b/.test(source) && !/solid-js/.test(source) && jsx.parseDiagnostics.length === 0 : true);
   const wrapped = `(function(require,module,exports,__dirname){${transformed}\n})`;
   vm.runInThisContext(wrapped, { filename: bundlePath })(
     (specifier) => externals[specifier],
@@ -258,8 +258,8 @@ async function main() {
     };
     check('TUI plugin id is unchanged', tui.definition.id === 'user.righthand');
     tui.definition.setup(tuiContext);
-    check('TUI retains footer slot and global slash command layer',
-      tui.slots[0]?.append === 'prompt.footer.status' && tui.layers[0]?.mode === 'global' &&
+    check('TUI drops the footer slot and keeps the global slash command layer',
+      tui.slots.length === 0 && tui.layers[0]?.mode === 'global' &&
       tui.layers[0]?.commands.some((command) => command.slash?.name === 'righthand'));
 
     const writeState = (persona) => {

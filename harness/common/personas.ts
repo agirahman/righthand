@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { getRepoRoot } from './repo-root.js';
+import { getPackageProfilesDir } from './repo-root.js';
 import { resolvePersonaName } from './aliases.js';
 
 export const RETIRED_PERSONAS: string[] = ['editor','architect','backend','code-reviewer','devops','frontend','orchestrator','product-manager','security-auditor','test-engineer','web-performance-auditor','worker'];
@@ -151,9 +151,11 @@ export function loadAllProfiles(cwd: string, dirs?: ProfileLoadDirs): Map<string
     ? dirs.packageDir
     : undefined;
   if (packageProfilesDir === undefined) {
-    // The default must resolve to the package root's profiles/ from any compiled location.
+    // The default must resolve to the package's profiles/ from any compiled or
+    // copied location: a bundled righthand-profiles/ sibling first, then the
+    // source checkout's profiles/.
     try {
-      packageProfilesDir = join(getRepoRoot(), 'profiles');
+      packageProfilesDir = getPackageProfilesDir();
     } catch {
       // fallback if the package root cannot be resolved
     }
@@ -224,7 +226,10 @@ export function loadAllProfiles(cwd: string, dirs?: ProfileLoadDirs): Map<string
     // user dir missing
   }
 
-  // 3. Project-level dirs override everything, later wins.
+  // 3. Project-level dirs override package and user personas, later wins,
+  //    but retired and shipped names are skipped exactly like the user dir:
+  //    a project copy of a shipped or retired persona never replaces the
+  //    canonical package body.
   for (const dir of projectDirs) {
     let files: string[] = [];
     try {
@@ -235,8 +240,12 @@ export function loadAllProfiles(cwd: string, dirs?: ProfileLoadDirs): Map<string
     for (const file of files) {
       if (!file.endsWith('.md') || file.startsWith('.')) continue;
       const fallbackName = file.slice(0, -3).toLowerCase();
+      if (retired.has(fallbackName)) continue;
+      if (shippedNames.has(fallbackName)) continue;
       const profile = parseProfileFile(join(dir, file), fallbackName);
       if (profile) {
+        // shipped name guard by resolved name too
+        if (retired.has(profile.name) || shippedNames.has(profile.name)) continue;
         map.set(profile.name, profile);
       }
     }

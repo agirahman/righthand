@@ -43,6 +43,8 @@ try {
   fs.writeFileSync(path.join(userDir, 'my-custom.md'), 'CUSTOM BODY');
   fs.writeFileSync(path.join(projDir, 'profiles', 'index.md'), 'PROJECT PROFILES BODY');
   fs.writeFileSync(path.join(projDir, '.commandcode', 'profiles', 'index.md'), 'PROJECT BODY');
+  fs.writeFileSync(path.join(projDir, 'profiles', 'proj-custom.md'), 'PROJECT PROFILES CUSTOM BODY');
+  fs.writeFileSync(path.join(projDir, '.commandcode', 'profiles', 'proj-custom.md'), 'PROJECT COMMANDCODE CUSTOM BODY');
 
   const profiles = common.loadAllProfiles(projDir, {
     packageDir: pkgDir,
@@ -65,7 +67,8 @@ try {
     userDir,
     projectDirs: [path.join(projDir, 'profiles'), path.join(projDir, '.commandcode', 'profiles')],
   });
-  check('project .commandcode profile overrides project profiles', overridden.get('index')?.body === 'PROJECT BODY');
+  check('shipped project persona does not override the package body', overridden.get('index')?.body === 'PKG BODY');
+  check('custom project .commandcode profile overrides project profiles', overridden.get('proj-custom')?.body === 'PROJECT COMMANDCODE CUSTOM BODY');
 
   const missingPkg = common.loadAllProfiles(projDir, {
     packageDir: path.join(base, 'no-such-pkg'),

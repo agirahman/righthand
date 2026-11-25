@@ -79,8 +79,9 @@ check('registry HARNESSES deep-equals expected four-entry shape', () => {
       aliases: [],
       label: 'Oh-My-Pi (OMP)',
       pathCheck: [],
+      destBase: 'omp',
       files: [
-        { src: '.omp/extensions/righthand.ts', dest: '.omp/extensions/righthand.ts' },
+        { src: '.omp/extensions/righthand.ts', dest: 'agent/extensions/righthand.ts' },
       ],
     },
     opencode: {

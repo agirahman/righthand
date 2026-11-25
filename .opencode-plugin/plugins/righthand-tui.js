@@ -1,8 +1,7 @@
 // GENERATED FILE - do not edit.
 // Source: harness/opencode/tui.tsx
 // Regenerate: node scripts/bundle-harness.js
-import { Plugin, usePlugin } from "@opencode/plugin/tui";
-import { Show, createMemo } from "solid-js";
+import { Plugin } from "@opencode/plugin/tui";
 import { existsSync, readFileSync, readdirSync, mkdirSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, dirname, resolve } from "node:path";
@@ -24,6 +23,19 @@ function getRepoRoot() {
     }
     catch { }
     return process.cwd();
+}
+// Package profiles dir for a deployed bundle. Setup copies the package's
+// profiles/ next to copy-harness artifacts as `righthand-profiles`, so a
+// bundle loaded from an installed location finds its personas without the
+// source checkout. Otherwise fall back to the checkout's profiles/ resolved
+// by getRepoRoot(). Pure and deterministic: __dirname + filesystem only.
+function getPackageProfilesDir() {
+    if (typeof __dirname !== 'undefined') {
+        const bundled = join(__dirname, 'righthand-profiles');
+        if (existsSync(bundled))
+            return bundled;
+    }
+    return join(getRepoRoot(), 'profiles');
 }
 // harness/common/aliases.ts
 // v2 bounded-contract engine, Fase 1: the persona alias layer.
@@ -230,9 +242,11 @@ function loadAllProfiles(cwd, dirs) {
         ? dirs.packageDir
         : undefined;
     if (packageProfilesDir === undefined) {
-        // The default must resolve to the package root's profiles/ from any compiled location.
+        // The default must resolve to the package's profiles/ from any compiled or
+        // copied location: a bundled righthand-profiles/ sibling first, then the
+        // source checkout's profiles/.
         try {
-            packageProfilesDir = join(getRepoRoot(), 'profiles');
+            packageProfilesDir = getPackageProfilesDir();
         }
         catch {
             // fallback if the package root cannot be resolved
@@ -307,7 +321,10 @@ function loadAllProfiles(cwd, dirs) {
     catch {
         // user dir missing
     }
-    // 3. Project-level dirs override everything, later wins.
+    // 3. Project-level dirs override package and user personas, later wins,
+    //    but retired and shipped names are skipped exactly like the user dir:
+    //    a project copy of a shipped or retired persona never replaces the
+    //    canonical package body.
     for (const dir of projectDirs) {
         let files = [];
         try {
@@ -320,8 +337,15 @@ function loadAllProfiles(cwd, dirs) {
             if (!file.endsWith('.md') || file.startsWith('.'))
                 continue;
             const fallbackName = file.slice(0, -3).toLowerCase();
+            if (retired.has(fallbackName))
+                continue;
+            if (shippedNames.has(fallbackName))
+                continue;
             const profile = parseProfileFile(join(dir, file), fallbackName);
             if (profile) {
+                // shipped name guard by resolved name too
+                if (retired.has(profile.name) || shippedNames.has(profile.name))
+                    continue;
                 map.set(profile.name, profile);
             }
         }
@@ -458,38 +482,16 @@ function saveSessionState(state) {
         throw error;
     }
 }
-const packageProfilesDir = join(getRepoRoot(), "profiles");
+const packageProfilesDir = getPackageProfilesDir();
 const loadOpenCodePersonas = (cwd) => loadAllPersonas(cwd, {
     packageDir: packageProfilesDir,
     projectDirs: [join(cwd, "profiles"), join(cwd, ".commandcode", "profiles"), join(cwd, ".opencode", "profiles")],
 });
-function PersonaFooter(props) {
-    const context = usePlugin();
-    const isChild = createMemo(() => {
-        const id = props.sessionID;
-        if (!id)
-            return false;
-        return Boolean(context.data.session.get(id)?.parentID);
-    });
-    const label = createMemo(() => {
-        const id = props.sessionID;
-        if (!id)
-            return undefined;
-        const name = props.active[id] ?? activePersonaForSession(id, process.cwd());
-        if (!name)
-            return undefined;
-        const persona = props.available.find((item) => item.name.toLowerCase() === name.toLowerCase());
-        return persona ? persona.role : name;
-    });
-    // @ts-ignore
-    return <Show when={Boolean(props.sessionID) && !isChild()}><text fg={label() ? context.theme.text.base : context.theme.text.muted}>{`persona: ${label() ?? "off"}`}</text></Show>;
-}
 const righthandOpenCodeTui = Plugin.define({
     id: "user.righthand",
     setup(context) {
         const cwd = process.cwd();
-        const available = Array.from(loadOpenCodePersonas(cwd).values()).sort((a, b) => a.name.localeCompare(b.name));
-        const [store, update] = context.storage.store("righthand", { initial: { active: {} } });
+        const [, update] = context.storage.store("righthand", { initial: { active: {} } });
         const hydrate = () => {
             const now = Date.now();
             const active = {};
@@ -606,13 +608,6 @@ const righthandOpenCodeTui = Plugin.define({
                     run: (input) => run(input),
                 }],
         }));
-        context.ui.slot({
-            append: "prompt.footer.status",
-            render: (input) => {
-                // @ts-ignore
-                return <PersonaFooter sessionID={input.sessionID} active={store.active} available={available}/>;
-            },
-        });
     },
 });
 export default righthandOpenCodeTui;
