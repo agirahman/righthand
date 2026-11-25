@@ -27,15 +27,21 @@ export const righthandOpenCodeTui = Plugin.define({
       const persona = name ? personas().get(name.toLowerCase()) : undefined;
       return buildStatusLabel(persona ? { name: persona.name, role: persona.role } : null);
     };
-    if (typeof context.ui?.slot === "function") {
-      context.ui.slot({
+    const registerFooter = () => {
+      if (typeof context.ui?.slot !== "function") return undefined;
+      return context.ui.slot({
         append: "prompt.footer.status",
         render: (input: { sessionID?: string }) => {
           const label = statusLabel(input?.sessionID);
           return label ? jsx("text", { content: label }) : null;
         },
       });
-    }
+    };
+    let disposeFooter = registerFooter();
+    const refreshFooter = () => {
+      if (typeof disposeFooter === "function") disposeFooter();
+      disposeFooter = registerFooter();
+    };
 
     const apply = async (sessionID: string, persona?: PersonaMetadata) => {
       const state = loadSessionState();
@@ -43,6 +49,7 @@ export const righthandOpenCodeTui = Plugin.define({
       else delete state.sessions[sessionID];
       saveSessionState(state);
       writeActivePersona(cwd, persona?.name.toLowerCase() ?? null);
+      refreshFooter();
 
       context.ui.toast.show({
         message: persona

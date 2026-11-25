@@ -49,6 +49,7 @@ function makeHarness(bundlePath) {
   const source = fs.readFileSync(bundlePath, 'utf8').replace(/\r\n/g, '\n');
   const hooks = [];
   const slots = [];
+  const slotDisposals = { count: 0 };
   const layers = [];
   const plugin = {
     define(definition) {
@@ -94,7 +95,7 @@ function makeHarness(bundlePath) {
   );
   const definition = module.exports.default;
   check(`${path.basename(bundlePath)} exports Plugin.define object`, definition && typeof definition.setup === 'function');
-  return { definition, hooks, slots, layers, source, disposeCalls: 0 };
+  return { definition, hooks, slots, slotDisposals, layers, source, disposeCalls: 0 };
 }
 
 async function loadServer(bundlePath) {
@@ -249,7 +250,10 @@ async function main() {
     const tuiContext = {
       keymap: { layer(factory) { tui.layers.push(factory()); } },
       ui: {
-        slot(config) { tui.slots.push(config); },
+        slot(config) {
+          tui.slots.push(config);
+          return () => { tui.slotDisposals.count += 1; };
+        },
         toast: { show(input) { tuiToasts.push(input.message); } },
         router: { current: () => ({ type: 'session', sessionID: sessionId }) },
         dialog: { async alert(input) { tuiList = input.message; }, async select() { return undefined; } },
@@ -324,6 +328,10 @@ async function main() {
     fs.writeFileSync(commonActiveFile, JSON.stringify({ active: null }));
     writeState(null);
     await runTui('middle');
+    check('persona activation refreshes the footer slot without re-running setup',
+      tui.slotDisposals.count === 1 && tui.slots.length === 2 &&
+      tui.slots.at(-1).append === 'prompt.footer.status' &&
+      tui.slots.at(-1).render({ sessionID: sessionId }).props.content === 'RightHand: middle (Senior Code Reviewer)');
     const blockedBeforeSessionOff = await isWriteBlocked();
     await runTui('off');
     const allowedAfterSessionOff = !(await isWriteBlocked());

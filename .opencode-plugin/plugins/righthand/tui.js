@@ -518,15 +518,23 @@ const righthandOpenCodeTui = Plugin.define({
             const persona = name ? personas().get(name.toLowerCase()) : undefined;
             return buildStatusLabel(persona ? { name: persona.name, role: persona.role } : null);
         };
-        if (typeof context.ui?.slot === "function") {
-            context.ui.slot({
+        const registerFooter = () => {
+            if (typeof context.ui?.slot !== "function")
+                return undefined;
+            return context.ui.slot({
                 append: "prompt.footer.status",
                 render: (input) => {
                     const label = statusLabel(input?.sessionID);
                     return label ? jsx("text", { content: label }) : null;
                 },
             });
-        }
+        };
+        let disposeFooter = registerFooter();
+        const refreshFooter = () => {
+            if (typeof disposeFooter === "function")
+                disposeFooter();
+            disposeFooter = registerFooter();
+        };
         const apply = async (sessionID, persona) => {
             const state = loadSessionState();
             if (persona)
@@ -535,6 +543,7 @@ const righthandOpenCodeTui = Plugin.define({
                 delete state.sessions[sessionID];
             saveSessionState(state);
             writeActivePersona(cwd, persona?.name.toLowerCase() ?? null);
+            refreshFooter();
             context.ui.toast.show({
                 message: persona
                     ? `RightHand persona: ${persona.role} (${persona.mode})`
