@@ -490,6 +490,8 @@ const loadOpenCodePersonas = (cwd) => loadAllPersonas(cwd, {
 const righthandOpenCodeTui = Plugin.define({
     id: "user.righthand",
     setup(context) {
+        if (!context.keymap?.layer || !context.ui?.toast?.show || !context.ui?.router?.current)
+            return;
         const cwd = process.cwd();
         const apply = async (sessionID, persona) => {
             const state = loadSessionState();
