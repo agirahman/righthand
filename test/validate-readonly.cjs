@@ -197,7 +197,8 @@ try {
   check('readonly shell unresolved var blocked', evaluateToolGuard('readonly', ctx('shell_command', 'Set-Content -Path "$unknown/x.txt" -Value hi')).block === true);
   check('readonly shell var traversal blocked', evaluateToolGuard('readonly', ctx('shell_command', `$d = "${scratchDir}"; echo hi > "$d/../../src.js"`)).block === true);
   check('readonly shell rm with var to src blocked', evaluateToolGuard('readonly', ctx('shell_command', `$d = "${rootDir}"; rm -rf "$d/src"`)).block === true);
-  check('readonly shell var from env userprofile allowed', evaluateToolGuard('readonly', ctx('shell_command', 'Set-Content -Path "$env:USERPROFILE/x.txt" -Value hi')).block === false);
+  const homeEnvName = process.platform === 'win32' ? 'USERPROFILE' : 'HOME';
+  check('readonly shell var from env home allowed', evaluateToolGuard('readonly', ctx('shell_command', `Set-Content -Path "$env:${homeEnvName}/x.txt" -Value hi`)).block === false);
 
   // command substitution hides a second command from the tokenizer (issue #44)
   check('readonly bash substitution format blocked', evaluateToolGuard('readonly', ctx('bash', 'git log --oneline --format="$(rm -rf src)"')).block === true);
