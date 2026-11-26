@@ -7,6 +7,6 @@ export const cmdcGuardMap: HarnessGuardMap = {
     read: 'read_file',
     find: 'glob',
   },
-  shellTools: ['shell_command', 'powershell', 'bash', 'terminal'],
+  shellTools: ['shell_command', 'powershell', 'bash', 'terminal', 'shell'],
   shellKind: process.platform === 'win32' ? 'powershell' : 'posix',
 };
