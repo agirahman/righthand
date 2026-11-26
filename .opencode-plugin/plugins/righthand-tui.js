@@ -490,21 +490,9 @@ const loadOpenCodePersonas = (cwd) => loadAllPersonas(cwd, {
 const righthandOpenCodeTui = Plugin.define({
     id: "user.righthand",
     setup(context) {
+        if (!context.keymap?.layer || !context.ui?.toast?.show || !context.ui?.router?.current)
+            return;
         const cwd = process.cwd();
-        const [, update] = context.storage.store("righthand", { initial: { active: {} } });
-        const hydrate = () => {
-            const now = Date.now();
-            const active = {};
-            for (const [id, entry] of Object.entries(loadSessionState().sessions)) {
-                if (!entry.persona || now - (entry.updated ?? 0) > MAX_AGE)
-                    continue;
-                active[id] = entry.persona;
-            }
-            void update((draft) => {
-                draft.active = active;
-            });
-        };
-        hydrate();
         const apply = async (sessionID, persona) => {
             const state = loadSessionState();
             if (persona)
@@ -513,12 +501,6 @@ const righthandOpenCodeTui = Plugin.define({
                 delete state.sessions[sessionID];
             saveSessionState(state);
             writeActivePersona(cwd, persona?.name.toLowerCase() ?? null);
-            await update((draft) => {
-                if (persona)
-                    draft.active[sessionID] = persona.name.toLowerCase();
-                else
-                    delete draft.active[sessionID];
-            });
             context.ui.toast.show({
                 message: persona
                     ? `RightHand persona: ${persona.role} (${persona.mode})`

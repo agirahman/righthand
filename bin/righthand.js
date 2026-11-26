@@ -70,6 +70,38 @@ function copyDirRecursive(src, dst) {
   }
 }
 
+// Generated bundles may be directories (OpenCode plugins). Copy a directory
+// tree instead of a single file so setup keeps working for both shapes.
+function copyHarnessArtifact(srcPath, destPath) {
+  if (fs.statSync(srcPath).isDirectory()) copyDirRecursive(srcPath, destPath);
+  else fs.copyFileSync(srcPath, destPath);
+}
+
+// Profiles must sit in the same directory as the copied bundle files. A
+// directory artifact keeps its files inside destPath; a file artifact keeps
+// them beside destPath.
+function profilesDestFor(srcPath, destPath) {
+  const isDirectory = fs.existsSync(srcPath) && fs.statSync(srcPath).isDirectory();
+  return path.join(isDirectory ? destPath : path.dirname(destPath), 'righthand-profiles');
+}
+
+// Move superseded flat bundles aside instead of deleting them. OpenCode would
+// otherwise load them as extra server plugins with duplicate ids.
+function retireLegacyFiles(h, dryRun) {
+  if (!h.legacyFiles) return;
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  for (const relative of h.legacyFiles) {
+    const source = resolveDestPath(h, relative);
+    if (!fs.existsSync(source)) continue;
+    const backup = source + '.bak-' + stamp;
+    if (dryRun) console.log(`  → (dry run) retire ${source} → ${backup}`);
+    else {
+      fs.renameSync(source, backup);
+      console.log(`  retired legacy file → ${backup}`);
+    }
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Harness helpers
 // ---------------------------------------------------------------------------
@@ -637,6 +669,7 @@ function cmdSetup(target, opts) {
       }
       runHarnessSkillsAndProfileCleanup(key, dryRun);
     } else if (h.type === 'copy') {
+      retireLegacyFiles(h, dryRun);
       const syncedProfileDirs = new Set();
       for (const { src, dest } of h.files) {
         const srcPath = path.join(root, src);
@@ -648,7 +681,7 @@ function cmdSetup(target, opts) {
         // Ship the persona tree next to the copied bundle so the runtime
         // getPackageProfilesDir() finds the shipped personas instead of
         // falling back to the user's home tree.
-        const profilesDest = path.join(path.dirname(destPath), 'righthand-profiles');
+        const profilesDest = profilesDestFor(srcPath, destPath);
         if (dryRun) {
           console.log(`  ✓ (dry run) ${destPath}`);
           if (!syncedProfileDirs.has(profilesDest) && fs.existsSync(profilesDir)) {
@@ -658,7 +691,7 @@ function cmdSetup(target, opts) {
           continue;
         }
         fs.mkdirSync(path.dirname(destPath), { recursive: true });
-        fs.copyFileSync(srcPath, destPath);
+        copyHarnessArtifact(srcPath, destPath);
         console.log(`  ✓ copied → ${destPath}`);
         if (!syncedProfileDirs.has(profilesDest) && fs.existsSync(profilesDir)) {
           syncedProfileDirs.add(profilesDest);
@@ -703,6 +736,7 @@ function cmdUpdate(target, opts) {
     for (const key of existingCopy) {
       const h = HARNESSES[key];
       console.log(`\n[${h.label}]`);
+      retireLegacyFiles(h, dryRun);
       const syncedProfileDirs = new Set();
       for (const { src, dest } of h.files) {
         const srcPath = path.join(root, src);
@@ -723,9 +757,9 @@ function cmdUpdate(target, opts) {
           console.log(`  ✓ (dry run) ${destPath}`);
           continue;
         }
-        fs.copyFileSync(srcPath, destPath);
+        copyHarnessArtifact(srcPath, destPath);
         console.log(`  ✓ updated → ${destPath}`);
-        const profilesDest = path.join(path.dirname(destPath), 'righthand-profiles');
+        const profilesDest = profilesDestFor(srcPath, destPath);
         if (!syncedProfileDirs.has(profilesDest) && fs.existsSync(profilesDir)) {
           syncedProfileDirs.add(profilesDest);
           copyDirRecursive(profilesDir, profilesDest);

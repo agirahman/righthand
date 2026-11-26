@@ -1,9 +1,10 @@
 import { Plugin } from "@opencode/plugin/tui";
-import { loadAllPersonas, getPackageProfilesDir, type PersonaMetadata } from "../common/index.js";
+import { jsx } from "@opentui/solid/jsx-runtime";
+import { loadAllPersonas, buildStatusLabel, getPackageProfilesDir, type PersonaMetadata } from "../common/index.js";
 import { parseRighthandArgs } from "../common/commands.js";
 import { writeActivePersona } from "../common/state.js";
 import { join } from "node:path";
-import { activePersonaForSession, loadSessionState, MAX_AGE, saveSessionState } from "./state.js";
+import { activePersonaForSession, loadSessionState, saveSessionState } from "./state.js";
 
 const packageProfilesDir = getPackageProfilesDir();
 const loadOpenCodePersonas = (cwd: string): Map<string, PersonaMetadata> =>
@@ -17,20 +18,30 @@ export const righthandOpenCodeTui = Plugin.define({
 
   setup(context: any) {
     const cwd = process.cwd();
-    const [, update] = context.storage.store("righthand", { initial: { active: {} } });
-
-    const hydrate = () => {
-      const now = Date.now();
-      const active: Record<string, string> = {};
-      for (const [id, entry] of Object.entries(loadSessionState().sessions)) {
-        if (!entry.persona || now - (entry.updated ?? 0) > MAX_AGE) continue;
-        active[id] = entry.persona;
-      }
-      void update((draft: any) => {
-        draft.active = active;
+    const personas = () => loadOpenCodePersonas(cwd);
+    const statusLabel = (slotSessionID?: string) => {
+      const sessionID = slotSessionID ?? context.ui.router.current()?.sessionID ?? "";
+      const root = context.data?.session?.root?.(sessionID);
+      if (sessionID && root && root !== sessionID) return undefined;
+      const name = activePersonaForSession(sessionID, cwd);
+      const persona = name ? personas().get(name.toLowerCase()) : undefined;
+      return buildStatusLabel(persona ? { name: persona.name, role: persona.role } : null);
+    };
+    const registerFooter = () => {
+      if (typeof context.ui?.slot !== "function") return undefined;
+      return context.ui.slot({
+        append: "prompt.footer.status",
+        render: (input: { sessionID?: string }) => {
+          const label = statusLabel(input?.sessionID);
+          return label ? jsx("text", { content: label }) : null;
+        },
       });
     };
-    hydrate();
+    let disposeFooter = registerFooter();
+    const refreshFooter = () => {
+      if (typeof disposeFooter === "function") disposeFooter();
+      disposeFooter = registerFooter();
+    };
 
     const apply = async (sessionID: string, persona?: PersonaMetadata) => {
       const state = loadSessionState();
@@ -38,11 +49,8 @@ export const righthandOpenCodeTui = Plugin.define({
       else delete state.sessions[sessionID];
       saveSessionState(state);
       writeActivePersona(cwd, persona?.name.toLowerCase() ?? null);
+      refreshFooter();
 
-      await update((draft: any) => {
-        if (persona) draft.active[sessionID] = persona.name.toLowerCase();
-        else delete draft.active[sessionID];
-      });
       context.ui.toast.show({
         message: persona
           ? `RightHand persona: ${persona.role} (${persona.mode})`
@@ -63,7 +71,7 @@ export const righthandOpenCodeTui = Plugin.define({
         return;
       }
 
-      const profiles = Array.from(loadOpenCodePersonas(cwd).values()).sort((a, b) => a.name.localeCompare(b.name));
+      const profiles = Array.from(personas().values()).sort((a, b) => a.name.localeCompare(b.name));
       const currentName = activePersonaForSession(sessionID, cwd) ?? undefined;
       const rawArg = (input ?? "").trim().toLowerCase();
       const action = parseRighthandArgs(rawArg);

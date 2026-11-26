@@ -1,0 +1,1785 @@
+// GENERATED FILE - do not edit.
+// Source: harness/opencode/extension.ts
+// Regenerate: node scripts/bundle-harness.js
+import { existsSync, readFileSync, readdirSync, mkdirSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join, resolve, dirname } from "node:path";
+import { Plugin } from "@opencode/plugin";
+const __RH_BUNDLE_DIR__ = new URL(".", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1");
+function readonlyBase() {
+    return {
+        git: { allowIntegration: false, allowCommit: false, allowTag: false },
+        gh: { allowPrEdit: false, allowRelease: false },
+        release: { allowVersionWrite: false },
+        scripts: { allowRepoRoot: false },
+    };
+}
+const palmPolicy = {
+    name: 'palm',
+    git: { allowIntegration: true, allowCommit: true, allowTag: true },
+    gh: { allowPrEdit: true, allowRelease: true },
+    release: { allowVersionWrite: true },
+    scripts: { allowRepoRoot: true },
+};
+const indexPolicy = { name: 'index', ...readonlyBase() };
+const pinkyPolicy = { name: 'pinky', ...readonlyBase() };
+const thumbPolicy = { name: 'thumb', ...readonlyBase() };
+const ringPolicy = { name: 'ring', ...readonlyBase() };
+const middlePolicy = { name: 'middle', ...readonlyBase() };
+export { readonlyBase };
+const PERSONA_POLICIES = {
+    palm: palmPolicy,
+    index: indexPolicy,
+    pinky: pinkyPolicy,
+    thumb: thumbPolicy,
+    ring: ringPolicy,
+    middle: middlePolicy,
+};
+function resolvePersonaPolicy(name) {
+    const normalizedName = name?.toLowerCase();
+    return normalizedName && Object.hasOwn(PERSONA_POLICIES, normalizedName)
+        ? PERSONA_POLICIES[normalizedName]
+        : { name: normalizedName ?? '', ...readonlyBase() };
+}
+function isInsideRoot(target, root) {
+    const resolvedRoot = resolve(root);
+    const resolvedTarget = resolve(target);
+    if (resolvedTarget === resolvedRoot)
+        return false;
+    const prefix = resolvedRoot.endsWith('/') || resolvedRoot.endsWith('\\') ? resolvedRoot : resolvedRoot + '\\';
+    // handle both separators
+    let normalizedTarget = resolvedTarget.replace(/\//g, '\\');
+    let normalizedRoot = resolvedRoot.replace(/\//g, '\\');
+    if (process.platform === 'win32') {
+        normalizedTarget = normalizedTarget.toLowerCase();
+        normalizedRoot = normalizedRoot.toLowerCase();
+    }
+    const rootWithSep = normalizedRoot.endsWith('\\') ? normalizedRoot : normalizedRoot + '\\';
+    return normalizedTarget.startsWith(rootWithSep);
+}
+function hasUnsafeTraversal(rawPath) {
+    const segments = rawPath.split(/[/\\\\]/);
+    for (const seg of segments) {
+        if (seg.trim() === '..')
+            return true;
+    }
+    return false;
+}
+function allowedRighthandRoot(target) {
+    let dir = dirname(target);
+    while (true) {
+        if (dir.split(/[/\\]/).pop() === '.righthand') {
+            const root = dirname(dir);
+            if (existsSync(join(root, '.git')) || existsSync(join(root, 'package.json'))) {
+                return dir;
+            }
+            return null;
+        }
+        const parent = dirname(dir);
+        if (parent === dir)
+            return null;
+        dir = parent;
+    }
+}
+/**
+ * A release edits the version in the manifests at the checkout root. A file with
+ * the same name deeper in the tree is ordinary source and stays blocked, and so
+ * does any path that walks out of the root.
+ */
+function isReleaseFile(target, cwd, rawPath) {
+    if (hasUnsafeTraversal(rawPath))
+        return false;
+    const root = resolve(cwd);
+    const resolvedTarget = resolve(target);
+    if (dirname(resolvedTarget) !== root)
+        return false;
+    return RELEASE_FILES.has(resolvedTarget.split(/[/\\]/).pop()?.toLowerCase() ?? '');
+}
+/**
+ * Writing `package.json` would otherwise be an execution primitive: add a
+ * `scripts` entry, then run it with the already-allowed `npm run`. A bump only
+ * needs the version fields, so every other field must survive untouched.
+ */
+function versionOnlyChange(previous, next) {
+    let before;
+    let after;
+    try {
+        before = JSON.parse(previous);
+        after = JSON.parse(next);
+    }
+    catch {
+        return false;
+    }
+    if (!before || !after || typeof before !== 'object' || typeof after !== 'object')
+        return false;
+    const strip = (value) => {
+        const copy = { ...value };
+        delete copy.version;
+        return copy;
+    };
+    return JSON.stringify(strip(before)) === JSON.stringify(strip(after));
+}
+/**
+ * Reads the current manifest through the same path the write targets, and allows
+ * the write only when the change is a version bump.
+ */
+function releaseWriteAllowed(target, rawPath, input) {
+    const next = typeof input.content === 'string' ? input.content : typeof input.new_string === 'string' ? input.new_string : null;
+    let previous;
+    try {
+        previous = readFileSync(target, 'utf8');
+    }
+    catch {
+        return false;
+    }
+    if (next !== null) {
+        return versionOnlyChange(previous, next);
+    }
+    return false;
+}
+function isAllowedWritePath(target, scratchDirs, rawPath) {
+    if (rawPath && hasUnsafeTraversal(rawPath)) {
+        return false;
+    }
+    const rhDir = allowedRighthandRoot(target);
+    if (rhDir) {
+        const normTarget = target.replace(/\//g, '\\').toLowerCase();
+        const normRh = rhDir.replace(/\//g, '\\').toLowerCase();
+        const sep = '\\';
+        const rootWithSep = normRh.endsWith(sep) ? normRh : normRh + sep;
+        if (normTarget.startsWith(rootWithSep)) {
+            return true;
+        }
+    }
+    if (scratchDirs) {
+        for (const dir of scratchDirs) {
+            if (isInsideRoot(target, dir))
+                return true;
+        }
+    }
+    return false;
+}
+const SHELL_INTERPRETERS = new Set([
+    'node', 'nodejs', 'deno', 'bun', 'python', 'python3', 'py',
+    'pwsh', 'powershell', 'bash', 'sh', 'zsh', 'fish',
+]);
+const POWERSHELL_FILE_CMDLETS = new Set([
+    'set-content', 'add-content', 'clear-content', 'set-item', 'new-item', 'remove-item',
+    'move-item', 'copy-item', 'rename-item', 'set-itemproperty', 'new-itemproperty',
+    'remove-itemproperty', 'export-csv', 'export-clixml', 'set-acl', 'out-file',
+    'tee-object', 'start-transcript', 'stop-transcript', 'compress-archive',
+    'expand-archive', 'clear-recyclebin',
+]);
+const POWERSHELL_PATH_FLAGS = new Set([
+    '-path', '-filepath', '-literalpath', '-destination', '-outfile', '-target', '-name',
+]);
+const POWERSHELL_VALUE_FLAGS = new Set([
+    '-value', '-encoding', '-itemtype', '-type', '-inputobject', '-filter', '-include',
+    '-exclude', '-stream', '-separator', '-width', '-credential', '-delimiter', '-replace',
+    '-namespace', '-property', '-propertytype',
+]);
+const POSIX_FILE_MUTATORS = new Set([
+    'rm', 'rmdir', 'rd', 'del', 'erase', 'mv', 'move', 'cp', 'copy', 'touch', 'mkdir',
+    'md', 'tee', 'truncate', 'ln', 'chmod', 'chown', 'sed', 'patch',
+]);
+const GIT_READ_SUBCOMMANDS = new Set([
+    'status', 'log', 'diff', 'show', 'describe', 'rev-parse', 'rev-list', 'ls-files',
+    'ls-tree', 'ls-remote', 'cat-file', 'shortlog', 'blame', 'grep', 'for-each-ref',
+    'merge-base', 'name-rev', 'var', 'help', 'whatchanged', 'count-objects', 'fsck',
+    'show-ref', 'show-branch', 'cherry', 'check-ignore', 'check-attr', 'check-ref-format',
+    'verify-commit', 'difftool', 'mergetool', 'range-diff', 'version', 'annotate',
+    'diff-tree', 'diff-index', 'diff-files',
+]);
+/**
+ * The only repository files the release persona may write. Both live at the
+ * checkout root; a copy under a subdirectory is not a release file.
+ */
+const RELEASE_FILES = new Set(['package.json', 'package-lock.json']);
+/**
+ * The only git subcommands the privileged persona may run beyond the read set.
+ * Each one is still filtered so it cannot destroy work or run a command.
+ */
+const GIT_INTEGRATION_SUBCOMMANDS = new Set(['fetch', 'push', 'rebase']);
+const GIT_INTEGRATION_BLOCKED_FLAGS = new Set([
+    '-f', '--force', '-d', '--delete', '--mirror', '--all', '--tags',
+    '--follow-tags', '--no-verify', '--exec', '-x', '--upload-pack', '--receive-pack',
+    '-o', '--push-option',
+]);
+/**
+ * A refspec can delete (`:branch`) or force (`+branch`) a ref without any flag,
+ * and the privileged persona must never push to the default branch. A tag
+ * refspec (`v1.2.3`, `refs/tags/v1.2.3`) stays allowed: releasing needs it.
+ * `--force-with-lease` stays allowed because `integration-flow` requires it.
+ */
+function pushRefspecBlocked(positionals) {
+    const refspecs = positionals.slice(1);
+    for (const refspec of refspecs) {
+        if (refspec.startsWith(':') || refspec.startsWith('+'))
+            return true;
+        const destination = refspec.includes(':') ? refspec.slice(refspec.indexOf(':') + 1) : refspec;
+        if (destination === 'main' || destination === 'refs/heads/main')
+            return true;
+    }
+    return false;
+}
+/**
+ * A release commit and an annotated tag both open an editor when no message is
+ * supplied, which would hang a dispatched agent instead of failing, so the
+ * message flag is required rather than merely recommended.
+ */
+function messageSupplied(flags) {
+    return flags.some((flag) => /^(-m|-F|-C)$|^--(message|file|reuse-message|fixup|squash)=/.test(flag))
+        || flags.some((flag) => ['-m', '-F', '-C'].includes(flag));
+}
+function gitCommitBlocked(flags) {
+    if (flags.some((flag) => ['--amend', '--no-verify', '-n'].includes(flag)))
+        return true;
+    return !messageSupplied(flags);
+}
+function gitTagBlocked(flags, positionals) {
+    if (flags.some((flag) => ['-d', '--delete', '-f', '--force'].includes(flag)))
+        return true;
+    // `-e`/`--edit` and an annotated tag without a message both wait on an editor.
+    if (flags.some((flag) => ['-e', '--edit'].includes(flag)))
+        return true;
+    // Listing is read-only and needs no name or message.
+    if (flags.some((flag) => ['-l', '--list'].includes(flag)))
+        return false;
+    if (positionals.length === 0)
+        return true;
+    const annotated = flags.some((flag) => ['-a', '--annotate', '-s', '--sign'].includes(flag));
+    return annotated && !messageSupplied(flags);
+}
+/**
+ * gh commands that change shared state other work depends on: merging, closing,
+ * reviewing, retargeting a PR, deleting, publishing releases or gists,
+ * credentials, secrets and repo configuration. These stay blocked for readonly
+ * personas.
+ *
+ * Content-append verbs are deliberately absent: `issue create/comment/edit` and
+ * `pr create/comment` publish text to the remote but change nothing on disk and
+ * nothing another lane builds on. `pr edit` is NOT in that set because it can
+ * retarget the base branch, and `gist create` is NOT either because it publishes
+ * local file contents.
+ */
+const GH_MUTATING_PATTERNS = [
+    /^pr\s+(merge|close|reopen|ready|lock|unlock|checkout|review|edit)\b/,
+    /^issue\s+(close|reopen|delete|lock|unlock|transfer|develop)\b/,
+    /^release\s+(create|delete|edit|upload)\b/,
+    /^repo\s+(create|delete|edit|rename|archive|unarchive|fork|clone|sync|set-default)\b/,
+    /^workflow\s+(run|enable|disable)\b/,
+    /^run\s+(cancel|rerun|delete)\b/,
+    /^label\s+(create|edit|delete|clone)\b/,
+    /^(secret|variable)\s+(set|delete)\b/,
+    /^gist\s+(create|delete|edit)\b/,
+    /^auth\s+(login|logout|setup-git|refresh|token)\b/,
+    /^extension\s+(install|remove|upgrade)\b/,
+    /^config\s+set\b/,
+];
+const PACKAGE_MUTATING_SUBCOMMANDS = new Set([
+    'install', 'i', 'add', 'uninstall', 'un', 'remove', 'rm', 'r', 'update', 'up',
+    'upgrade', 'publish', 'unpublish', 'version', 'link', 'ci', 'dedupe', 'prune',
+    'rebuild', 'pack', 'init',
+]);
+function lookupShellVar(name, vars) {
+    if (!vars)
+        return undefined;
+    if (vars.has(name))
+        return vars.get(name);
+    const lower = name.toLowerCase();
+    if (vars.has(lower))
+        return vars.get(lower);
+    return undefined;
+}
+function expandShellToken(token, vars) {
+    let value = token;
+    value = value.replace(/\$env:([A-Za-z_][A-Za-z0-9_]*)/gi, (match, name) => process.env[name] ?? match);
+    value = value.replace(/%([A-Za-z_][A-Za-z0-9_]*)%/g, (match, name) => process.env[name] ?? match);
+    const substitute = (input) => input.replace(/\$\{([A-Za-z_][A-Za-z0-9_]*)\}|\$([A-Za-z_][A-Za-z0-9_]*)/g, (match, braced, plain) => {
+        const name = braced ?? plain;
+        if (!name)
+            return match;
+        const fromVars = lookupShellVar(name, vars);
+        if (fromVars !== undefined)
+            return fromVars;
+        return process.env[name] ?? match;
+    });
+    value = substitute(value);
+    // a variable whose value contains another variable or an $env: reference
+    const second = substitute(value.replace(/\$env:([A-Za-z_][A-Za-z0-9_]*)/gi, (match, name) => process.env[name] ?? match));
+    if (second !== value)
+        value = second;
+    if (value === '~' || value.startsWith('~/') || value.startsWith('~\\')) {
+        value = join(homedir(), value.slice(1));
+    }
+    return value;
+}
+/**
+ * Record simple variable assignments so a path built from a variable can still be
+ * resolved when the assignment happens earlier in the same command.
+ * Supports `NAME=value` (bash) and `$NAME = value` / `$NAME=value` (PowerShell).
+ * Only literal values are recorded; anything unresolved stays unresolvable, which
+ * keeps the guard fail-closed.
+ */
+function collectShellVars(segment, vars) {
+    const body = scanShellRedirects(segment).body;
+    const tokens = tokenizeShellSegment(body);
+    for (let i = 0; i < tokens.length; i++) {
+        const token = tokens[i];
+        const posix = /^([A-Za-z_][A-Za-z0-9_]*)=(.+)$/.exec(token);
+        if (posix) {
+            vars.set(posix[1], expandShellToken(posix[2].replace(/^["']|["']$/g, ''), vars));
+            continue;
+        }
+        const psInline = /^\$([A-Za-z_][A-Za-z0-9_]*)=(.+)$/.exec(token);
+        if (psInline) {
+            vars.set(psInline[1], expandShellToken(psInline[2].replace(/^["']|["']$/g, ''), vars));
+            continue;
+        }
+        const psSpaced = /^\$([A-Za-z_][A-Za-z0-9_]*)$/.exec(token);
+        if (psSpaced && tokens[i + 1] === '=') {
+            const rawValue = (tokens[i + 2] ?? '').replace(/^["']|["']$/g, '');
+            if (rawValue)
+                vars.set(psSpaced[1], expandShellToken(rawValue, vars));
+            i += 2;
+        }
+    }
+}
+function looksLikePathToken(token) {
+    if (!token || token.startsWith('-'))
+        return false;
+    if (token.startsWith('$') || token.startsWith('%'))
+        return false;
+    if (/^[A-Za-z]:[\\/]/.test(token))
+        return true;
+    if (token.startsWith('/') || token.startsWith('\\'))
+        return true;
+    if (token.startsWith('./') || token.startsWith('../') || token.startsWith('.\\') || token.startsWith('..\\'))
+        return true;
+    if (/[\\/]/.test(token))
+        return true;
+    return /\.(?:js|mjs|cjs|ts|mts|cts|jsx|tsx|json|py|ps1|sh|bat|cmd|rb|pl)$/i.test(token);
+}
+function splitShellSegments(command) {
+    const segments = [];
+    let current = '';
+    let quote = null;
+    for (let i = 0; i < command.length; i++) {
+        const ch = command[i];
+        if (quote) {
+            current += ch;
+            if (ch === quote)
+                quote = null;
+            continue;
+        }
+        if (ch === '"' || ch === "'") {
+            quote = ch;
+            current += ch;
+            continue;
+        }
+        if (ch === ';' || ch === '\n' || ch === '\r') {
+            segments.push(current);
+            current = '';
+            continue;
+        }
+        if (ch === '|') {
+            segments.push(current);
+            current = '';
+            if (command[i + 1] === '|')
+                i++;
+            continue;
+        }
+        if (ch === '&' && command[i + 1] === '&') {
+            segments.push(current);
+            current = '';
+            i++;
+            continue;
+        }
+        current += ch;
+    }
+    segments.push(current);
+    return segments.filter((segment) => segment.trim() !== '');
+}
+function tokenizeShellSegment(segment) {
+    const tokens = [];
+    let current = '';
+    let quote = null;
+    for (let i = 0; i < segment.length; i++) {
+        const ch = segment[i];
+        if (quote) {
+            if (ch === quote)
+                quote = null;
+            else
+                current += ch;
+            continue;
+        }
+        if (ch === '"' || ch === "'") {
+            quote = ch;
+            continue;
+        }
+        if (/\s/.test(ch)) {
+            if (current) {
+                tokens.push(current);
+                current = '';
+            }
+            continue;
+        }
+        current += ch;
+    }
+    if (current)
+        tokens.push(current);
+    return tokens;
+}
+function scanShellRedirects(segment) {
+    const chars = segment.split('');
+    const targets = [];
+    let quote = null;
+    for (let i = 0; i < segment.length; i++) {
+        const ch = segment[i];
+        if (quote) {
+            if (ch === quote)
+                quote = null;
+            continue;
+        }
+        if (ch === '"' || ch === "'") {
+            quote = ch;
+            continue;
+        }
+        if (ch !== '>')
+            continue;
+        const next = segment[i + 1];
+        if (next === '&' || next === '=')
+            continue;
+        const start = i;
+        let cursor = i + 1;
+        if (next === '>')
+            cursor += 1;
+        while (cursor < segment.length && /\s/.test(segment[cursor]))
+            cursor++;
+        if (cursor >= segment.length) {
+            for (let k = start; k < cursor; k++)
+                chars[k] = ' ';
+            continue;
+        }
+        let target = '';
+        if (segment[cursor] === '"' || segment[cursor] === "'") {
+            const quoteChar = segment[cursor];
+            cursor += 1;
+            while (cursor < segment.length && segment[cursor] !== quoteChar) {
+                target += segment[cursor];
+                cursor++;
+            }
+            cursor += 1;
+        }
+        else {
+            while (cursor < segment.length && !/[\s;|&]/.test(segment[cursor])) {
+                target += segment[cursor];
+                cursor++;
+            }
+        }
+        targets.push(target);
+        for (let k = start; k < cursor; k++)
+            chars[k] = ' ';
+        i = cursor - 1;
+    }
+    return { targets, body: chars.join('') };
+}
+function targetAllowed(rawTarget, cwd, scratchDirs, vars, privilegedRepoRoot = false) {
+    const expanded = expandShellToken(rawTarget.trim(), vars).replace(/^["']|["']$/g, '');
+    if (!expanded)
+        return false;
+    const lower = expanded.toLowerCase();
+    if (lower === 'nul' || lower === '/dev/null' || lower === '$null')
+        return true;
+    if (hasUnsafeTraversal(expanded))
+        return false;
+    const target = resolve(cwd, expanded);
+    if (privilegedRepoRoot && isInsideRoot(target, cwd))
+        return true;
+    return isAllowedWritePath(target, scratchDirs, expanded);
+}
+function posixTargets(tokens, command) {
+    const targets = [];
+    let skipNextPositional = command === 'chmod' || command === 'chown' || command === 'sed';
+    for (let i = 1; i < tokens.length; i++) {
+        const token = tokens[i];
+        if (token.startsWith('-'))
+            continue;
+        if (skipNextPositional) {
+            skipNextPositional = false;
+            continue;
+        }
+        targets.push(token);
+    }
+    return targets;
+}
+function powershellTargets(tokens) {
+    const targets = [];
+    for (let i = 1; i < tokens.length; i++) {
+        const token = tokens[i];
+        const isSlashFlag = /^\/[A-Za-z][A-Za-z0-9-]*$/.test(token);
+        if (!token.startsWith('-') && !isSlashFlag) {
+            targets.push(token);
+            continue;
+        }
+        const lower = token.toLowerCase();
+        if (POWERSHELL_PATH_FLAGS.has(lower)) {
+            const next = tokens[i + 1];
+            if (next && !next.startsWith('-')) {
+                targets.push(next);
+                i++;
+            }
+            continue;
+        }
+        if (POWERSHELL_VALUE_FLAGS.has(lower)) {
+            i++;
+        }
+    }
+    return targets;
+}
+function displayMutationTarget(target, cwd, vars) {
+    const normalizedCwd = resolve(cwd).replace(/\\/g, '/');
+    const normalizedTarget = resolve(cwd, expandShellToken(target.trim(), vars)).replace(/\\/g, '/');
+    const compareCwd = process.platform === 'win32' ? normalizedCwd.toLowerCase() : normalizedCwd;
+    const compareTarget = process.platform === 'win32' ? normalizedTarget.toLowerCase() : normalizedTarget;
+    const rootPrefix = compareCwd.endsWith('/') ? compareCwd : compareCwd + '/';
+    if (compareTarget === compareCwd)
+        return '.';
+    if (compareTarget.startsWith(rootPrefix))
+        return normalizedTarget.slice(rootPrefix.length);
+    if (!/^(?:[A-Za-z]:[\\/]|[\\/]{1,2})/.test(target))
+        return target;
+    return normalizedTarget.split('/').pop() || target;
+}
+function mutationTargetsBlocked(targets, cwd, scratchDirs, vars) {
+    if (targets.length === 0)
+        return true;
+    for (const target of targets) {
+        if (!targetAllowed(target, cwd, scratchDirs, vars))
+            return true;
+    }
+    return false;
+}
+function interpreterBlocked(command, args, cwd, scratchDirs, vars, privileged = false) {
+    const lower = args.map((arg) => arg.toLowerCase());
+    if (command === 'node' || command === 'nodejs' || command === 'deno' || command === 'bun') {
+        if (lower.some((arg) => arg === '-e' || arg === '--eval' || arg.startsWith('--eval=')))
+            return true;
+        if (command === 'deno' && lower[0] === 'eval')
+            return true;
+        const script = args.find((arg) => looksLikePathToken(arg));
+        if (!script)
+            return false;
+        return !targetAllowed(script, cwd, scratchDirs, vars, privileged);
+    }
+    if (command === 'python' || command === 'python3' || command === 'py') {
+        if (lower.some((arg) => arg === '-c' || arg === '-m' || arg === '-'))
+            return true;
+        const script = args.find((arg) => looksLikePathToken(arg));
+        if (!script)
+            return false;
+        return !targetAllowed(script, cwd, scratchDirs, vars, privileged);
+    }
+    if (command === 'pwsh' || command === 'powershell') {
+        if (lower.some((arg) => /^(-command|-c|-encodedcommand|-ec)$/.test(arg)))
+            return true;
+        const fileIndex = lower.findIndex((arg) => arg === '-file' || arg === '-f');
+        if (fileIndex >= 0) {
+            const target = args[fileIndex + 1];
+            if (!target)
+                return true;
+            return !targetAllowed(target, cwd, scratchDirs, vars, privileged);
+        }
+        const script = args.find((arg) => looksLikePathToken(arg));
+        if (script)
+            return !targetAllowed(script, cwd, scratchDirs, vars, privileged);
+        return true;
+    }
+    if (command === 'bash' || command === 'sh' || command === 'zsh' || command === 'fish') {
+        if (lower.some((arg) => arg === '-c' || arg === '--command'))
+            return true;
+        const script = args.find((arg) => looksLikePathToken(arg));
+        if (!script)
+            return false;
+        return !targetAllowed(script, cwd, scratchDirs, vars, privileged);
+    }
+    return true;
+}
+function gitSubcommandBlocked(subcommand, args, privileged = false) {
+    const flags = args.filter((arg) => arg.startsWith('-'));
+    const positionals = args.filter((arg) => !arg.startsWith('-'));
+    const flagMatches = (pattern) => flags.some((flag) => pattern.test(flag));
+    if (privileged && subcommand === 'add') {
+        // Staging a bump only: no force, no interactive edit, no shell execution.
+        if (flags.some((flag) => ['-f', '--force', '-p', '--patch', '-i', '--interactive', '-e', '--edit', '-N', '--intent-to-add'].includes(flag)))
+            return true;
+        return false;
+    }
+    if (privileged && GIT_INTEGRATION_SUBCOMMANDS.has(subcommand)) {
+        if (flags.some((flag) => GIT_INTEGRATION_BLOCKED_FLAGS.has(flag)))
+            return true;
+        if (flags.some((flag) => /^-o.+/.test(flag)))
+            return true;
+        if (flags.some((flag) => /^--(exec|receive-pack|upload-pack|push-option)=/.test(flag)))
+            return true;
+        if (subcommand === 'push' && pushRefspecBlocked(positionals))
+            return true;
+        return false;
+    }
+    if (privileged && subcommand === 'commit') {
+        return gitCommitBlocked(flags);
+    }
+    if (privileged && subcommand === 'tag') {
+        return gitTagBlocked(flags, positionals);
+    }
+    switch (subcommand) {
+        case 'branch':
+            if (flagMatches(/^(-d|-D|-m|-M|-c|-C|-u|-f|--delete|--move|--copy|--force|--set-upstream-to|--unset-upstream|--edit-description|--create-reflog)/))
+                return true;
+            if (positionals.length > 0 && !flagMatches(/^(-l|--list|--contains|--no-contains|--merged|--no-merged|--points-at)/))
+                return true;
+            return false;
+        case 'tag':
+            if (flagMatches(/^(-a|--annotate|-d|--delete|-m|--message|-F|--file|-s|--sign|-f|--force|-u|--local-user|-e|--edit|--cleanup)/))
+                return true;
+            if (positionals.length > 0 && !flagMatches(/^(-l|--list)/))
+                return true;
+            return false;
+        case 'worktree':
+            return !(positionals.length === 0 || positionals[0].toLowerCase() === 'list');
+        case 'remote':
+            if (positionals.length === 0)
+                return false;
+            return !['show', 'get-url'].includes(positionals[0].toLowerCase());
+        case 'stash':
+            return !(positionals.length > 0 && ['list', 'show'].includes(positionals[0].toLowerCase()));
+        case 'reflog':
+            return !(positionals.length === 0 || ['show', 'list'].includes(positionals[0].toLowerCase()));
+        case 'config':
+            if (flagMatches(/^(--unset|--unset-all|--add|--replace-all|--rename-section|--remove-section)/))
+                return true;
+            return positionals.length > 1;
+        case 'submodule':
+            return !(positionals.length === 0 || ['status', 'summary'].includes(positionals[0].toLowerCase()));
+        case 'notes':
+            return !(positionals.length === 0 || ['list', 'show'].includes(positionals[0].toLowerCase()));
+        default:
+            return !GIT_READ_SUBCOMMANDS.has(subcommand);
+    }
+}
+function gitBlocked(args, privileged = false) {
+    let index = 0;
+    while (index < args.length) {
+        const token = args[index];
+        if (token === '-C' || token === '-c' || token === '--git-dir' || token === '--work-tree') {
+            index += 2;
+            continue;
+        }
+        if (token.startsWith('-')) {
+            index += 1;
+            continue;
+        }
+        break;
+    }
+    const subcommand = (args[index] || '').toLowerCase();
+    if (!subcommand)
+        return false;
+    return gitSubcommandBlocked(subcommand, args.slice(index + 1), privileged);
+}
+function ghBlocked(args, privileged = false) {
+    const positional = args.filter((arg) => !arg.startsWith('-')).map((arg) => arg.toLowerCase()).join(' ');
+    // The privileged persona maintains an open pull request and cuts the release
+    // that follows a merge. Merging, closing and repo surgery stay blocked.
+    const privilegedAllowed = privileged && (/^pr\s+edit\b/.test(positional) || /^release\s+(create|edit|delete|upload)\b/.test(positional));
+    if (!privilegedAllowed && GH_MUTATING_PATTERNS.some((pattern) => pattern.test(positional)))
+        return true;
+    if ((args[0] || '').toLowerCase() === 'api') {
+        const methodIndex = args.findIndex((arg) => /^(-X|--method)$/i.test(arg));
+        if (methodIndex >= 0) {
+            const method = (args[methodIndex + 1] || '').toUpperCase();
+            if (method !== 'GET')
+                return true;
+        }
+        if (args.some((arg) => /^--method=(?!GET$)/i.test(arg)))
+            return true;
+        if (args.some((arg) => /^(-f|--field|--raw-field|--input)$/i.test(arg)))
+            return true;
+    }
+    // Everything not listed above is either read-only (`gh pr view`, `gh issue
+    // list`) or content-append (`gh issue create`, `gh pr comment`). Neither can
+    // mutate the working tree, so a readonly persona may run it.
+    return false;
+}
+function packageManagerBlocked(args) {
+    let index = 0;
+    while (index < args.length && args[index].startsWith('-')) {
+        if (['--prefix', '--dir', '-C', '-w', '--workspace'].includes(args[index]))
+            index += 2;
+        else
+            index += 1;
+    }
+    const subcommand = (args[index] || '').toLowerCase();
+    if (!subcommand)
+        return false;
+    return PACKAGE_MUTATING_SUBCOMMANDS.has(subcommand);
+}
+const SHELL_WRAPPERS = new Set([
+    'sudo', 'doas', 'env', 'command', 'exec', 'nohup', 'nice', 'ionice', 'time',
+    'timeout', 'xargs', 'start', 'cmd',
+]);
+function stripShellWrapper(command, args) {
+    if (!SHELL_WRAPPERS.has(command))
+        return null;
+    let index = 0;
+    if (command === 'cmd') {
+        while (index < args.length && /^[/-][a-z]$/i.test(args[index]))
+            index++;
+        return args.slice(index);
+    }
+    if (command === 'timeout') {
+        while (index < args.length && args[index].startsWith('-'))
+            index++;
+        if (index < args.length)
+            index++;
+        return args.slice(index);
+    }
+    while (index < args.length) {
+        const token = args[index];
+        if (/^[A-Za-z_][A-Za-z0-9_]*=/.test(token)) {
+            index++;
+            continue;
+        }
+        if (token.startsWith('-') || token.startsWith('/')) {
+            const takesValue = ['-u', '-g', '-p', '-C', '-n', '-t', '-U', '-r', '-a', '--user', '--group'].includes(token);
+            index += takesValue ? 2 : 1;
+            continue;
+        }
+        break;
+    }
+    return args.slice(index);
+}
+function commandBlocked(command, rawCommand, args, cwd, scratchDirs, vars, privileged = false) {
+    if (SHELL_INTERPRETERS.has(command))
+        return interpreterBlocked(command, args, cwd, scratchDirs, vars, privileged);
+    if (command === 'git')
+        return gitBlocked(args, privileged);
+    if (command === 'gh')
+        return ghBlocked(args, privileged);
+    if (command === 'npm' || command === 'pnpm' || command === 'yarn')
+        return packageManagerBlocked(args);
+    if (command === 'sed' && !args.some((arg) => /^-i/.test(arg) || /^--in-place/.test(arg)))
+        return false;
+    if (POWERSHELL_FILE_CMDLETS.has(command)) {
+        return mutationTargetsBlocked(powershellTargets([rawCommand, ...args]), cwd, scratchDirs, vars);
+    }
+    if (POSIX_FILE_MUTATORS.has(command)) {
+        if (command === 'patch')
+            return true;
+        return mutationTargetsBlocked(posixTargets([rawCommand, ...args], command), cwd, scratchDirs, vars);
+    }
+    return false;
+}
+function shellSegmentBlocked(segment, cwd, scratchDirs, vars, privileged = false) {
+    const redirects = scanShellRedirects(segment);
+    for (const target of redirects.targets) {
+        if (!targetAllowed(target, cwd, scratchDirs, vars))
+            return true;
+    }
+    const tokens = tokenizeShellSegment(redirects.body);
+    let start = 0;
+    while (start < tokens.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(tokens[start]))
+        start++;
+    let commandTokens = tokens.slice(start);
+    for (let depth = 0; commandTokens.length > 0 && depth < 8; depth++) {
+        const rawCommand = commandTokens[0];
+        const command = (rawCommand.split(/[\\/]/).pop() ?? rawCommand).replace(/\.exe$/i, '').toLowerCase();
+        const args = commandTokens.slice(1);
+        const stripped = stripShellWrapper(command, args);
+        if (stripped) {
+            commandTokens = stripped;
+            continue;
+        }
+        return commandBlocked(command, rawCommand, args, cwd, scratchDirs, vars, privileged);
+    }
+    return false;
+}
+/**
+ * Index of the character that closes a substitution opened at `openIndex`,
+ * or -1 when it never closes.
+ */
+function findSubstitutionEnd(command, openIndex, kind) {
+    if (command[openIndex] === '`') {
+        for (let i = openIndex + 1; i < command.length; i++) {
+            if (kind === 'posix' && command[i] === '\\') {
+                i += 1;
+                continue;
+            }
+            if (command[i] === '`')
+                return i;
+        }
+        return -1;
+    }
+    let depth = 1;
+    let quote = null;
+    for (let i = openIndex + 2; i < command.length; i++) {
+        const ch = command[i];
+        if (quote === "'") {
+            if (ch === "'")
+                quote = null;
+            continue;
+        }
+        if (kind === 'powershell' ? ch === '`' : ch === '\\') {
+            i += 1;
+            continue;
+        }
+        if (quote === '"') {
+            if (ch === '"') {
+                quote = null;
+                continue;
+            }
+        }
+        else {
+            if (ch === "'") {
+                quote = "'";
+                continue;
+            }
+            if (ch === '"') {
+                quote = '"';
+                continue;
+            }
+        }
+        if (ch === '(')
+            depth += 1;
+        if (ch === ')') {
+            depth -= 1;
+            if (depth === 0)
+                return i;
+        }
+    }
+    return -1;
+}
+/**
+ * Split a command into the commands hidden in its substitutions and a masked
+ * version of the outer text. Returns null when a substitution never closes.
+ *
+ * Forms handled: `$(...)`, a backtick pair and, on POSIX, `<(cmd)` / `>(cmd)`.
+ *
+ * Quoting differs per shell and both matter:
+ * - single quotes make every form literal
+ * - POSIX escapes with a backslash and still substitutes inside double quotes
+ * - PowerShell escapes with a backtick, so `` `$( `` is literal text
+ */
+function scanCommandSubstitutions(command, kind) {
+    const inner = [];
+    let masked = '';
+    let quote = null;
+    for (let i = 0; i < command.length; i++) {
+        const ch = command[i];
+        if (quote === "'") {
+            masked += ch;
+            if (ch === "'")
+                quote = null;
+            continue;
+        }
+        if (kind === 'powershell' ? ch === '`' : ch === '\\') {
+            masked += ch;
+            if (i + 1 < command.length) {
+                masked += command[i + 1];
+                i += 1;
+            }
+            continue;
+        }
+        if (quote === '"') {
+            if (ch === '"') {
+                quote = null;
+                masked += ch;
+                continue;
+            }
+        }
+        else {
+            if (ch === "'") {
+                quote = "'";
+                masked += ch;
+                continue;
+            }
+            if (ch === '"') {
+                quote = '"';
+                masked += ch;
+                continue;
+            }
+        }
+        const opensValue = ch === '$' && command[i + 1] === '(';
+        const opensBacktick = ch === '`';
+        const opensProcess = kind === 'posix' && (ch === '<' || ch === '>') && command[i + 1] === '(';
+        if (!opensValue && !opensBacktick && !opensProcess) {
+            masked += ch;
+            continue;
+        }
+        const end = findSubstitutionEnd(command, i, kind);
+        if (end < 0)
+            return null;
+        inner.push(command.slice(i + (opensBacktick ? 1 : 2), end));
+        // the substitution's own text is not part of the outer command; a target
+        // built from it stays unresolved and therefore blocked
+        masked += ' __rh_subst__ ';
+        i = end;
+    }
+    return { inner, masked };
+}
+function shellBlocked(command, cwd, scratchDirs, kind = 'posix', depth = 0, privileged = false) {
+    const trimmed = command.trim();
+    if (!trimmed)
+        return true;
+    if (depth > 8)
+        return true;
+    const scan = scanCommandSubstitutions(trimmed, kind);
+    if (!scan)
+        return true;
+    // A substitution runs its own command, so judge that command too instead of
+    // refusing every use of one.
+    for (const innerCommand of scan.inner) {
+        if (shellBlocked(innerCommand, cwd, scratchDirs, kind, depth + 1, privileged))
+            return true;
+    }
+    const outer = scan.masked.trim();
+    if (!outer)
+        return true;
+    const vars = new Map();
+    for (const segment of splitShellSegments(outer)) {
+        if (shellSegmentBlocked(segment, cwd, scratchDirs, vars, privileged))
+            return true;
+        collectShellVars(segment, vars);
+    }
+    return false;
+}
+function shellBlockReason(command, cwd, scratchDirs, kind, privileged, persona) {
+    const trimmed = command.trim();
+    if (!trimmed)
+        return 'shell input was unusable, so the call was refused rather than allowed';
+    const scan = scanCommandSubstitutions(trimmed, kind);
+    if (!scan)
+        return 'shell command substitution was malformed and refused';
+    for (const inner of scan.inner) {
+        if (shellBlocked(inner, cwd, scratchDirs, kind, 0, privileged)) {
+            const reason = shellBlockReason(inner, cwd, scratchDirs, kind, privileged, persona);
+            return `shell command substitution was refused: ${reason}`;
+        }
+    }
+    const segments = splitShellSegments(scan.masked);
+    const vars = new Map();
+    for (const segment of segments) {
+        const redirects = scanShellRedirects(segment);
+        if (redirects.targets.some((target) => !targetAllowed(target, cwd, scratchDirs, vars))) {
+            return 'shell redirect target is outside the allowed write roots';
+        }
+        const tokens = tokenizeShellSegment(redirects.body);
+        if (tokens.length === 0) {
+            collectShellVars(segment, vars);
+            continue;
+        }
+        let commandTokens = tokens;
+        for (let depth = 0; depth < 8; depth++) {
+            const wrappedCommand = commandTokens[0];
+            const wrappedName = (wrappedCommand.split(/[\\/]/).pop() ?? wrappedCommand).replace(/\.exe$/i, '').toLowerCase();
+            const unwrapped = stripShellWrapper(wrappedName, commandTokens.slice(1));
+            if (!unwrapped)
+                break;
+            commandTokens = unwrapped;
+        }
+        const rawCommand = commandTokens[0];
+        const executable = (rawCommand.split(/[\\/]/).pop() ?? rawCommand).replace(/\.exe$/i, '').toLowerCase();
+        const args = commandTokens.slice(1);
+        const lower = args.map((arg) => arg.toLowerCase());
+        if (SHELL_INTERPRETERS.has(executable)) {
+            if (lower.some((arg) => ['-e', '-c', '--eval', '--command', '-encodedcommand', '-ec'].includes(arg) || arg.startsWith('--eval='))) {
+                return 'inline evaluation is always refused; write a script instead';
+            }
+            if (executable === 'deno' && lower[0] === 'eval') {
+                return 'inline evaluation is always refused; write a script instead';
+            }
+            if ((executable === 'python' || executable === 'python3' || executable === 'py') && lower.some((arg) => arg === '-m' || arg === '-')) {
+                return 'interpreter module or stdin execution is refused; run an allowed script file instead';
+            }
+            const script = args.find((arg) => looksLikePathToken(arg));
+            if (script && !targetAllowed(script, cwd, scratchDirs, vars, privileged)) {
+                return 'interpreter script must resolve inside .righthand/, the scratchpad, or (privileged only) the repo root';
+            }
+            return 'interpreter command was refused by the script execution rule';
+        }
+        if (executable === 'git' && gitBlocked(args, privileged)) {
+            let index = 0;
+            while (index < args.length) {
+                if (['-C', '-c', '--git-dir', '--work-tree'].includes(args[index]))
+                    index += 2;
+                else if (args[index].startsWith('-'))
+                    index += 1;
+                else
+                    break;
+            }
+            const subcommand = (args[index] || 'unspecified').toLowerCase();
+            const operationArgs = args.slice(index + 1);
+            const flags = operationArgs.filter((arg) => arg.startsWith('-'));
+            const positionals = operationArgs.filter((arg) => !arg.startsWith('-'));
+            if (privileged && subcommand === 'push') {
+                if (flags.some((flag) => ['-f', '--force', '-d', '--delete', '--mirror', '--all', '--tags', '--follow-tags'].includes(flag))
+                    || positionals.slice(1).some((refspec) => refspec.startsWith(':') || refspec.startsWith('+'))) {
+                    return 'force and delete pushes are refused; use --force-with-lease on your own ticket branch';
+                }
+                const protectedRef = positionals.slice(1).map((refspec) => refspec.includes(':') ? refspec.slice(refspec.indexOf(':') + 1) : refspec)
+                    .find((refspec) => refspec === 'main' || refspec === 'refs/heads/main');
+                if (protectedRef)
+                    return `refusing to push to '${protectedRef}': the ticket branch is pushed, never the protected branch`;
+                const blockedFlag = flags.find((flag) => GIT_INTEGRATION_BLOCKED_FLAGS.has(flag) || /^-o.+/.test(flag) || /^--(exec|receive-pack|upload-pack|push-option)=/.test(flag));
+                if (blockedFlag)
+                    return `git push option '${blockedFlag}' is refused by the protected push options rule`;
+            }
+            if (privileged && subcommand === 'commit') {
+                if (flags.includes('--amend'))
+                    return 'git commit --amend is refused; amend commits are not permitted';
+                if (!messageSupplied(flags))
+                    return 'git commit requires an explicit message with -m or -F';
+                if (flags.some((flag) => ['--no-verify', '-n'].includes(flag)))
+                    return 'git commit --no-verify is refused by the commit verification rule';
+            }
+            if (privileged && subcommand === 'tag') {
+                if (flags.some((flag) => ['-d', '--delete'].includes(flag)))
+                    return 'git tag delete is refused; deleting tags is not permitted';
+                if (flags.some((flag) => ['-f', '--force'].includes(flag)))
+                    return 'git tag force is refused; replacing tags is not permitted';
+                if (flags.some((flag) => ['-e', '--edit'].includes(flag)))
+                    return 'git tag edit is refused because it requires an interactive editor';
+                if (!positionals.length)
+                    return 'git tag requires a tag name';
+                if (flags.some((flag) => ['-a', '--annotate', '-s', '--sign'].includes(flag)) && !messageSupplied(flags))
+                    return 'annotated git tag requires an explicit message';
+            }
+            if (privileged && GIT_INTEGRATION_SUBCOMMANDS.has(subcommand)) {
+                const blockedFlag = flags.find((flag) => GIT_INTEGRATION_BLOCKED_FLAGS.has(flag) || /^-o.+/.test(flag) || /^--(exec|receive-pack|upload-pack|push-option)=/.test(flag));
+                if (blockedFlag)
+                    return `git ${subcommand} option '${blockedFlag}' is refused by the integration safety rule`;
+            }
+            return `git allows read-only operations${privileged ? ' and privileged integration operations' : ''}; requested subcommand '${subcommand}' is not allowed`;
+        }
+        if (executable === 'gh' && ghBlocked(args, privileged)) {
+            const positional = args.filter((arg) => !arg.startsWith('-')).map((arg) => arg.toLowerCase());
+            const operation = positional.slice(0, 2).join(' ') || 'unspecified';
+            if (GH_MUTATING_PATTERNS.some((pattern) => pattern.test(positional.join(' ')))) {
+                const category = operation.startsWith('repo ') ? 'repo-surgery'
+                    : /\bmerge\b/.test(operation) ? 'merge'
+                        : /\bclose\b/.test(operation) ? 'close'
+                            : /\bdelete\b/.test(operation) ? 'delete'
+                                : 'mutation';
+                return `gh operation '${operation}' is refused: ${category} is not permitted for ${persona || 'readonly persona'}`;
+            }
+            if ((args[0] || '').toLowerCase() === 'api')
+                return `gh operation '${operation}' is refused: API mutation is not permitted for ${persona || 'readonly persona'}`;
+        }
+        if (['npm', 'pnpm', 'yarn'].includes(executable) && packageManagerBlocked(args)) {
+            let index = 0;
+            while (index < args.length && args[index].startsWith('-')) {
+                if (['--prefix', '--dir', '-C', '-w', '--workspace'].includes(args[index]))
+                    index += 2;
+                else
+                    index += 1;
+            }
+            return `package manager operation '${args[index] || 'unspecified'}' was refused; use npm run <script> or npm test`;
+        }
+        if (POWERSHELL_FILE_CMDLETS.has(executable)) {
+            const targets = powershellTargets(commandTokens);
+            const rejected = targets.find((target) => !targetAllowed(target, cwd, scratchDirs, vars));
+            if (rejected) {
+                const displayTarget = displayMutationTarget(rejected, cwd, vars);
+                return `file mutation target '${displayTarget}' is outside .righthand/ and the scratchpad`;
+            }
+            if (targets.length === 0)
+                return 'file mutation was refused because no target was supplied; writes are limited to .righthand/ and the scratchpad';
+        }
+        if (POSIX_FILE_MUTATORS.has(executable)) {
+            if (executable === 'patch')
+                return 'patch command is refused; use an allowed file mutator inside .righthand/ or the scratchpad';
+            const targets = posixTargets(commandTokens, executable);
+            const rejected = targets.find((target) => !targetAllowed(target, cwd, scratchDirs, vars));
+            if (rejected) {
+                const displayTarget = displayMutationTarget(rejected, cwd, vars);
+                return `file mutation target '${displayTarget}' is outside .righthand/ and the scratchpad`;
+            }
+            if (targets.length === 0)
+                return 'file mutation was refused because no target was supplied; writes are limited to .righthand/ and the scratchpad';
+        }
+        collectShellVars(segment, vars);
+    }
+    if (scan.inner.length > 0)
+        return 'shell command substitution was refused';
+    if (/[;|&]/.test(trimmed))
+        return 'shell metacharacter was refused';
+    return 'shell command was refused by an unclassified shell rule';
+}
+function evaluateToolGuard(mode, ctx) {
+    if (mode !== 'readonly') {
+        return { block: false };
+    }
+    const toolAliases = ctx.harness?.toolAliases ?? {
+        write: 'write_file',
+        edit: 'edit_file',
+        read: 'read_file',
+        find: 'glob',
+    };
+    const toolName = toolAliases[ctx.toolName] ?? ctx.toolName;
+    const writeReason = (ctx.persona || 'readonly persona').toLowerCase() + ' is readonly: writes are limited to .righthand/ and the scratchpad. Put reports under .righthand/tickets/<ID>/reports/.';
+    const policy = resolvePersonaPolicy(ctx.persona);
+    const privileged = policy.git.allowIntegration;
+    if (toolName === 'write_file' || toolName === 'edit_file') {
+        let rawPath = '';
+        try {
+            const input = (ctx.input && typeof ctx.input === 'object') ? ctx.input : {};
+            rawPath = typeof input.file_path === 'string' ? input.file_path : (typeof input.path === 'string' ? input.path : '');
+        }
+        catch {
+            return { block: true, reason: 'write input was unusable, so the call was refused rather than allowed' };
+        }
+        if (!rawPath) {
+            return { block: true, reason: 'write input was unusable, so the call was refused rather than allowed' };
+        }
+        const target = resolve(ctx.cwd, rawPath);
+        if (privileged && isReleaseFile(target, ctx.cwd, rawPath)) {
+            let input = {};
+            try {
+                input = (ctx.input && typeof ctx.input === 'object') ? ctx.input : {};
+            }
+            catch {
+                return { block: true, reason: 'release manifest input was unusable, so the call was refused rather than allowed' };
+            }
+            // `edit_file` carries fragments, so the resulting manifest cannot be
+            // reconstructed here. A bump writes the whole file instead.
+            if (toolName === 'write_file' && releaseWriteAllowed(target, rawPath, input)) {
+                return { block: false };
+            }
+            return {
+                block: true,
+                reason: toolName === 'edit_file'
+                    ? 'release manifest can only be written whole, never patched, because the fragment cannot be verified'
+                    : 'release manifest writes may only change the version and must preserve every other field',
+            };
+        }
+        if (!isAllowedWritePath(target, ctx.scratchDirs, rawPath)) {
+            return { block: true, reason: writeReason };
+        }
+        return { block: false };
+    }
+    const shellTools = new Set(ctx.harness?.shellTools ?? ['shell_command', 'powershell', 'bash', 'terminal']);
+    if (shellTools.has(toolName)) {
+        if (!ctx.input || typeof ctx.input !== 'object') {
+            return { block: true, reason: 'shell input was unusable, so the call was refused rather than allowed' };
+        }
+        const input = ctx.input;
+        const rawCmd = input.command ?? input.script;
+        if (typeof rawCmd !== 'string' || rawCmd.trim() === '') {
+            return { block: true, reason: 'shell input was unusable, so the call was refused rather than allowed' };
+        }
+        const command = rawCmd;
+        // `powershell` and the default Windows shell escape with a backtick, so a
+        // backtick there is not substitution. `bash`/`sh` always substitute.
+        const shellKind = ctx.harness?.shellKind ?? (toolName === 'powershell' || (process.platform === 'win32' && toolName !== 'bash')
+            ? 'powershell'
+            : 'posix');
+        if (shellBlocked(command, ctx.cwd, ctx.scratchDirs, shellKind, 0, privileged)) {
+            return { block: true, reason: shellBlockReason(command, ctx.cwd, ctx.scratchDirs, shellKind, privileged, ctx.persona) };
+        }
+        return { block: false };
+    }
+    const safeTools = new Set(['read_file', 'grep', 'glob', 'ls', 'cat']);
+    if (safeTools.has(toolName)) {
+        return { block: false };
+    }
+    // unknown tool: fail closed if mutating fields present
+    if (ctx.input && typeof ctx.input === 'object') {
+        const input = ctx.input;
+        const mutating = ['command', 'script', 'file_path', 'path', 'patch', 'content', 'filePath', 'patchText'];
+        if (mutating.some((k) => k in input)) {
+            return { block: true, reason: 'unknown tool carried a mutating field, so it was refused' };
+        }
+    }
+    // read-only tools untouched
+    return { block: false };
+}
+// A generated ESM bundle has no CommonJS __dirname. The bundler inlines this
+// marker with the directory of the generated file, which is where setup copies
+// the righthand-profiles/ tree. Keep the other branches for source builds and
+// VM-based validators that provide a CommonJS __dirname.
+const { __dirname: runtimeDirname } = { __dirname: typeof __dirname !== 'undefined' ? __dirname : undefined };
+function bundleDir() {
+    if (typeof __RH_BUNDLE_DIR__ === 'string' && __RH_BUNDLE_DIR__.length > 0)
+        return __RH_BUNDLE_DIR__;
+    return runtimeDirname;
+}
+function getRepoRoot() {
+    try {
+        const directory = bundleDir();
+        if (directory) {
+            let current = resolve(directory);
+            for (let depth = 0; depth < 10; depth++) {
+                if (existsSync(join(current, 'package.json')) && existsSync(join(current, 'profiles'))) {
+                    return current;
+                }
+                const parent = dirname(current);
+                if (parent === current)
+                    break;
+                current = parent;
+            }
+            return resolve(directory, '../..');
+        }
+    }
+    catch { }
+    return process.cwd();
+}
+// Package profiles dir for a deployed bundle. Setup copies the package's
+// profiles/ next to copy-harness artifacts as `righthand-profiles`, so a
+// bundle loaded from an installed location finds its personas without the
+// source checkout. Otherwise fall back to the checkout's profiles/ resolved
+// by getRepoRoot(). Pure and deterministic: bundle directory + filesystem only.
+function getPackageProfilesDir() {
+    try {
+        const directory = bundleDir();
+        if (directory) {
+            const bundled = join(directory, 'righthand-profiles');
+            if (existsSync(bundled))
+                return bundled;
+        }
+    }
+    catch { }
+    return join(getRepoRoot(), 'profiles');
+}
+// harness/common/aliases.ts
+// v2 bounded-contract engine, Fase 1: the persona alias layer.
+//
+// The six canonical personas are named by hand anatomy: one palm plus five
+// fingers. Each anatomy name stands for a role (palm = steer, index = point,
+// pinky = scan, thumb = build, ring = shape, middle = guard). This module maps
+// the legacy shipped personas, the old verb role-words, and common SDLC words
+// onto those six anatomy names. Pure data plus a pure resolver.
+// The six canonical personas, named by hand anatomy.
+const CANONICAL_PERSONAS = [
+    'palm', // the palm - chairs the loop, integrates findings, owns release
+    'index', // points - sets direction: requirements, architecture, planning
+    'pinky', // scouts - reads: explore, research, debug, triage
+    'thumb', // builds - writes: implement, refactor, fix, deploy
+    'ring', // shapes - crafts the interface: frontend, design
+    'middle', // guards - verifies: review, security, test, qa
+];
+// The eleven shipped personas this layer supersedes. They stay loadable until
+// the retirement step lands; their names always resolve onto a canonical one.
+const LEGACY_PERSONAS = [
+    'architect',
+    'backend',
+    'code-reviewer',
+    'devops',
+    'frontend',
+    'orchestrator',
+    'product-manager',
+    'security-auditor',
+    'test-engineer',
+    'web-performance-auditor',
+    'worker',
+];
+// Alias table: the eleven legacy names, the six old verb role-words, and common
+// SDLC words, each mapped to exactly one canonical (anatomy) persona. Keys are
+// lowercased; every value is a member of CANONICAL_PERSONAS.
+const PERSONA_ALIASES = {
+    // palm (steers the loop)
+    orchestrator: 'palm',
+    'product-manager': 'palm',
+    pm: 'palm',
+    steer: 'palm',
+    // index (sets direction)
+    architect: 'index',
+    planner: 'index',
+    point: 'index',
+    // pinky (reads + triages)
+    explorer: 'pinky',
+    researcher: 'pinky',
+    debugger: 'pinky',
+    'web-performance-auditor': 'middle',
+    scan: 'pinky',
+    // thumb (writes)
+    backend: 'thumb',
+    devops: 'thumb',
+    worker: 'thumb',
+    coder: 'thumb',
+    refactorer: 'thumb',
+    fixer: 'thumb',
+    build: 'thumb',
+    // ring (UI)
+    frontend: 'ring',
+    designer: 'ring',
+    shape: 'ring',
+    // middle (verifies)
+    'code-reviewer': 'middle',
+    'security-auditor': 'middle',
+    'test-engineer': 'middle',
+    reviewer: 'middle',
+    qa: 'middle',
+    security: 'middle',
+    guard: 'middle',
+};
+// Resolve a raw persona reference onto its canonical v2 anatomy persona.
+// - a canonical name resolves to itself (aliasedFrom is null);
+// - a known alias (legacy name, verb role-word, or SDLC word) resolves to its
+//   canonical target;
+// - any other name passes through unchanged (it is not an alias).
+function resolvePersonaName(raw) {
+    const name = raw.trim().toLowerCase();
+    if (CANONICAL_PERSONAS.includes(name)) {
+        return { canonical: name, aliasedFrom: null };
+    }
+    const target = PERSONA_ALIASES[name];
+    if (target) {
+        return { canonical: target, aliasedFrom: name };
+    }
+    return { canonical: name, aliasedFrom: null };
+}
+const RETIRED_PERSONAS = ['editor', 'architect', 'backend', 'code-reviewer', 'devops', 'frontend', 'orchestrator', 'product-manager', 'security-auditor', 'test-engineer', 'web-performance-auditor', 'worker'];
+// A profile map that also answers legacy and role-word persona names.
+// A retired name such as 'architect' or 'backend' still finds its canonical
+// anatomy persona, so a stale config, a stale state file, or a habit typed at
+// the command line keeps working after the eleven were folded into six.
+// Iteration, keys(), size and has() stay exactly the canonical set, so lists,
+// completion, and 'unknown persona' checks never see an alias as a persona.
+class AliasAwareMap extends Map {
+    get(key) {
+        const direct = super.get(key);
+        if (direct !== undefined)
+            return direct;
+        if (typeof key !== 'string' || key === '')
+            return undefined;
+        const canonical = resolvePersonaName(key).canonical;
+        if (canonical === key)
+            return undefined;
+        return super.get(canonical);
+    }
+}
+function parseProfileFile(filePath, fallbackName) {
+    let raw;
+    try {
+        raw = readFileSync(filePath, 'utf8');
+    }
+    catch {
+        return undefined;
+    }
+    let name = fallbackName;
+    let label = fallbackName;
+    let role = fallbackName;
+    let desc = '';
+    let mode = 'readonly';
+    let skills = [];
+    let output = [];
+    let body = raw.trim();
+    // Parse YAML Frontmatter if present
+    const frontmatterMatch = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/.exec(raw);
+    if (frontmatterMatch) {
+        const fmLines = frontmatterMatch[1].split(/\r?\n/);
+        body = frontmatterMatch[2].trim();
+        for (const line of fmLines) {
+            const match = /^([a-zA-Z0-9_-]+)\s*:\s*(.*)$/.exec(line);
+            if (!match)
+                continue;
+            const key = match[1].toLowerCase();
+            const val = match[2].trim().replace(/^['"](.*)['"]$/, '$1');
+            if (key === 'name')
+                name = val;
+            if (key === 'role')
+                role = val;
+            if (key === 'description' || key === 'desc')
+                desc = val;
+            if (key === 'mode')
+                mode = val.toLowerCase() === 'writer' ? 'writer' : 'readonly';
+            if (key === 'skills' || key === 'output') {
+                const stripped = val.replace(/^\[/, '').replace(/\]$/, '').trim();
+                const parsed = stripped === '' ? [] : stripped.split(',').map((s) => s.trim().replace(/^['"](.*)['"]$/, '$1')).filter(Boolean);
+                if (key === 'skills')
+                    skills = parsed;
+                else
+                    output = parsed;
+            }
+        }
+        label = role || name;
+    }
+    // Fallback parsing (when frontmatter is missing)
+    const lines = raw.split(/\r?\n/);
+    if (!label || label === fallbackName) {
+        for (const line of lines) {
+            const m = /^#\s+(.+)$/.exec(line);
+            if (m) {
+                label = m[1].trim();
+                if (!role || role === fallbackName)
+                    role = label;
+                break;
+            }
+        }
+    }
+    if (!desc) {
+        for (const line of lines) {
+            const m = /^>\s*(.+)$/.exec(line);
+            if (m) {
+                desc = m[1].trim();
+                break;
+            }
+        }
+    }
+    if (!frontmatterMatch) {
+        for (const line of lines) {
+            const m = /^mode:\s*(writer|readonly)\s*$/i.exec(line);
+            if (m) {
+                mode = m[1].toLowerCase();
+                break;
+            }
+        }
+    }
+    return {
+        name: name.toLowerCase(),
+        label,
+        role,
+        desc,
+        mode,
+        skills,
+        output,
+        body,
+        sourcePath: filePath,
+    };
+}
+function loadAllProfiles(cwd, dirs) {
+    const map = new AliasAwareMap();
+    // Resolve directories, defaulting to today's paths so existing single-arg
+    // call sites keep working unchanged.
+    let packageProfilesDir = dirs && 'packageDir' in dirs
+        ? dirs.packageDir
+        : undefined;
+    if (packageProfilesDir === undefined) {
+        // The default must resolve to the package's profiles/ from any compiled or
+        // copied location: a bundled righthand-profiles/ sibling first, then the
+        // source checkout's profiles/.
+        try {
+            packageProfilesDir = getPackageProfilesDir();
+        }
+        catch {
+            // fallback if the package root cannot be resolved
+        }
+    }
+    const userDir = (dirs && 'userDir' in dirs && dirs.userDir !== undefined)
+        ? dirs.userDir
+        : join(homedir(), '.commandcode', 'profiles');
+    const projectDirs = (dirs && Array.isArray(dirs.projectDirs))
+        ? dirs.projectDirs
+        : [join(cwd, 'profiles'), join(cwd, '.commandcode', 'profiles')];
+    const retired = new Set(RETIRED_PERSONAS.map((n) => n.toLowerCase()));
+    // Determine shipped names from the package dir first, so a legacy
+    // user-level copy of a shipped name can never shadow it.
+    // If the package directory is missing or unreadable, shippedNames stays
+    // empty: no persona silently becomes a shipped name, and a legacy file
+    // may then load as a custom persona (documented fallback).
+    const shippedNames = new Set();
+    if (packageProfilesDir) {
+        try {
+            for (const file of readdirSync(packageProfilesDir)) {
+                if (!file.endsWith('.md') || file.startsWith('.'))
+                    continue;
+                shippedNames.add(file.slice(0, -3).toLowerCase());
+            }
+        }
+        catch {
+            // package dir missing or unreadable: no shipped names
+        }
+    }
+    // 1. Package profiles are authoritative.
+    if (packageProfilesDir) {
+        let files = [];
+        try {
+            files = readdirSync(packageProfilesDir);
+        }
+        catch {
+            files = [];
+        }
+        for (const file of files) {
+            if (!file.endsWith('.md') || file.startsWith('.'))
+                continue;
+            const fallbackName = file.slice(0, -3).toLowerCase();
+            const profile = parseProfileFile(join(packageProfilesDir, file), fallbackName);
+            if (profile) {
+                shippedNames.add(profile.name);
+                map.set(profile.name, profile);
+            }
+        }
+    }
+    // 2. Legacy user dir: custom personas only. Retired and shipped names skip.
+    try {
+        for (const file of readdirSync(userDir)) {
+            if (!file.endsWith('.md') || file.startsWith('.'))
+                continue;
+            const fallbackName = file.slice(0, -3).toLowerCase();
+            if (retired.has(fallbackName))
+                continue;
+            if (shippedNames.has(fallbackName))
+                continue;
+            const profile = parseProfileFile(join(userDir, file), fallbackName);
+            if (profile) {
+                // shipped name guard by resolved name too
+                if (retired.has(profile.name) || shippedNames.has(profile.name))
+                    continue;
+                if (map.has(profile.name))
+                    continue;
+                map.set(profile.name, profile);
+            }
+        }
+    }
+    catch {
+        // user dir missing
+    }
+    // 3. Project-level dirs override package and user personas, later wins,
+    //    but retired and shipped names are skipped exactly like the user dir:
+    //    a project copy of a shipped or retired persona never replaces the
+    //    canonical package body.
+    for (const dir of projectDirs) {
+        let files = [];
+        try {
+            files = readdirSync(dir);
+        }
+        catch {
+            continue;
+        }
+        for (const file of files) {
+            if (!file.endsWith('.md') || file.startsWith('.'))
+                continue;
+            const fallbackName = file.slice(0, -3).toLowerCase();
+            if (retired.has(fallbackName))
+                continue;
+            if (shippedNames.has(fallbackName))
+                continue;
+            const profile = parseProfileFile(join(dir, file), fallbackName);
+            if (profile) {
+                // shipped name guard by resolved name too
+                if (retired.has(profile.name) || shippedNames.has(profile.name))
+                    continue;
+                map.set(profile.name, profile);
+            }
+        }
+    }
+    return map;
+}
+function loadAllPersonas(cwd, dirs) {
+    const profiles = loadAllProfiles(cwd, dirs);
+    const personas = new AliasAwareMap();
+    for (const [name, profile] of profiles) {
+        personas.set(name, {
+            name: profile.name,
+            role: profile.role,
+            mode: profile.mode,
+            desc: profile.desc,
+            skills: profile.skills,
+            output: profile.output,
+            body: profile.body,
+        });
+    }
+    return personas;
+}
+function getStatePath(cwd) {
+    return join(cwd, '.righthand', 'state', 'active-persona.json');
+}
+function readActivePersona(cwd) {
+    const fromEnv = process.env.RIGHTHAND_PERSONA;
+    if (typeof fromEnv === 'string' && fromEnv.trim() !== '') {
+        return fromEnv.trim().toLowerCase();
+    }
+    const canonicalPath = getStatePath(cwd);
+    const legacyPath = join(cwd, '.righthand', 'active-persona.json');
+    const path = existsSync(canonicalPath) ? canonicalPath : legacyPath;
+    try {
+        const parsed = JSON.parse(readFileSync(path, 'utf8'));
+        if (parsed && (typeof parsed.active === 'string' || parsed.active === null)) {
+            return typeof parsed.active === 'string' ? parsed.active.trim().toLowerCase() : null;
+        }
+        return null;
+    }
+    catch {
+        return null;
+    }
+}
+function writeActivePersona(cwd, persona) {
+    let tempPath;
+    try {
+        const dir = join(cwd, '.righthand', 'state');
+        mkdirSync(dir, { recursive: true });
+        const target = getStatePath(cwd);
+        tempPath = join(dir, `.active-persona.${process.pid}.tmp`);
+        const state = { active: persona, updatedAt: new Date().toISOString() };
+        writeFileSync(tempPath, JSON.stringify(state, null, 2) + '\n');
+        renameSync(tempPath, target);
+    }
+    catch {
+        if (tempPath) {
+            try {
+                unlinkSync(tempPath);
+            }
+            catch { }
+        }
+    }
+}
+function buildPersonaPrompt(persona, options) {
+    const heading = options?.heading ?? 'Persona';
+    const label = options?.label ?? persona.name;
+    const lines = [
+        heading === 'Persona'
+            ? `## Active RightHand Persona: ${label} (${persona.role}) [mode: ${persona.mode}]`
+            : `## Active RightHand persona: ${label} (${persona.mode})`,
+        ...(options?.sections ?? []),
+    ];
+    if (options?.includeDesc !== false)
+        lines.push(`> ${persona.desc}`);
+    lines.push('', persona.body);
+    return lines.join('\n');
+}
+function buildStatusLabel(persona) {
+    return persona ? `RightHand: ${persona.name} (${persona.role})` : undefined;
+}
+function parseRighthandArgs(args) {
+    const arg = args.trim().toLowerCase();
+    if (!arg || arg === 'pick')
+        return { action: 'pick' };
+    if (arg === 'list')
+        return { action: 'list' };
+    if (arg === 'off' || arg === 'none' || arg === 'default')
+        return { action: 'off' };
+    return { action: 'activate', name: arg };
+}
+function completionCandidates(personas, prefix) {
+    const all = ['list', 'off', ...personas];
+    const matches = all.filter((name) => name.startsWith(prefix.toLowerCase()));
+    return matches.length > 0 ? matches.map((name) => ({ value: name, label: name })) : null;
+}
+const openCodeGuardMap = {
+    toolAliases: {
+        write: "write_file",
+        edit: "edit_file",
+        read: "read_file",
+        find: "glob",
+    },
+    shellTools: ["bash", "powershell"],
+    shellKind: process.platform === "win32" ? "powershell" : "posix",
+};
+const MAX_AGE = 30 * 24 * 60 * 60 * 1000;
+const statePath = join(homedir(), ".local", "state", "opencode", "righthand.json");
+function activePersonaForSession(sessionID, cwd) {
+    return loadSessionState().sessions?.[sessionID]?.persona ?? readActivePersona(cwd);
+}
+function loadSessionState() {
+    try {
+        const parsed = JSON.parse(readFileSync(statePath, "utf8"));
+        return {
+            version: 1,
+            sessions: parsed.sessions ?? {},
+        };
+    }
+    catch {
+        return { version: 1, sessions: {} };
+    }
+}
+function saveSessionState(state) {
+    const now = Date.now();
+    const sessions = {};
+    for (const [id, entry] of Object.entries(state.sessions)) {
+        if (!entry.persona || now - (entry.updated ?? 0) > MAX_AGE)
+            continue;
+        sessions[id] = entry;
+    }
+    const directory = dirname(statePath);
+    const tempPath = join(directory, `.righthand.${process.pid}.${Math.random().toString(36).slice(2)}.tmp`);
+    mkdirSync(directory, { recursive: true });
+    try {
+        writeFileSync(tempPath, JSON.stringify({ version: 1, sessions }, null, 2), "utf8");
+        renameSync(tempPath, statePath);
+    }
+    catch (error) {
+        try {
+            unlinkSync(tempPath);
+        }
+        catch { }
+        throw error;
+    }
+}
+const resolveProjectDirectory = (context) => {
+    const location = context && typeof context === "object" ? context.location : undefined;
+    const directory = location && typeof location === "object" ? location.directory : undefined;
+    return typeof directory === "string" && directory.trim() !== "" ? directory : process.cwd();
+};
+const packageProfilesDir = getPackageProfilesDir();
+const loadOpenCodePersonas = (cwd) => loadAllPersonas(cwd, {
+    packageDir: packageProfilesDir,
+    projectDirs: [join(cwd, "profiles"), join(cwd, ".commandcode", "profiles"), join(cwd, ".opencode", "profiles")],
+});
+const righthandOpenCodePlugin = Plugin.define({
+    id: "user.righthand.server",
+    async setup(context) {
+        const cwd = resolveProjectDirectory(context);
+        const sessionRegistration = await context.session.hook("context", async (event) => {
+            const info = await context.session.get({ sessionID: event.sessionID });
+            if (info.parentID)
+                return;
+            const active = activePersonaForSession(event.sessionID, cwd);
+            if (!active)
+                return;
+            const persona = loadOpenCodePersonas(cwd).get(active.toLowerCase());
+            if (!persona)
+                return;
+            event.system.push({
+                type: "text",
+                text: buildPersonaPrompt(persona),
+            });
+        });
+        const toolRegistration = await context.tool.hook("execute.before", (event) => {
+            let refusal;
+            try {
+                const active = activePersonaForSession(event.sessionID, cwd);
+                if (!active)
+                    return;
+                const persona = loadOpenCodePersonas(cwd).get(active.toLowerCase());
+                if (!persona || persona.mode !== "readonly")
+                    return;
+                if (event.tool === "apply_patch") {
+                    refusal = "apply_patch can rewrite any file, so it is refused for readonly personas";
+                }
+                else if (event.tool === "batch") {
+                    refusal = "batch wraps nested tool calls the guard cannot statically classify, so it is refused for readonly personas";
+                }
+                else {
+                    const shellKind = event.tool === "bash" ? "posix" : event.tool === "powershell" ? "powershell" : openCodeGuardMap.shellKind;
+                    const scratchDirs = process.env.COMMANDCODE_SCRATCHPAD ? [process.env.COMMANDCODE_SCRATCHPAD] : [];
+                    const input = event.input && typeof event.input === "object" ? event.input : {};
+                    const normalizedInput = (event.tool === "write" || event.tool === "edit")
+                        && typeof input.filePath === "string"
+                        && !("file_path" in input)
+                        && !("path" in input)
+                        ? { ...input, file_path: input.filePath }
+                        : input;
+                    const decision = evaluateToolGuard(persona.mode, {
+                        toolName: event.tool,
+                        input: normalizedInput,
+                        cwd,
+                        scratchDirs,
+                        persona: active,
+                        harness: { ...openCodeGuardMap, shellKind },
+                    });
+                    if (decision.block)
+                        refusal = decision.reason ?? "Blocked by the readonly guard.";
+                }
+            }
+            catch {
+                throw new Error("Blocked: the readonly guard failed to evaluate this call.");
+            }
+            if (refusal)
+                throw new Error(refusal);
+        });
+        return async () => {
+            await sessionRegistration.dispose();
+            await toolRegistration?.dispose?.();
+        };
+    },
+});
+export default righthandOpenCodePlugin;

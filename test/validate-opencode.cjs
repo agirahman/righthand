@@ -49,6 +49,7 @@ function makeHarness(bundlePath) {
   const source = fs.readFileSync(bundlePath, 'utf8').replace(/\r\n/g, '\n');
   const hooks = [];
   const slots = [];
+  const slotDisposals = { count: 0 };
   const layers = [];
   const plugin = {
     define(definition) {
@@ -69,6 +70,7 @@ function makeHarness(bundlePath) {
       if (name in nodeModules) return nodeModules[name];
       if (name === '@opencode/plugin') return { Plugin: plugin };
       if (name === '@opencode/plugin/tui') return { Plugin: plugin, usePlugin: () => ({}) };
+      if (name === '@opentui/solid/jsx-runtime') return { jsx: (type, props) => ({ type, props }) };
       if (name === 'solid-js') return solid;
       throw new Error(`Unexpected external module: ${String(name)}`);
     },
@@ -79,10 +81,11 @@ function makeHarness(bundlePath) {
     fileName: bundlePath,
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.React, jsxFactory: 'Show', jsxFragmentFactory: 'Show.Fragment' },
   }).outputText
+    .replace(/^const __RH_BUNDLE_DIR__ = new URL\(.+, import\.meta\.url\)\.pathname.*$/m, 'const __RH_BUNDLE_DIR__ = __dirname;')
     .replace(/^import \{ (.*?) \} from "(.*?)";$/gm, 'const { $1 } = require("$2");')
     .replace(/^export \{[^}]+\};?$/gm, '')
     .replace(/^export default (\w+);?$/gm, 'module.exports.default = $1;');
-  check(`${path.basename(bundlePath)} has no solid-js or JSX in tracked bundle`, bundlePath.endsWith('righthand-tui.js') ? !/<Show\b/.test(source) && !/solid-js/.test(source) && jsx.parseDiagnostics.length === 0 : true);
+  check(`${path.basename(bundlePath)} has no solid-js or JSX in tracked bundle`, /[/\\]tui\.js$/.test(bundlePath) ? !/<Show\b/.test(source) && !/solid-js/.test(source) && jsx.parseDiagnostics.length === 0 : true);
   const wrapped = `(function(require,module,exports,__dirname){${transformed}\n})`;
   vm.runInThisContext(wrapped, { filename: bundlePath })(
     (specifier) => externals[specifier],
@@ -92,7 +95,7 @@ function makeHarness(bundlePath) {
   );
   const definition = module.exports.default;
   check(`${path.basename(bundlePath)} exports Plugin.define object`, definition && typeof definition.setup === 'function');
-  return { definition, hooks, slots, layers, source, disposeCalls: 0 };
+  return { definition, hooks, slots, slotDisposals, layers, source, disposeCalls: 0 };
 }
 
 async function loadServer(bundlePath) {
@@ -133,8 +136,8 @@ async function main() {
     process.env.HOME = userHome;
     process.env.USERPROFILE = userHome;
 
-    const serverPath = path.join(root, '.opencode-plugin', 'plugins', 'righthand-server.js');
-    const tuiPath = process.env.RH_OPENCODE_TUI_BUNDLE || path.join(root, '.opencode-plugin', 'plugins', 'righthand-tui.js');
+    const serverPath = path.join(root, '.opencode-plugin', 'plugins', 'righthand', 'index.js');
+    const tuiPath = process.env.RH_OPENCODE_TUI_BUNDLE || path.join(root, '.opencode-plugin', 'plugins', 'righthand', 'tui.js');
     process.chdir(repoDir);
     const server = makeHarness(serverPath);
     const serverContext = {
@@ -245,10 +248,12 @@ async function main() {
     let tuiList = '';
     const tuiToasts = [];
     const tuiContext = {
-      storage: { store(_name, config) { return [config.initial, async () => {}]; } },
       keymap: { layer(factory) { tui.layers.push(factory()); } },
       ui: {
-        slot(config) { tui.slots.push(config); },
+        slot(config) {
+          tui.slots.push(config);
+          return () => { tui.slotDisposals.count += 1; };
+        },
         toast: { show(input) { tuiToasts.push(input.message); } },
         router: { current: () => ({ type: 'session', sessionID: sessionId }) },
         dialog: { async alert(input) { tuiList = input.message; }, async select() { return undefined; } },
@@ -257,10 +262,42 @@ async function main() {
       theme: { text: { base: '', muted: '' } },
     };
     check('TUI plugin id is unchanged', tui.definition.id === 'user.righthand');
+    check('TUI bundle does not depend on a storage API', !/context\.storage\b/.test(tui.source));
     tui.definition.setup(tuiContext);
-    check('TUI drops the footer slot and keeps the global slash command layer',
-      tui.slots.length === 0 && tui.layers[0]?.mode === 'global' &&
+    check('TUI claims the footer slot and keeps the global slash command layer',
+      tui.slots.length === 1 && tui.slots[0].append === 'prompt.footer.status' &&
+      typeof tui.slots[0].render === 'function' && tui.layers[0]?.mode === 'global' &&
       tui.layers[0]?.commands.some((command) => command.slash?.name === 'righthand'));
+    const writeFooterState = (persona) => {
+      fs.mkdirSync(path.dirname(stateFile), { recursive: true });
+      fs.writeFileSync(stateFile, JSON.stringify({ version: 1, sessions: { [sessionId]: { persona, updated: Date.now() } } }));
+    };
+    writeFooterState('middle');
+    check('footer slot renders the active persona label from session state',
+      tui.slots[0].render({ sessionID: sessionId }).props.content === 'RightHand: middle (Senior Code Reviewer)');
+    check('footer slot hides when no persona is active', (() => {
+      fs.writeFileSync(stateFile, JSON.stringify({ version: 1, sessions: {} }));
+      fs.writeFileSync(commonActiveFile, JSON.stringify({ active: null }));
+      return tui.slots[0].render({ sessionID: sessionId }) === null;
+    })());
+    fs.writeFileSync(commonActiveFile, JSON.stringify({ active: 'middle' }));
+    writeFooterState('middle');
+
+    const serverShapedTui = makeHarness(tuiPath);
+    serverShapedTui.definition.setup({
+      keymap: { layer(factory) { serverShapedTui.layers.push(factory()); } },
+      ui: { toast: { show() {} }, router: { current: () => null } },
+    });
+    check('TUI setup registers the slash layer without requiring a session route',
+      serverShapedTui.layers[0]?.mode === 'global' &&
+      serverShapedTui.layers[0]?.commands.some((command) => command.slash?.name === 'righthand'));
+
+    check('generated bundles carry the ESM directory marker',
+      [serverPath, tuiPath].every((bundlePath) => {
+        const generated = fs.readFileSync(bundlePath, 'utf8');
+        return /^const __RH_BUNDLE_DIR__ = new URL\("\.", import\.meta\.url\)\.pathname/m.test(generated) &&
+          /join\(directory, ['"]righthand-profiles['"]\)/.test(generated);
+      }));
 
     const writeState = (persona) => {
       fs.mkdirSync(path.dirname(stateFile), { recursive: true });
@@ -291,6 +328,10 @@ async function main() {
     fs.writeFileSync(commonActiveFile, JSON.stringify({ active: null }));
     writeState(null);
     await runTui('middle');
+    check('persona activation refreshes the footer slot without re-running setup',
+      tui.slotDisposals.count === 1 && tui.slots.length === 2 &&
+      tui.slots.at(-1).append === 'prompt.footer.status' &&
+      tui.slots.at(-1).render({ sessionID: sessionId }).props.content === 'RightHand: middle (Senior Code Reviewer)');
     const blockedBeforeSessionOff = await isWriteBlocked();
     await runTui('off');
     const allowedAfterSessionOff = !(await isWriteBlocked());
