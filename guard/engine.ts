@@ -98,7 +98,7 @@ function releaseWriteAllowed(target: string, rawPath: string, input: Record<stri
   return false;
 }
 
-function isAllowedWritePath(target: string, scratchDirs?: string[], rawPath?: string): boolean {
+function isAllowedWritePath(target: string, scratchDirs?: string[], rawPath?: string, projectRoot?: string): boolean {
   if (rawPath && hasUnsafeTraversal(rawPath)) {
     return false;
   }
@@ -116,6 +116,11 @@ function isAllowedWritePath(target: string, scratchDirs?: string[], rawPath?: st
     for (const dir of scratchDirs) {
       if (isInsideRoot(target, dir)) return true;
     }
+  }
+  // Outside the opened project, ordinary writes are allowed. Writes inside
+  // the project stay read-only except in its .righthand/ output directory.
+  if (projectRoot && !isInsideRoot(target, projectRoot) && resolve(target) !== resolve(projectRoot)) {
+    return true;
   }
   return false;
 }
@@ -443,7 +448,7 @@ function targetAllowed(rawTarget: string, cwd: string, scratchDirs?: string[], v
   if (hasUnsafeTraversal(expanded)) return false;
   const target = resolve(cwd, expanded);
   if (privilegedRepoRoot && isInsideRoot(target, cwd)) return true;
-  return isAllowedWritePath(target, scratchDirs, expanded);
+  return isAllowedWritePath(target, scratchDirs, expanded, cwd);
 }
 
 function posixTargets(tokens: string[], command: string): string[] {
@@ -1027,13 +1032,13 @@ export function evaluateToolGuard(mode: ProfileMode | null, ctx: GuardContext): 
           : 'release manifest writes may only change the version and must preserve every other field',
       };
     }
-    if (!isAllowedWritePath(target, ctx.scratchDirs, rawPath)) {
+    if (!isAllowedWritePath(target, ctx.scratchDirs, rawPath, ctx.cwd)) {
       return { block: true, reason: writeReason };
     }
     return { block: false };
   }
 
-  const shellTools = new Set(ctx.harness?.shellTools ?? ['shell_command', 'powershell', 'bash', 'terminal']);
+  const shellTools = new Set(ctx.harness?.shellTools ?? ['shell_command', 'powershell', 'bash', 'terminal', 'shell']);
   if (shellTools.has(toolName)) {
     if (!ctx.input || typeof ctx.input !== 'object') {
       return { block: true, reason: 'shell input was unusable, so the call was refused rather than allowed' };

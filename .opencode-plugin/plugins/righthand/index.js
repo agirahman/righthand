@@ -137,7 +137,7 @@ function releaseWriteAllowed(target, rawPath, input) {
     }
     return false;
 }
-function isAllowedWritePath(target, scratchDirs, rawPath) {
+function isAllowedWritePath(target, scratchDirs, rawPath, projectRoot) {
     if (rawPath && hasUnsafeTraversal(rawPath)) {
         return false;
     }
@@ -156,6 +156,11 @@ function isAllowedWritePath(target, scratchDirs, rawPath) {
             if (isInsideRoot(target, dir))
                 return true;
         }
+    }
+    // Outside the opened project, ordinary writes are allowed. Writes inside
+    // the project stay read-only except in its .righthand/ output directory.
+    if (projectRoot && !isInsideRoot(target, projectRoot) && resolve(target) !== resolve(projectRoot)) {
+        return true;
     }
     return false;
 }
@@ -496,7 +501,7 @@ function targetAllowed(rawTarget, cwd, scratchDirs, vars, privilegedRepoRoot = f
     const target = resolve(cwd, expanded);
     if (privilegedRepoRoot && isInsideRoot(target, cwd))
         return true;
-    return isAllowedWritePath(target, scratchDirs, expanded);
+    return isAllowedWritePath(target, scratchDirs, expanded, cwd);
 }
 function posixTargets(tokens, command) {
     const targets = [];
@@ -1161,12 +1166,12 @@ function evaluateToolGuard(mode, ctx) {
                     : 'release manifest writes may only change the version and must preserve every other field',
             };
         }
-        if (!isAllowedWritePath(target, ctx.scratchDirs, rawPath)) {
+        if (!isAllowedWritePath(target, ctx.scratchDirs, rawPath, ctx.cwd)) {
             return { block: true, reason: writeReason };
         }
         return { block: false };
     }
-    const shellTools = new Set(ctx.harness?.shellTools ?? ['shell_command', 'powershell', 'bash', 'terminal']);
+    const shellTools = new Set(ctx.harness?.shellTools ?? ['shell_command', 'powershell', 'bash', 'terminal', 'shell']);
     if (shellTools.has(toolName)) {
         if (!ctx.input || typeof ctx.input !== 'object') {
             return { block: true, reason: 'shell input was unusable, so the call was refused rather than allowed' };
@@ -1661,7 +1666,7 @@ const openCodeGuardMap = {
         read: "read_file",
         find: "glob",
     },
-    shellTools: ["bash", "powershell"],
+    shellTools: ["bash", "powershell", "shell"],
     shellKind: process.platform === "win32" ? "powershell" : "posix",
 };
 const MAX_AGE = 30 * 24 * 60 * 60 * 1000;

@@ -26,7 +26,7 @@ function check(name, cond) {
 
 try {
   function ctx(toolName, payload) {
-    const input = (toolName === 'shell_command' || toolName === 'powershell' || toolName === 'bash' || toolName === 'terminal')
+    const input = (toolName === 'shell_command' || toolName === 'powershell' || toolName === 'bash' || toolName === 'terminal' || toolName === 'shell')
       ? { command: payload }
       : (toolName === 'write_file' || toolName === 'edit_file')
         ? { file_path: payload }
@@ -41,7 +41,7 @@ try {
 
   check('readonly write_file to src/x.js blocked', evaluateToolGuard('readonly', ctx('write_file', path.join(rootDir, 'src', 'x.js'))).block === true);
   check('readonly write_file traversal blocked', evaluateToolGuard('readonly', ctx('write_file', rootDir + path.sep + '.righthand' + path.sep + 'tickets' + path.sep + 'T18' + path.sep + '..' + path.sep + '..' + path.sep + 'src' + path.sep + 'x.js')).block === true);
-  check('readonly write_file home .commandcode blocked', evaluateToolGuard('readonly', ctx('write_file', path.join(os.homedir(), '.commandcode', 'mods', 'righthand.ts'))).block === true);
+  check('readonly write_file home .commandcode allowed outside project', evaluateToolGuard('readonly', ctx('write_file', path.join(os.homedir(), '.commandcode', 'mods', 'righthand.ts'))).block === false);
   check('readonly write_file nested .righthand blocked', evaluateToolGuard('readonly', ctx('write_file', path.join(rootDir, 'src', '.righthand', 'x.js'))).block === true);
   if (process.platform === 'win32') {
     check('readonly write_file trailing-space traversal blocked', evaluateToolGuard('readonly', ctx('write_file', rootDir + path.sep + '.righthand' + path.sep + '.. ' + path.sep + 'src' + path.sep + 'x.js')).block === true);
@@ -79,7 +79,9 @@ try {
   if (process.platform === 'win32') {
     check('readonly write_file scratch case-insensitive allowed', evaluateToolGuard('readonly', { toolName: 'write_file', input: { file_path: scratchDir.toLowerCase() + path.sep + 'a.md' }, cwd: rootDir, scratchDirs: [scratchDir] }).block === false);
   }
-  check('readonly shell npm test allowed', evaluateToolGuard('readonly', ctx('shell_command', 'npm test')).block === false);
+  check('readonly shell tool npm test allowed', evaluateToolGuard('readonly', ctx('shell', 'npm test')).block === false);
+  check('readonly shell tool rm blocked', evaluateToolGuard('readonly', ctx('shell', 'rm -rf src')).block === true);
+  check('readonly shell_command npm test allowed', evaluateToolGuard('readonly', ctx('shell_command', 'npm test')).block === false);
   check('readonly shell node scratch allowed', evaluateToolGuard('readonly', ctx('shell_command', `node ${path.join(scratchDir, 'probe.js')}`)).block === false);
   check('readonly shell node flags then path allowed', evaluateToolGuard('readonly', ctx('shell_command', `node --enable-source-maps ${path.join(scratchDir, 'probe.js')}`)).block === false);
   check('readonly shell git log format allowed', evaluateToolGuard('readonly', ctx('shell_command', 'git log --format=%s')).block === false);
@@ -184,7 +186,7 @@ try {
   check('readonly shell var from env allowed', evaluateToolGuard('readonly', ctx('shell_command', '$d = $env:COMMANDCODE_SCRATCHPAD; Set-Content -Path "$d/v.txt" -Value hi')).block === false);
   check('readonly shell var from env quoted allowed', evaluateToolGuard('readonly', ctx('shell_command', '$d = "$env:COMMANDCODE_SCRATCHPAD"; Set-Content -Path "$d/v.txt" -Value hi')).block === false);
   process.env.COMMANDCODE_SCRATCHPAD = path.join(scratchDir, '..', 'outside');
-  check('readonly shell var from env outside blocked', evaluateToolGuard('readonly', ctx('shell_command', '$d = $env:COMMANDCODE_SCRATCHPAD; Set-Content -Path "$d/v.txt" -Value hi')).block === true);
+  check('readonly shell var from env outside allowed', evaluateToolGuard('readonly', ctx('shell_command', '$d = $env:COMMANDCODE_SCRATCHPAD; Set-Content -Path "$d/v.txt" -Value hi')).block === false);
   if (prevScratch === undefined) delete process.env.COMMANDCODE_SCRATCHPAD;
   else process.env.COMMANDCODE_SCRATCHPAD = prevScratch;
 
@@ -195,7 +197,8 @@ try {
   check('readonly shell unresolved var blocked', evaluateToolGuard('readonly', ctx('shell_command', 'Set-Content -Path "$unknown/x.txt" -Value hi')).block === true);
   check('readonly shell var traversal blocked', evaluateToolGuard('readonly', ctx('shell_command', `$d = "${scratchDir}"; echo hi > "$d/../../src.js"`)).block === true);
   check('readonly shell rm with var to src blocked', evaluateToolGuard('readonly', ctx('shell_command', `$d = "${rootDir}"; rm -rf "$d/src"`)).block === true);
-  check('readonly shell var from env userprofile blocked', evaluateToolGuard('readonly', ctx('shell_command', 'Set-Content -Path "$env:USERPROFILE/x.txt" -Value hi')).block === true);
+  const homeEnvName = process.platform === 'win32' ? 'USERPROFILE' : 'HOME';
+  check('readonly shell var from env home allowed', evaluateToolGuard('readonly', ctx('shell_command', `Set-Content -Path "$env:${homeEnvName}/x.txt" -Value hi`)).block === false);
 
   // command substitution hides a second command from the tokenizer (issue #44)
   check('readonly bash substitution format blocked', evaluateToolGuard('readonly', ctx('bash', 'git log --oneline --format="$(rm -rf src)"')).block === true);
@@ -339,7 +342,7 @@ try {
   check('palm repo node script allowed', orchestratorNode(`node ${path.join(rootDir, 'test', 'validate-board.cjs')}`).block === false);
   check('palm repo node script with flags allowed', orchestratorNode(`node --enable-source-maps ${path.join(rootDir, 'test', 'x.cjs')}`).block === false);
   check('palm node eval blocked', orchestratorNode('node -e "1+1"').block === true);
-  check('palm node outside root blocked', orchestratorNode(`node ${path.join(base, 'outside.js')}`).block === true);
+  check('palm node outside root allowed', orchestratorNode(`node ${path.join(base, 'outside.js')}`).block === false);
   check('palm node traversal blocked', orchestratorNode(`node ${rootDir}${path.sep}..${path.sep}escape.js`).block === true);
   check('palm python inline blocked', orchestratorNode('python -c "print(1)"').block === true);
   check('palm bash inline blocked', orchestratorNode('bash -c "echo hi"').block === true);

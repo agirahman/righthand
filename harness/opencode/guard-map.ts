@@ -7,6 +7,6 @@ export const openCodeGuardMap: HarnessGuardMap = {
     read: "read_file",
     find: "glob",
   },
-  shellTools: ["bash", "powershell"],
+  shellTools: ["bash", "powershell", "shell"],
   shellKind: process.platform === "win32" ? "powershell" : "posix",
 };
